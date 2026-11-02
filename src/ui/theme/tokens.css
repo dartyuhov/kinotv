@@ -81,6 +81,12 @@
   --motion-backdrop: 400ms;
   --scale-focus-tab: 1.08;
 
+  /* Search: on-screen keyboard and query field (mockup keyboard-v2.html) */
+  --color-field: rgba(255, 255, 255, 0.1);
+  --color-key-accent: rgba(255, 255, 255, 0.22);
+  --color-field-badge: rgba(255, 255, 255, 0.18);
+  --scale-focus-key: 1.15;
+
   /* Player: darkens the picture under the controls, top and bottom (mockup player-remote). */
   --scrim-player: linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 40%),
     linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 25%);

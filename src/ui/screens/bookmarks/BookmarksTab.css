@@ -1,0 +1,72 @@
+.bookmarks {
+  padding: var(--space-5) 0 var(--space-6);
+}
+
+.bookmarks__title {
+  padding: 0 var(--screen-gutter);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.bookmarks__message {
+  margin-top: var(--space-3);
+  padding: 0 var(--screen-gutter);
+  color: var(--color-text-secondary);
+}
+
+.bookmarks__empty {
+  margin-top: var(--space-5);
+  padding: 0 var(--screen-gutter);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+}
+
+.bookmarks__empty + .bookmarks__message {
+  margin: var(--space-1) 0 var(--space-5);
+}
+
+/* Folders: pills like the tab bar's. The selected folder is white; focus adds lift. */
+.bookmarks__folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-3);
+  padding: 0 var(--screen-gutter);
+}
+
+.bookmarks__folder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 64px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-control);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.bookmarks__count {
+  color: var(--color-text-tertiary);
+}
+
+.bookmarks__folder--selected,
+.bookmarks__folder[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.bookmarks__folder--selected .bookmarks__count,
+.bookmarks__folder[data-focused='true'] .bookmarks__count {
+  color: var(--color-on-primary);
+  opacity: 0.6;
+}
+
+.bookmarks__folder[data-focused='true'] {
+  transform: scale(var(--scale-focus-tab));
+  box-shadow: var(--shadow-focus);
+}

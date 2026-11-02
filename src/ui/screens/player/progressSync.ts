@@ -3,6 +3,7 @@ import type { WatchedVideo } from '../../../core/api/client';
 import type { WatchingItem, WatchingVideo } from '../../../core/api/types';
 import { api } from '../../../core/services';
 import { createProgressReporter, WATCHED_AT, type ProgressReporter } from '../../../core/sync/progressReporter';
+import { followingQuery } from '../../app/following';
 import { queryClient, watchingQuery } from '../../app/queries';
 import { continueWatchingQuery } from '../home/homeQueries';
 
@@ -20,10 +21,11 @@ export const mediaLinksQuery = (mediaId: number) =>
 
 /**
  * Queries that show the viewer's progress. They are refreshed after every progress write, so Home's
- * Continue watching and the title page match what was just watched. (History, ticket 14, adds its key.)
+ * Continue watching, I Watch's new-episode counts and the title page match what was just watched.
+ * (History, ticket 14, adds its key.)
  */
 function progressQueryKeys(itemId: number) {
-  return [watchingQuery(itemId).queryKey, continueWatchingQuery.queryKey];
+  return [watchingQuery(itemId).queryKey, continueWatchingQuery.queryKey, followingQuery.queryKey];
 }
 
 /**

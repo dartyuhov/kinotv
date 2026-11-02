@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { fakeFilm, fakeHome, fakeItem, fakeSeries, filmProgress, seriesProgress, streamUrl } from './harness/catalog';
 import type { FakeApi } from './harness/fakeApi';
-import { setAppVisible } from './harness/player';
+import { FakePlayerRemote, setAppVisible } from './harness/player';
 import type { Remote } from './harness/remote';
 import { expect, test } from './harness/test';
 
@@ -17,13 +17,20 @@ const RIVER_VIDEO = 210; // fakeFilm: the film's only video has id `id * 10`
 const playerScreen = (page: Page) => page.locator('[data-screen="player"]');
 const progressBar = (page: Page) => page.getByRole('progressbar', { name: 'Прогресс просмотра' });
 
-/** Home's featured title → its page → Play/Resume. Returns once the player's controls show. */
+/**
+ * Home's featured title → its page → Play/Resume. Returns once the video plays (the controls show and the
+ * loading spinner has gone), as a viewer would wait before pressing on.
+ */
 async function playFromHero(page: Page, remote: Remote, { plays = true }: { plays?: boolean } = {}) {
   await expect(page.getByRole('button', { name: 'Смотреть' })).toBeVisible();
   await remote.press('down', 'ok');
   await expect(page.locator('[data-screen="title"] [role="button"][data-focused="true"]')).toHaveCount(1);
   await remote.press('ok');
-  await expect(plays ? progressBar(page) : playerScreen(page)).toBeVisible();
+  await expect(playerScreen(page)).toBeVisible();
+  if (!plays) return;
+  await expect(progressBar(page)).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Загрузка' })).toHaveCount(0);
+  await expect.poll(() => new FakePlayerRemote(page).state()).toBe('playing');
 }
 
 /** RIVER as Home's only title; `stoppedAt` seconds is the viewer's saved position, if any. */
@@ -283,6 +290,7 @@ test.describe('progress sync', () => {
     await expect(app.focused).toHaveAccessibleName('Продолжить · 1 ч 20 мин');
     await remote.press('ok');
     await expect(progressBar(page)).toBeVisible();
+    await expect.poll(() => player.state()).toBe('playing');
 
     await player.time(0.9 * DURATION - 1);
     await clock.settle();

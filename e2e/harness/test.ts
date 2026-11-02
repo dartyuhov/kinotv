@@ -1,4 +1,5 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { fakeBookmarks } from './bookmarks';
 import { fakeHome } from './catalog';
 import { FakeApi } from './fakeApi';
 import { FakeCdn } from './fakeCdn';
@@ -128,6 +129,8 @@ export const test = base.extend<Fixtures>({
       // Every signed-in launch lands on Home, so its endpoints get default answers too. Tests about Home
       // call fakeHome(api, …) with their own catalog.
       fakeHome(api);
+      // The Bookmarks tab and the title page's folder picker: no folders unless a test routes its own.
+      fakeBookmarks(api);
       await api.attach(page);
       await use(api);
       expect(api.unhandled, 'the app called endpoints that have no fake route').toEqual([]);

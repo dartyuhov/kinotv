@@ -10,8 +10,10 @@ export interface HttpRequest {
   query?: Params;
   /** POST body, sent as application/x-www-form-urlencoded (kino.watch ignores JSON bodies). */
   form?: Params;
-  /** `false` never retries this GET, e.g. one that toggles server state (GET /v1/watching/toggle). */
+  /** `false` for a GET that changes state (kino.watch toggles are GETs), so it is never sent twice. */
   retry?: false;
+  /** Cancels the request (e.g. a search superseded by a newer one). It then fails, and is not retried. */
+  signal?: AbortSignal;
 }
 
 /** Sends one request and returns the parsed JSON body, or throws an ApiError. */
@@ -29,8 +31,8 @@ export interface HttpOptions {
  * The transport under the API client: builds the URL, encodes params, applies the timeout and
  * normalises every failure to an ApiError.
  *
- * GETs are retried on `network`, `timeout` and `server` errors. POSTs never are, so a write is never
- * sent twice.
+ * GETs are retried on `network`, `timeout` and `server` errors. POSTs never are, nor GETs marked
+ * `retry: false`, so a write is never sent twice.
  */
 export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000, 3_000] }: HttpOptions): Http {
   async function once<T>(req: HttpRequest): Promise<T> {
@@ -47,6 +49,9 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
       timedOut = true;
       controller.abort();
     }, timeoutMs);
+    const cancel = () => controller.abort();
+    if (req.signal?.aborted) cancel();
+    req.signal?.addEventListener('abort', cancel);
     try {
       let response: Response;
       try {
@@ -62,6 +67,7 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
       return body as T;
     } finally {
       clearTimeout(timer);
+      req.signal?.removeEventListener('abort', cancel);
     }
   }
 
@@ -71,7 +77,7 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
         return await once<T>(req);
       } catch (error) {
         const delay = retryDelaysMs[attempt];
-        if (req.method !== 'GET' || req.retry === false || delay === undefined || !isRetryable(error)) throw error;
+        if (req.method !== 'GET' || req.retry === false || delay === undefined || !isRetryable(error) || req.signal?.aborted) throw error;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

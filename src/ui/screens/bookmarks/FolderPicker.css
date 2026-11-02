@@ -1,0 +1,43 @@
+.folder-picker__message {
+  color: var(--color-text-secondary);
+}
+
+.folder-picker__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.folder-picker__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 72px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-button);
+  background: var(--color-control);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.folder-picker__option[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  transform: scale(var(--scale-focus-button));
+  box-shadow: var(--shadow-focus);
+}
+
+.folder-picker__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.folder-picker__check svg {
+  width: 32px;
+  height: 32px;
+}

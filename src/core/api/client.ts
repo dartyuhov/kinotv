@@ -1,5 +1,6 @@
 import type { Http } from './http';
 import type {
+  BookmarkFolder,
   ItemDetails,
   ItemSummary,
   MediaLinks,
@@ -59,6 +60,23 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /**
+   * GET /v1/watching/togglewatchlist?id=: follows the series if the viewer doesn't, unfollows it if they
+   * do (I Watch). Resolves with whether the series is followed now. A toggle, so it is never retried.
+   */
+  toggleWatchlist(id: number): Promise<boolean>;
+  /** GET /v1/items/search: titles whose name matches `q`, ranked by the server (research 10-kp-api §6.3). */
+  search(q: string, options?: SearchOptions): Promise<Page<ItemSummary>>;
+  /** GET /v1/bookmarks: the viewer's bookmark folders. */
+  bookmarkFolders(): Promise<BookmarkFolder[]>;
+  /** GET /v1/bookmarks/{id}: every title in one folder (all pages), newest first. */
+  bookmarkFolderItems(folderId: number): Promise<ItemSummary[]>;
+  /** GET /v1/bookmarks/get-item-folders: the ids of the folders that hold a title. */
+  itemBookmarkFolders(itemId: number): Promise<number[]>;
+  /** POST /v1/bookmarks/add: puts a title in a folder. */
+  addBookmark(itemId: number, folderId: number): Promise<void>;
+  /** POST /v1/bookmarks/remove-item: takes a title out of a folder. */
+  removeBookmark(itemId: number, folderId: number): Promise<void>;
   /** GET /v1/items/media-links?mid=: a video's stream links (signed, short-lived) and subtitles. */
   mediaLinks(mediaId: number): Promise<MediaLinks>;
   /** GET /v1/watching/marktime: saves the viewer's position in a part or episode. */
@@ -68,6 +86,12 @@ export interface ApiClient {
    * doesn't set: check the current status first. Never retried, so it can't flip twice.
    */
   toggleWatched(where: WatchedVideo): Promise<WatchedToggle>;
+}
+
+export interface SearchOptions {
+  perpage?: number;
+  /** Cancels the request, e.g. when the viewer has typed more. */
+  signal?: AbortSignal;
 }
 
 /** A part or episode in the watching calls: the item, the season for series, and the 1-based video number. */
@@ -122,6 +146,53 @@ export function createApiClient(http: Http): ApiClient {
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
     },
+    async toggleWatchlist(id) {
+      const res = await http<{ watching?: unknown }>({ method: 'GET', path: '/v1/watching/togglewatchlist', query: { id }, retry: false });
+      return Boolean(res.watching);
+    },
+    async search(q, { perpage, signal } = {}) {
+      // field=title, as other kino.watch TV clients send for their search box: ranked title matches only.
+      const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+        method: 'GET',
+        path: '/v1/items/search',
+        query: { q, field: 'title', perpage },
+        signal,
+      });
+      return { items: res.items ?? [], pagination: pagination(res.pagination) };
+    },
+    async bookmarkFolders() {
+      const res = await http<{ items?: Array<Record<keyof BookmarkFolder, unknown>> }>({ method: 'GET', path: '/v1/bookmarks' });
+      return (res.items ?? []).map((f) => ({ id: num(f.id), title: String(f.title ?? ''), count: num(f.count) }));
+    },
+    async bookmarkFolderItems(folderId) {
+      const items: ItemSummary[] = [];
+      // Folders are paged; a viewer's folder is rarely long, so it is fetched whole (up to a cap).
+      for (let page = 1; page <= MAX_BOOKMARK_PAGES; page++) {
+        const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+          method: 'GET',
+          path: `/v1/bookmarks/${folderId}`,
+          query: { page, perpage: BOOKMARK_PAGE_SIZE },
+        });
+        items.push(...(res.items ?? []));
+        if (page >= num(res.pagination?.total)) break;
+      }
+      return items;
+    },
+    async itemBookmarkFolders(itemId) {
+      const res = await http<{ folders?: Array<{ id: unknown }> }>({
+        method: 'GET',
+        path: '/v1/bookmarks/get-item-folders',
+        query: { item: itemId },
+      });
+      return (res.folders ?? []).map((f) => num(f.id));
+    },
+    // Bookmark writes ignore ids in the query string ("item not found"): they go in the form body.
+    async addBookmark(itemId, folderId) {
+      await http({ method: 'POST', path: '/v1/bookmarks/add', form: { item: itemId, folder: folderId } });
+    },
+    async removeBookmark(itemId, folderId) {
+      await http({ method: 'POST', path: '/v1/bookmarks/remove-item', form: { item: itemId, folder: folderId } });
+    },
     async mediaLinks(mediaId) {
       const res = await http<Partial<MediaLinks>>({ method: 'GET', path: '/v1/items/media-links', query: { mid: mediaId } });
       return {
@@ -139,6 +210,9 @@ export function createApiClient(http: Http): ApiClient {
     },
   };
 }
+
+const BOOKMARK_PAGE_SIZE = 50;
+const MAX_BOOKMARK_PAGES = 20;
 
 // Numbers sometimes arrive as strings ("128") or are missing.
 function num(value: unknown): number {

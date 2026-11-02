@@ -1,0 +1,38 @@
+/* Full-stage scrim with a panel on the right. A plain translucent fill: no backdrop-filter (spec §6.3). */
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  background: var(--color-scrim);
+  animation: overlay-fade var(--motion-overlay) var(--ease-out);
+}
+
+.overlay__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 720px;
+  padding: var(--space-6) var(--space-5);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-float);
+  animation: overlay-slide var(--motion-overlay) var(--ease-out);
+}
+
+.overlay__title {
+  margin-bottom: var(--space-4);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+}
+
+@keyframes overlay-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes overlay-slide {
+  from {
+    transform: translateX(80px);
+  }
+}
