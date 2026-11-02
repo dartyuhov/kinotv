@@ -79,3 +79,69 @@ test('a fresh launch shows the code, address and QR code; approving it leads to 
   await expect(app.focused).toHaveAccessibleName('Главная');
   await expect(signInHeading(page)).toBeHidden();
 });
+
+test.describe('an expired code is replaced automatically', () => {
+  test('when its lifetime runs out', async ({ app, api, page }) => {
+    const flow = fakeDeviceFlow(api);
+    await pauseClock(page);
+    await app.open({ signedIn: false });
+    await expect(page.getByText('CODE1')).toBeVisible();
+
+    await page.clock.runFor(299_000);
+    await expect(page.getByText('CODE1')).toBeVisible();
+    await page.clock.runFor(1_000);
+
+    await expect(page.getByText('CODE2')).toBeVisible();
+    await expect(page.getByText('CODE1')).toBeHidden();
+    expect(flow.codeRequests()).toHaveLength(2);
+
+    // Polling carries on with the new code.
+    const before = flow.polls().length;
+    await page.clock.runFor(5_000);
+    await expect.poll(() => flow.polls().length).toBe(before + 1);
+    expect(flow.polls()[flow.polls().length - 1]!.query.code).toBe('device-code-2');
+  });
+
+  test('when the server rejects a poll with anything but "pending"', async ({ app, api, page }) => {
+    const flow = fakeDeviceFlow(api, () => ({ status: 400, json: { error: 'code_expired' } }));
+    await pauseClock(page);
+    await app.open({ signedIn: false });
+    await expect(page.getByText('CODE1')).toBeVisible();
+
+    await page.clock.runFor(5_000);
+
+    await expect(page.getByText('CODE2')).toBeVisible();
+    expect(flow.codeRequests()).toHaveLength(2);
+  });
+});
+
+test('"slow_down" keeps the code and stretches the polling interval by 5 s', async ({ app, api, page }) => {
+  let answer: FakeResponse = { status: 400, json: { error: 'slow_down' } };
+  const flow = fakeDeviceFlow(api, () => answer);
+  await pauseClock(page);
+  await app.open({ signedIn: false });
+
+  await page.clock.runFor(5_000);
+  await expect.poll(() => flow.polls().length).toBe(1);
+  answer = PENDING;
+
+  await page.clock.runFor(9_900);
+  expect(flow.polls()).toHaveLength(1);
+  await page.clock.runFor(100);
+  await expect.poll(() => flow.polls().length).toBe(2);
+  await expect(page.getByText('CODE1')).toBeVisible();
+  expect(flow.codeRequests()).toHaveLength(1);
+});
+
+test('if no code can be had, the screen says so and OK retries', async ({ app, api, page, remote }) => {
+  api.on('POST', '/oauth2/device', { status: 503, json: {} });
+  await app.open({ signedIn: false });
+
+  await expect(page.getByText('Не удалось получить код для входа', { exact: false })).toBeVisible();
+  await expect(app.focused).toHaveAccessibleName('Повторить');
+
+  fakeDeviceFlow(api);
+  await remote.press('ok');
+  await expect(page.getByText('CODE1')).toBeVisible();
+  await expect(app.focused).toHaveAccessibleName('Получить новый код');
+});
