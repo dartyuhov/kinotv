@@ -3,6 +3,120 @@
 Unofficial kino.watch client for Samsung Tizen TVs, built as a Tizen web app. Design spec:
 [`docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md`](docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md).
 
+## Install KinoTV on your Samsung TV
+
+KinoTV isn't in Samsung's app store. You install it from your computer with an install script. Samsung TVs
+only accept apps signed for that particular TV, so the script helps you make a free Samsung certificate for
+your TV and signs KinoTV with it. The first install takes about 30 minutes. Updates take a minute.
+
+**You need:**
+
+- a kino.watch subscription;
+- a Samsung TV from 2022 or later (tested on a 2023 Q60C with Tizen 7.0);
+- a Mac on the same network as the TV (tested on macOS; Linux may work but is untested);
+- a Samsung account, for the certificate;
+- [Node.js](https://nodejs.org) 22 or later (the LTS version).
+
+The script never installs anything on your computer without asking first. It keeps its files in `~/KinoTV`.
+
+### 1. Get Samsung's TV tools
+
+1. Download the Tizen SDK **CLI installer** for macOS from <https://samsungtizenos.com/tools-download/>.
+   It's a file named like `web-cli_Tizen_SDK_<version>_macos-64.bin`. Don't run it yourself: the install
+   script asks for it in step 3 and installs it into `~/tizen-studio`. On an Apple Silicon Mac the script also
+   offers to install Rosetta, which Samsung's tools need.
+2. Install [VS Code](https://code.visualstudio.com) and its Samsung **Tizen TV** extension
+   (`tizensdk.tizentv`). You'll use its Certificate Manager in step 6. Tizen Studio's Certificate Manager
+   works too.
+
+### 2. Turn on Developer Mode on the TV
+
+1. On the TV, open **Apps** and press **1 2 3 4 5** on the remote (or on the on-screen keypad).
+2. Set **Developer mode** to **On**. For **Host PC IP**, enter your Mac's IP address. It's in System
+   Settings → Wi-Fi → Details, and the script prints it too when it gets to the TV.
+3. Restart the TV: hold the power button on the remote until it restarts. **Develop Mode** now shows at the
+   top of Apps.
+4. Note the TV's IP address: Settings → General → Network → Network Status → IP Settings.
+
+> **TODO (screenshot, needs the TV):** the Developer Mode dialog in Apps, with Host PC IP filled in.
+
+### 3. Download and run the install script
+
+1. Open the **Releases** page of this repository on GitHub and, under the latest release, download
+   `install.sh`. You only need this one file; the script downloads the rest.
+2. Open Terminal and run:
+
+   ```sh
+   bash ~/Downloads/install.sh
+   ```
+
+The script works through five steps and stops with instructions if one needs you. Fix what it says and run
+it again. It remembers your answers and skips what is already done.
+
+### 4. Script step 1: Tizen tools
+
+If the Tizen CLI isn't installed yet, the script asks for the path of the CLI installer you downloaded in
+step 1. Drag the file into the Terminal window and press Enter. Then it shows the package-manager commands
+that add Samsung's TV extensions. Run them in a second Terminal window and press Enter when they're done.
+
+> **TODO (screenshot):** Terminal at "Step 1/5 · Tizen tools".
+
+### 5. Script steps 2 and 3: connecting to the TV
+
+Type the TV's IP address when the script asks. It connects to the TV and shows the TV's **DUID**, a device
+ID that the certificate needs. If it can't reach the TV, check the Developer Mode steps above. The Host PC IP
+must be this Mac's address, and the TV must have been restarted after you set it.
+
+> **TODO (screenshot):** Terminal showing "Connected to …" and the DUID.
+
+### 6. Script step 4: your Samsung certificate
+
+This is the one step that has to be done in Samsung's app. In VS Code, open the command palette and run
+**Tizen: Run Certificate Manager** (or in Tizen Studio: Tools → Certificate Manager). Then:
+
+1. Click **+**, choose **Samsung** (not Tizen), then **TV**. Name the profile `KinoTV`.
+2. **Author certificate:** create a new one and sign in with your Samsung account. Keep a backup of the
+   `author.p12` file it makes (in `~/SamsungCertificate/KinoTV/`). Updates must be signed with the same
+   author certificate.
+3. **Distributor certificate:** choose privilege **Public** and add the DUID the script showed.
+4. Click **Finish**, go back to Terminal and press Enter.
+
+> **TODO (screenshots):** Certificate Manager: choosing Samsung → TV; the author certificate; the
+> distributor certificate with the DUID.
+
+### 7. Script step 5: signing and installing
+
+The script signs KinoTV with your certificate, installs it on the TV and starts it. KinoTV is now in
+**Apps** on the TV, and you can sign in with your kino.watch account.
+
+> **TODO (screenshot, needs the TV):** KinoTV in Apps.
+
+### Updating
+
+When a new version is out, KinoTV shows **Доступно обновление (vX.Y.Z)** ("Update available") in Settings.
+Samsung doesn't let sideloaded apps update themselves, so run the script again:
+
+```sh
+bash ~/Downloads/install.sh
+```
+
+It downloads the latest release and reuses the TV address and certificate from the first install. The TV
+must still be in Developer Mode.
+
+To install a `KinoTV.wgt` you already downloaded, run `bash install.sh --wgt path/to/KinoTV.wgt`.
+
+### If something goes wrong
+
+| What the script says | What to do |
+|---|---|
+| `Can't reach the TV at …` | Developer Mode must be on with this Mac's IP as Host PC IP, and the TV restarted after setting it. Both must be on the same network. |
+| `Author certificate not match` | KinoTV is already on the TV, signed with a different author certificate. Uninstall it from Apps on the TV and run the script again. |
+| `Invalid certificate chain` or error `1010` | The certificate wasn't made for this TV. Recreate the distributor certificate with this TV's DUID. |
+| `Node.js is not installed` / `too old` | Install the LTS version from <https://nodejs.org>. |
+
+The script keeps the TV address and profile name in `~/KinoTV/tizen/.signing/settings.json`. Delete that file
+to start over. Set `KINOTV_DIR` to use another folder.
+
 ## Development
 
 Needs Node 22.
@@ -61,3 +175,37 @@ The package manifest (`config.xml`) is generated at build time by `tools/tizen/c
 taken from `package.json`. The launcher icon is `tizen/icon.png`, rendered from `tizen/icon.svg` with
 `node tools/tizen/renderIcon.ts`. The production build is a single classic script (not an ES module), because
 the TV opens the app from local files and Chromium doesn't load module scripts from `file://`.
+
+## Releases (maintainers)
+
+CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, e2e tests and the build on every push to a
+branch and on pull requests. Pushing a version tag runs `.github/workflows/release.yml`. It checks the release
+gate, runs the same tests, builds the app with the project's own API credentials and publishes a GitHub
+Release with three files:
+
+| File | What it is |
+|---|---|
+| `KinoTV.wgt` | The app, **unsigned**. Each user signs it with their own Samsung certificate. |
+| `install.sh` | The script users download and run. It fetches the other two files from the latest release. |
+| `kinotv-installer.mjs` | The installer (`tools/tizen/installer.ts` plus the setup wizard), bundled into one file that needs only Node.js. |
+
+**One-time setup on GitHub, before the first release:**
+
+1. **The repo.** Set `"kinotv": { "githubRepo": "<owner>/<repo>" }` in `package.json`. This is the only place
+   it is set. The app's update check and `install.sh` use it. Until it is set, it stays the placeholder
+   `OWNER/REPO`, the update check is off and releases are blocked.
+2. **The credentials.** Add the repository secrets `KP_CLIENT_ID` and `KP_CLIENT_SECRET` (GitHub → Settings →
+   Secrets and variables → Actions → New repository secret). They must be KinoTV's **own** kino.watch API
+   client, never the borrowed development one from `.env.local`. The release build passes them to the app as
+   `VITE_KP_CLIENT_ID` and `VITE_KP_CLIENT_SECRET`, the same variables `.env.local` sets during development.
+
+The release gate (`tools/release/gate.ts`) fails the workflow with a clear message if either secret is missing,
+if the tag isn't `v` + the `package.json` version, or if `githubRepo` doesn't name the repository being
+released.
+
+**To release:** set `version` in `package.json`, commit, then `git tag v<version>` and push the tag. To check the
+release files locally, run `npm run build && npm run release:assets`. They go to `dist-release/` (git-ignored).
+
+The app checks `https://api.github.com/repos/<githubRepo>/releases/latest` at launch, at most once a day. The
+result is kept in `localStorage`. When the latest tag is a newer semver than the app's own version, Settings shows
+"Доступно обновление (vX.Y.Z)". `VITE_RELEASES_URL` overrides the URL; the e2e tests point it at the fake API.

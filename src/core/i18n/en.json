@@ -26,6 +26,8 @@
   "signin.retry": "Retry",
   "settings.account": "Account: {name}",
   "settings.signOut": "Sign out",
+  "settings.updateAvailable": "Update available (v{version})",
+  "settings.updateHint": "To update KinoTV, run the installer on your computer again",
   "home.continue": "Continue watching",
   "home.fresh": "New releases",
   "home.popular": "Popular",

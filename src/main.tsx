@@ -10,9 +10,11 @@ import '@fontsource/inter/cyrillic-700.css';
 import '@fontsource/inter/cyrillic-800.css';
 import './ui/theme/tokens.css';
 import './ui/theme/global.css';
+import { config } from './core/config';
 import { remoteBus } from './core/input/remoteBus';
 import { registerRemoteKeys } from './core/platform/keys';
 import { startServices } from './core/services';
+import { startUpdateCheck } from './core/updates/updateCheck';
 import { startSpatialNavigation } from './ui/focus/spatialNavigation';
 import { screenStack } from './ui/nav/stack';
 import { App } from './ui/app/App';
@@ -23,6 +25,8 @@ startSpatialNavigation(remoteBus);
 remoteBus.pushBackHandler(() => screenStack.pop());
 remoteBus.listen(window);
 startServices();
+// At most once a day; Settings shows "Update available" when GitHub has a newer release.
+startUpdateCheck({ releasesUrl: config.releasesUrl, currentVersion: config.appVersion, storage: window.localStorage });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

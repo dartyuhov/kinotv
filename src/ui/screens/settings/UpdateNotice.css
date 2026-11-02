@@ -1,0 +1,16 @@
+.update-notice {
+  max-width: 720px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-control);
+}
+
+.update-notice__title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.update-notice__hint {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+}

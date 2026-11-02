@@ -15,6 +15,16 @@ export const config = {
     secret: import.meta.env.VITE_KP_CLIENT_SECRET ?? '',
   },
 
-  /** package.json version, injected by vite.config.ts. Sent to kino.watch in the device notify. */
+  /**
+   * package.json version (the same one config.xml carries), injected by vite.config.ts. Sent to
+   * kino.watch in the device notify and compared with the latest release by the update check.
+   */
   appVersion: __APP_VERSION__,
+
+  /**
+   * Where the update check finds the latest release: GitHub's API for package.json's
+   * "kinotv": { "githubRepo" }, or VITE_RELEASES_URL (e2e points it at the fake API). Null turns the
+   * check off, which is the case until the repo is set.
+   */
+  releasesUrl: import.meta.env.VITE_RELEASES_URL || (__GITHUB_REPO__ ? `https://api.github.com/repos/${__GITHUB_REPO__}/releases/latest` : null),
 } as const;

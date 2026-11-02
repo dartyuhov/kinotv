@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { Page, Request, Route } from '@playwright/test';
 
 /** The app under test is built with VITE_API_BASE_URL set to this host (see playwright.config.ts). */
@@ -5,6 +6,16 @@ export const FAKE_API_BASE_URL = 'http://fake-api.kinotv.test';
 
 /** Fake OAuth client credentials baked into the e2e build. Real ones live only in a git-ignored .env.local. */
 export const FAKE_CLIENT = { id: 'e2e-client-id', secret: 'e2e-client-secret' } as const;
+
+/**
+ * The GitHub "latest release" endpoint the app's update check calls. The e2e build points
+ * VITE_RELEASES_URL here (see playwright.config.ts), so it is routed like any other fake API path.
+ */
+export const RELEASES_PATH = '/github/repos/example/kinotv/releases/latest';
+export const FAKE_RELEASES_URL = `${FAKE_API_BASE_URL}${RELEASES_PATH}`;
+
+/** The version the app under test reports: package.json's, which the build injects. */
+export const APP_VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version;
 
 export interface RecordedRequest {
   method: string;
@@ -56,12 +67,14 @@ const SESSION_DEFAULTS: Array<[method: string, path: string, response: FakeRespo
  *   if any are left, so the route table always describes everything the app called.
  * - Routes every signed-in session calls are answered by default (see `SESSION_DEFAULTS`); `on()`
  *   overrides them like any other route.
+ * - The app checks for updates at launch, so RELEASES_PATH is answered by default too: the latest
+ *   release is the app's own version (no update). Tests about updates replace it.
  */
 export class FakeApi {
   readonly baseUrl = FAKE_API_BASE_URL;
   readonly requests: RecordedRequest[] = [];
   readonly unhandled: RecordedRequest[] = [];
-  private readonly routes = new Map<string, RouteHandler>();
+  private readonly routes = new Map<string, RouteHandler>([[routeKey('GET', RELEASES_PATH), { json: { tag_name: `v${APP_VERSION}` } }]]);
 
   constructor() {
     for (const [method, path, response] of SESSION_DEFAULTS) this.on(method, path, response);
