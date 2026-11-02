@@ -1,0 +1,46 @@
+/* Full-stage scrim. A plain translucent fill: no backdrop-filter (spec §6.3). */
+.confirm-dialog {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim);
+  animation: confirm-dialog-fade var(--motion-overlay) var(--ease-out);
+}
+
+.confirm-dialog__panel {
+  min-width: 720px;
+  padding: var(--space-6);
+  border-radius: var(--radius-dialog);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-focus);
+  text-align: center;
+  animation: confirm-dialog-rise var(--motion-overlay) var(--ease-out);
+}
+
+.confirm-dialog__title {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+@keyframes confirm-dialog-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-dialog-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
