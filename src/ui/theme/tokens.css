@@ -1,0 +1,58 @@
+/*
+ * Design tokens (spec §6.2). Components use only these custom properties.
+ * Layout is in 1920×1080 logical pixels. Minimum body text is 24px (viewing distance ~3 m).
+ */
+:root {
+  /* Colour */
+  --color-bg: #000;
+  --color-text: #fff;
+  --color-text-secondary: rgba(255, 255, 255, 0.72);
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  --color-primary: #fff; /* white pill: primary button, active tab */
+  --color-on-primary: #000;
+  --color-control: rgba(120, 120, 128, 0.45); /* secondary buttons */
+  --color-tabbar: rgba(60, 60, 67, 0.55);
+  --color-tabbar-border: rgba(255, 255, 255, 0.08);
+  --color-scrim: rgba(0, 0, 0, 0.72);
+  --color-dialog: #1c1c1e;
+
+  /* Type */
+  --font-family: 'Inter', system-ui, sans-serif;
+  --font-size-body: 24px;
+  --font-size-label: 24px;
+  --font-size-headline: 40px;
+  --font-size-title: 72px;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-heavy: 800;
+
+  /* Shape */
+  --radius-pill: 999px;
+  --radius-card: 12px;
+  --radius-button: 18px;
+  --radius-dialog: 28px;
+
+  /* Space */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 48px;
+  --space-6: 64px;
+  --screen-gutter: 96px;
+  --tabbar-top: 40px;
+  --content-top: 200px; /* first content row sits below the floating tab bar */
+
+  /* Elevation */
+  --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --shadow-focus: 0 18px 40px rgba(0, 0, 0, 0.55);
+
+  /* Motion: animate only transform and opacity (spec §6.3) */
+  --motion-focus: 220ms;
+  --motion-overlay: 200ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --scale-focus-button: 1.06;
+  --scale-focus-card: 1.1;
+  --scale-focus-tab: 1.08;
+}

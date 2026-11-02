@@ -1,0 +1,49 @@
+/* Floating translucent pill. No backdrop-filter (spec §6.3): a plain translucent fill over the backdrop. */
+.tabbar {
+  position: absolute;
+  top: var(--tabbar-top);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tabbar);
+  border: 1px solid var(--color-tabbar-border);
+  box-shadow: var(--shadow-float);
+  z-index: 10;
+}
+
+.tabbar__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  min-width: 56px;
+  padding: 0 26px;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.tabbar__icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* The active tab is a white pill with black text. */
+.tabbar__tab--active {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+/* The focused tab is always the active one (focusing a tab selects it); focus adds lift. */
+.tabbar__tab[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  transform: scale(var(--scale-focus-tab));
+  box-shadow: var(--shadow-focus);
+}

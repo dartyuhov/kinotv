@@ -13,3 +13,6 @@ tizen/.signing/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+dist-e2e/
+test-results/
+playwright-report/
