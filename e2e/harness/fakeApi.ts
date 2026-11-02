@@ -26,7 +26,7 @@ export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeRespons
  *
  * - `on(method, path, response)` adds a route. Registering the same method+path again replaces it,
  *   so a test can change the server's behaviour half-way through.
- * - `requests` logs every request the app made (CORS preflights excluded), in order.
+ * - `requests` logs every request the app made, in order.
  * - A request with no route gets a 501 and is listed in `unhandled`; the test fixture fails the test
  *   if any are left, so the route table always describes everything the app called.
  */
@@ -49,28 +49,19 @@ export class FakeApi {
     await page.route(`${this.baseUrl}/**`, (route) => this.handle(route));
   }
 
+  // Responses fulfilled by Playwright are not CORS-checked and trigger no preflight, so no CORS headers.
   private async handle(route: Route): Promise<void> {
-    const request = route.request();
-    const cors = corsHeaders(request);
-    if (request.method() === 'OPTIONS') {
-      await route.fulfill({ status: 204, headers: cors });
-      return;
-    }
-    const recorded = record(request);
+    const recorded = record(route.request());
     this.requests.push(recorded);
 
     const handler = this.routes.get(routeKey(recorded.method, recorded.path));
     if (!handler) {
       this.unhandled.push(recorded);
-      await route.fulfill({ status: 501, headers: cors, json: { error: 'no fake route', path: recorded.path } });
+      await route.fulfill({ status: 501, json: { error: 'no fake route', path: recorded.path } });
       return;
     }
     const res = typeof handler === 'function' ? await handler(recorded) : handler;
-    await route.fulfill({
-      status: res.status ?? 200,
-      headers: { ...cors, ...res.headers },
-      json: res.json ?? {},
-    });
+    await route.fulfill({ status: res.status ?? 200, headers: res.headers, json: res.json ?? {} });
   }
 }
 
@@ -99,14 +90,4 @@ function parseBody(request: Request): unknown {
   } catch {
     return raw;
   }
-}
-
-// The app runs on localhost and calls another origin, so every response needs CORS headers.
-function corsHeaders(request: Request): Record<string, string> {
-  const h = request.headers();
-  return {
-    'access-control-allow-origin': h['origin'] ?? '*',
-    'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-    'access-control-allow-headers': h['access-control-request-headers'] ?? 'authorization, content-type',
-  };
 }
