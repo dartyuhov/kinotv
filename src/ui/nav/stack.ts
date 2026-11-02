@@ -80,6 +80,18 @@ export const screenStack = {
     return true;
   },
 
+  /**
+   * Swaps the top screen for a new one, which mounts fresh (e.g. the player moving on to another
+   * episode). The screens below, and where they restore focus to, stay as they were. At the root it
+   * pushes instead, so the root is never replaced.
+   */
+  replace<N extends ScreenName>(name: N, ...args: ParamsArg<N>): void {
+    const { stack } = useScreenStackStore.getState();
+    if (stack.length <= 1) return screenStack.push(name, ...args);
+    const entry = { id: nextId++, name, params: args[0] } as StackEntry;
+    useScreenStackStore.setState({ stack: [...stack.slice(0, -1), entry] });
+  },
+
   depth(): number {
     return useScreenStackStore.getState().stack.length;
   },

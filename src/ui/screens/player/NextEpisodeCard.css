@@ -1,0 +1,42 @@
+/* The "Next episode in 10 s" card: bottom right, above the progress bar. 1920×1080 logical pixels. */
+
+.next-episode {
+  position: absolute;
+  right: var(--screen-gutter);
+  bottom: 240px;
+  width: 560px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-dialog);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-float);
+  animation: next-episode-in var(--motion-overlay) var(--ease-out);
+}
+
+.next-episode__countdown {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.next-episode__name {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-row-title);
+  font-weight: var(--font-weight-bold);
+}
+
+.next-episode__hint {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}
+
+@keyframes next-episode-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

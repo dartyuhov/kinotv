@@ -14,6 +14,8 @@ import type { ProgressReporter } from '../../../core/sync/progressReporter';
 import { itemQuery } from '../../app/queries';
 import { screenStack, type ScreenParams } from '../../nav/stack';
 import { useBackHandler } from '../../nav/useBackHandler';
+import { playEpisode, useEpisodeNeighbours } from './episodeSwitch';
+import { NextEpisodeCard } from './NextEpisodeCard';
 import { PlayerControls } from './PlayerControls';
 import { PlayerUiContext, useControlsVisibility, useKeyCaptures, type PlayerUi } from './playerUi';
 import { mediaLinksQuery, showSavedPosition, startProgressSync } from './progressSync';
@@ -37,6 +39,9 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
   const item = useQuery(itemQuery(itemId));
   const video = useMemo(() => (item.data ? findVideo(item.data, season, episode) : null), [item.data, season, episode]);
   const links = useQuery({ ...mediaLinksQuery(video?.id ?? -1), enabled: video !== null });
+  const episodes = useEpisodeNeighbours(item.data, season, episode);
+  const latestEpisodes = useRef(episodes);
+  latestEpisodes.current = episodes;
 
   const hostRef = useRef<HTMLDivElement>(null);
   const player = usePlayerAdapter(hostRef);
@@ -124,10 +129,17 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
         case 'stop':
           screenStack.pop();
           return;
-        // ▲ settings panel (ticket 08), ▼ info, CH ▲▼ episodes or channels (tickets 09, 16): not yet.
+        case 'channelUp':
+        case 'channelDown': {
+          // The next or previous episode (none at the ends: the key just shows the controls).
+          const to = key === 'channelUp' ? latestEpisodes.current.next : latestEpisodes.current.previous;
+          if (to) playEpisode(itemId, to, progress.current);
+          return;
+        }
+        // ▲ settings panel (ticket 08), ▼ info, CH ▲▼ channels (ticket 16): not yet.
       }
     });
-  }, [player, scrubber, showControls, isCaptured]);
+  }, [player, scrubber, showControls, isCaptured, itemId, progress]);
 
   // Back: layers above take it first; then hide the controls; then leave (the navigator pops).
   useBackHandler(() => {
@@ -153,10 +165,11 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
     });
   }, [player, progress, showControls]);
 
-  // The end of the video leaves the player. (The next-episode card, ticket 09, will step in before.)
+  // The end of the video leaves the player, unless there is a next episode: NextEpisodeCard owns it then.
+  const hasNext = episodes.next !== null;
   useEffect(() => {
-    if (playback.state === 'ended') screenStack.pop();
-  }, [playback.state]);
+    if (playback.state === 'ended' && !hasNext) screenStack.pop();
+  }, [playback.state, hasNext]);
 
   const ui = useMemo<PlayerUi | null>(
     () =>
@@ -197,6 +210,13 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
               hint={t('player.hint')}
             />
             {/* Overlay layers go here: the settings panel (ticket 08), the next-episode card (ticket 09). */}
+            {episodes.next && (
+              <NextEpisodeCard
+                label={episodes.next.label}
+                onPlay={() => playEpisode(itemId, episodes.next!, progress.current)}
+                onLeave={() => screenStack.pop()}
+              />
+            )}
           </PlayerUiContext.Provider>
         )
       )}

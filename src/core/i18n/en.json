@@ -133,5 +133,9 @@
   "bookmarks.pickerFailed": "Couldn't load your folders",
   "bookmarks.noFolders": "No folders yet. Create one on kino.watch",
   "bookmarks.addFailed": "Couldn't add “{title}” to “{folder}”",
-  "bookmarks.removeFailed": "Couldn't remove “{title}” from “{folder}”"
+  "bookmarks.removeFailed": "Couldn't remove “{title}” from “{folder}”",
+  "player.nextEpisode": "Next episode",
+  "player.nextEpisodeIn": "Next episode in {n} s",
+  "player.nextEpisodeName": "{where} · {title}",
+  "player.nextEpisodeHint": "OK to watch now · Back to stay"
 }
