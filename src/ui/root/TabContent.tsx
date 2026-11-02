@@ -2,6 +2,7 @@ import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-naviga
 import type { ComponentType } from 'react';
 import { useScreenScroller } from '../nav/ScreenHost';
 import { HomeTab } from '../screens/home/HomeTab';
+import { IWatchTab } from '../screens/iwatch/IWatchTab';
 import { PlaceholderTab } from '../screens/placeholder/PlaceholderTab';
 import { SettingsTab } from '../screens/settings/SettingsTab';
 import type { TabId } from './tabs';
@@ -15,7 +16,7 @@ const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
   home: HomeTab,
   movies: PlaceholderTab,
   series: PlaceholderTab,
-  iwatch: PlaceholderTab,
+  iwatch: IWatchTab,
   tv: PlaceholderTab,
   sport: PlaceholderTab,
   bookmarks: PlaceholderTab,

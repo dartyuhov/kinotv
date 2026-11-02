@@ -45,3 +45,8 @@
   transform: scale(var(--scale-focus-button));
   box-shadow: var(--shadow-focus);
 }
+
+/* A toggle button that is on: its icon is drawn filled (e.g. a filled heart for a followed series). */
+.button--pressed .button__icon {
+  fill: currentColor;
+}

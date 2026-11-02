@@ -34,6 +34,8 @@ export interface CardProps extends CardSlot {
   progress?: number | null;
   /** Draws a watched mark. Say so in `label` too: the mark itself is not announced. */
   watched?: boolean;
+  /** A count badge, e.g. new episodes. Say what it counts in `label` too: the badge itself is not announced. */
+  badge?: number;
 }
 
 /**
@@ -53,6 +55,7 @@ export const Card = memo(function Card({
   image,
   progress,
   watched,
+  badge,
 }: CardProps) {
   const onFocus = useCallback(() => onFocusIndex(index), [index, onFocusIndex]);
   const onEnterPress = useCallback(() => onPressIndex(index), [index, onPressIndex]);
@@ -80,6 +83,11 @@ export const Card = memo(function Card({
         {watched && (
           <span className="card__watched" aria-hidden>
             <Check strokeWidth={3} />
+          </span>
+        )}
+        {badge !== undefined && badge > 0 && (
+          <span className="card__badge" aria-hidden>
+            {badge}
           </span>
         )}
         <div className="card__sheen" aria-hidden />

@@ -1,6 +1,6 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, Play, Plus } from 'lucide-react';
+import { Play, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ItemDetails } from '../../../core/api/types';
 import { formatDuration, is4k, languageName, ratingLabels, trackLanguages, typeLabel } from '../../../core/catalog/facts';
@@ -13,6 +13,7 @@ import { Backdrop } from '../../components/Backdrop';
 import { Button } from '../../components/Button';
 import { screenStack, type ScreenParams } from '../../nav/stack';
 import { useInitialFocus } from '../../nav/useInitialFocus';
+import { FollowButton } from './FollowButton';
 import { Seasons } from './Seasons';
 import './TitleScreen.css';
 
@@ -137,7 +138,7 @@ function Actions({ itemId, keys: k, play, series }: ActionsProps) {
           onPress={() => screenStack.push('player', { itemId, ...where })}
         />
         <Button focusKey={k.bookmark} icon={Plus} iconOnly label={t('title.bookmark')} onPress={notYet} />
-        {series && <Button focusKey={k.follow} icon={Heart} iconOnly label={t('title.follow')} onPress={notYet} />}
+        {series && <FollowButton focusKey={k.follow} itemId={itemId} />}
       </div>
     </FocusContext.Provider>
   );

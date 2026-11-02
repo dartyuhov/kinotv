@@ -219,17 +219,17 @@ test.describe('a series', () => {
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
   });
 
-  test('has Bookmark and Follow buttons that do nothing yet', async ({ app, api, page, remote }) => {
+  // Follow itself is covered in iwatch.spec.ts.
+  test('has a Bookmark button that does nothing yet, then Follow', async ({ app, api, page, remote }) => {
     fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });
     await app.open();
     await openFromHero(page, remote);
+    await api.idle();
     const requests = api.requests.length;
 
     await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('В закладки');
     await remote.press('ok', 'right');
-    await expect(app.focused).toHaveAccessibleName('Буду смотреть');
-    await remote.press('ok');
     await expect(app.focused).toHaveAccessibleName('Буду смотреть');
     await expect(heading(page)).toHaveText('Тихая гавань');
     expect(api.requests.length).toBe(requests);

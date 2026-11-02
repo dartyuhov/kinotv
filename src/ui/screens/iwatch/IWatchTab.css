@@ -1,0 +1,36 @@
+/*
+ * I Watch fills the content region under the tab bar. The heading sits top left; the row of followed
+ * series sits where Home's rows start, over the focused series' art (drawn by the root screen).
+ */
+.iwatch {
+  position: absolute;
+  inset: 0;
+  padding: var(--space-5) var(--screen-gutter) 0;
+}
+
+.iwatch__title {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.iwatch__empty,
+.iwatch__message {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-semibold);
+}
+
+.iwatch__hint {
+  margin-top: var(--space-2);
+  max-width: 1100px;
+  color: var(--color-text-secondary);
+}
+
+.iwatch__rows {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--home-rows-top);
+}

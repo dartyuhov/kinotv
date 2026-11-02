@@ -79,5 +79,15 @@
   "lang.jpn": "Japanese",
   "lang.kor": "Korean",
   "lang.zho": "Chinese",
-  "title.failed": "Couldn't load this page. Press Back to return"
+  "title.failed": "Couldn't load this page. Press Back to return",
+  "card.newEpisodes.one": "{label}, {n} new episode",
+  "card.newEpisodes.few": "{label}, {n} new episodes",
+  "card.newEpisodes.many": "{label}, {n} new episodes",
+  "card.newEpisodes.other": "{label}, {n} new episodes",
+  "home.newEpisodes": "New episodes",
+  "iwatch.empty": "You don't follow any series yet",
+  "iwatch.emptyHint": "Choose Follow on a series page, and it will show up here with its new episodes",
+  "iwatch.suggestions": "Popular series",
+  "iwatch.failed": "Couldn't load the list",
+  "title.followFailed": "Couldn't update I Watch. Please try again"
 }

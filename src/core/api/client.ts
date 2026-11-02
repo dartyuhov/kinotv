@@ -57,6 +57,11 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /**
+   * GET /v1/watching/togglewatchlist?id=: follows the series if the viewer doesn't, unfollows it if they
+   * do (I Watch). Resolves with whether the series is followed now. A toggle, so it is never retried.
+   */
+  toggleWatchlist(id: number): Promise<boolean>;
 }
 
 export function createApiClient(http: Http): ApiClient {
@@ -103,6 +108,10 @@ export function createApiClient(http: Http): ApiClient {
         videos: item.videos?.map(video),
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
+    },
+    async toggleWatchlist(id) {
+      const res = await http<{ watching?: unknown }>({ method: 'GET', path: '/v1/watching/togglewatchlist', query: { id }, retry: false });
+      return Boolean(res.watching);
     },
   };
 }
