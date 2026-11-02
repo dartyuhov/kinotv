@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_KP_CLIENT_SECRET?: string;
   /** GitHub "latest release" URL for the update check. Defaults to the repo in package.json (see core/config.ts). */
   readonly VITE_RELEASES_URL?: string;
+  /** "fake" builds the app with the FakePlayer (e2e tests; see core/player/createPlayer.ts). Unset otherwise. */
+  readonly VITE_PLAYER?: string;
 }
 
 interface ImportMeta {

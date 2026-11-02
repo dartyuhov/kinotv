@@ -80,4 +80,8 @@
   --motion-scroll: 300ms;
   --motion-backdrop: 400ms;
   --scale-focus-tab: 1.08;
+
+  /* Player: darkens the picture under the controls, top and bottom (mockup player-remote). */
+  --scrim-player: linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 40%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 25%);
 }

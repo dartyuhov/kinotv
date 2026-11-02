@@ -342,6 +342,9 @@ export function fakeHome(api: FakeApi, catalog: Partial<HomeCatalog> = {}): Home
     const id = Number(req.query.id);
     return home.progress[id] ?? { json: { status: 200, item: { id, title: '', type: 'movie', videos: [] } } };
   });
+  // The player's progress writes (research 10-kp-api §7). Route them again after fakeHome to change them.
+  api.on('GET', '/v1/watching/marktime', { json: { status: 200 } });
+  api.on('GET', '/v1/watching/toggle', { json: { status: 200, watched: 1 } });
   const everything = [...home.hot, ...home.fresh, ...home.popular, ...home.movies];
   for (const item of everything) fakeTitle(api, item);
   for (const serial of home.serials) {
@@ -350,7 +353,58 @@ export function fakeHome(api: FakeApi, catalog: Partial<HomeCatalog> = {}): Home
   return home;
 }
 
-/** GET /v1/items/<id>: the title's details. */
+/** GET /v1/items/<id>: the title's details. Also lets the player fetch stream links for its videos. */
 export function fakeTitle(api: FakeApi, item: FakeItem): void {
   api.on('GET', `/v1/items/${item.id}`, { json: { status: 200, item } });
+  fakeMediaLinks(api, [...(item.videos ?? []), ...(item.seasons ?? []).flatMap((s) => s.episodes)]);
+}
+
+/** The stream qualities every fake video comes in, best first. */
+export const FAKE_QUALITIES = [
+  { quality: '1080p', quality_id: 3, w: 1920, h: 1080 },
+  { quality: '720p', quality_id: 2, w: 1280, h: 720 },
+] as const;
+
+/** Where the fake CDN serves a video's stream, e.g. `streamUrl(210, '1080p', 'hls4')`. Nothing is fetched from it. */
+export function streamUrl(mid: number, quality: string, type: 'http' | 'hls' | 'hls2' | 'hls4'): string {
+  return `${FAKE_CDN_BASE_URL}/${type}/${mid}/${quality}.${type === 'http' ? 'mp4' : 'm3u8'}`;
+}
+
+const mediaByApi = new WeakMap<FakeApi, Map<number, FakeVideo>>();
+
+/**
+ * GET /v1/items/media-links?mid=<video id>: the stream links of each video, in every FAKE_QUALITIES rung.
+ * The body has no `status` and uses `urls`, as the real endpoint does (research 10-kp-api §6.6).
+ */
+export function fakeMediaLinks(api: FakeApi, videos: FakeVideo[]): void {
+  let known = mediaByApi.get(api);
+  if (!known) {
+    const media = new Map<number, FakeVideo>();
+    known = media;
+    mediaByApi.set(api, media);
+    api.on('GET', '/v1/items/media-links', (req) => {
+      const video = media.get(Number(req.query.mid));
+      if (!video) return { status: 404, json: { status: 404, error: 'not found' } };
+      return {
+        json: {
+          files: FAKE_QUALITIES.map(({ quality, quality_id, w, h }) => ({
+            codec: 'h264',
+            w,
+            h,
+            quality,
+            quality_id,
+            file: `/${video.id}/${quality}.mp4`,
+            urls: {
+              http: streamUrl(video.id, quality, 'http'),
+              hls: streamUrl(video.id, quality, 'hls'),
+              hls2: streamUrl(video.id, quality, 'hls2'),
+              hls4: streamUrl(video.id, quality, 'hls4'),
+            },
+          })),
+          subtitles: video.subtitles,
+        },
+      };
+    });
+  }
+  for (const video of videos) known.set(video.id, video);
 }

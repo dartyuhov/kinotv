@@ -10,6 +10,8 @@ export interface HttpRequest {
   query?: Params;
   /** POST body, sent as application/x-www-form-urlencoded (kino.watch ignores JSON bodies). */
   form?: Params;
+  /** `false` never retries this GET, e.g. one that toggles server state (GET /v1/watching/toggle). */
+  retry?: false;
 }
 
 /** Sends one request and returns the parsed JSON body, or throws an ApiError. */
@@ -69,7 +71,7 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
         return await once<T>(req);
       } catch (error) {
         const delay = retryDelaysMs[attempt];
-        if (req.method !== 'GET' || delay === undefined || !isRetryable(error)) throw error;
+        if (req.method !== 'GET' || req.retry === false || delay === undefined || !isRetryable(error)) throw error;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

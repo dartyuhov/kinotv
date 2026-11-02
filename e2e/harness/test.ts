@@ -2,6 +2,7 @@ import { test as base, expect, type Locator, type Page } from '@playwright/test'
 import { fakeHome } from './catalog';
 import { FakeApi } from './fakeApi';
 import { FakeCdn } from './fakeCdn';
+import { FakePlayerRemote } from './player';
 import { Remote } from './remote';
 
 /** The page clock starts here in every test. It runs normally until a test pauses or advances it. */
@@ -108,6 +109,8 @@ interface Fixtures {
   clock: Clock;
   remote: Remote;
   app: App;
+  /** The FakePlayer the e2e build plays through: its calls, and cues for time, buffering, end and errors. */
+  player: FakePlayerRemote;
 }
 
 export const test = base.extend<Fixtures>({
@@ -142,6 +145,7 @@ export const test = base.extend<Fixtures>({
   ],
   remote: async ({ page }, use) => use(new Remote(page)),
   app: async ({ page }, use) => use(new App(page)),
+  player: async ({ page }, use) => use(new FakePlayerRemote(page)),
 });
 
 export { expect };

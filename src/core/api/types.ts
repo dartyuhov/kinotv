@@ -179,3 +179,33 @@ export interface ItemDetails extends ItemSummary {
   videos?: Video[];
   seasons?: Season[];
 }
+
+/** Stream URLs of one file, by kind (research 10-kp-api §6.5). The URLs are signed and expire (~24 h). */
+export type StreamUrls = Partial<Record<'http' | 'hls' | 'hls2' | 'hls4', string>>;
+
+/** One encoded file of a video: a quality in one codec. */
+export interface VideoFile {
+  /** "h264", "h265" or "hevc": compare case-insensitively. */
+  codec: string;
+  w: number;
+  h: number;
+  /** "2160p", "1080p", "720p", "480p". */
+  quality: string;
+  /** 1 = 480p, 2 = 720p, 3 = 1080p, 4 = 2160p. */
+  quality_id: number;
+  file?: string;
+  /** media-links sends `urls`; the item details send `url`. */
+  urls?: StreamUrls;
+  url?: StreamUrls;
+}
+
+/** GET /v1/items/media-links?mid= (no `status` envelope): a video's files and subtitles. */
+export interface MediaLinks {
+  files: VideoFile[];
+  subtitles: Subtitle[];
+}
+
+/** GET /v1/watching/toggle → the video's new state. */
+export interface WatchedToggle {
+  watched: boolean;
+}

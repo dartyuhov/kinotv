@@ -36,6 +36,8 @@ export default defineConfig({
       VITE_KP_CLIENT_ID: FAKE_CLIENT.id,
       VITE_KP_CLIENT_SECRET: FAKE_CLIENT.secret,
       VITE_RELEASES_URL: FAKE_RELEASES_URL,
+      // Play through the FakePlayer, which tests drive via e2e/harness/player.ts (spec §10, player seam).
+      VITE_PLAYER: 'fake',
     },
   },
 });
