@@ -1,6 +1,6 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Heart, Play, Plus } from 'lucide-react';
+import { Play, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ItemDetails } from '../../../core/api/types';
 import { formatDuration, is4k, languageName, ratingLabels, trackLanguages, typeLabel } from '../../../core/catalog/facts';
@@ -14,6 +14,7 @@ import { Button } from '../../components/Button';
 import { screenStack, type ScreenParams } from '../../nav/stack';
 import { useInitialFocus } from '../../nav/useInitialFocus';
 import { FolderPicker } from '../bookmarks/FolderPicker';
+import { FollowButton } from './FollowButton';
 import { Seasons } from './Seasons';
 import './TitleScreen.css';
 
@@ -121,8 +122,8 @@ interface ActionsProps {
 }
 
 /**
- * Play/Resume, then Bookmark and, for series, Follow. Bookmark opens the folder picker. Follow (ticket 13)
- * is a focusable placeholder for now: OK on it does nothing.
+ * Play/Resume, then Bookmark and, for series, Follow. Bookmark opens the folder picker; Follow toggles
+ * the series in I Watch.
  */
 function Actions({ itemId, keys: k, play, series }: ActionsProps) {
   const { ref } = useFocusable<object, HTMLDivElement>({ focusKey: k.actions, preferredChildFocusKey: k.play });
@@ -142,13 +143,11 @@ function Actions({ itemId, keys: k, play, series }: ActionsProps) {
         />
         <Button focusKey={k.bookmark} icon={Plus} iconOnly label={t('title.bookmark')} onPress={() => setPicking(true)} />
         {picking && item && <FolderPicker item={item} onClose={() => setPicking(false)} />}
-        {series && <Button focusKey={k.follow} icon={Heart} iconOnly label={t('title.follow')} onPress={notYet} />}
+        {series && <FollowButton focusKey={k.follow} itemId={itemId} />}
       </div>
     </FocusContext.Provider>
   );
 }
-
-const notYet = () => undefined;
 
 /** "Фильм · Драма, Детектив · 2019 · 1 ч 52 мин"; "Сериал · 3 сезона · Драма, Детектив · 2022". */
 function metaLine(item: ItemDetails): string {

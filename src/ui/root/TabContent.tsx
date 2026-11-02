@@ -3,7 +3,9 @@ import type { ComponentType } from 'react';
 import { useScreenScroller } from '../nav/ScreenHost';
 import { BookmarksTab } from '../screens/bookmarks/BookmarksTab';
 import { HomeTab } from '../screens/home/HomeTab';
+import { IWatchTab } from '../screens/iwatch/IWatchTab';
 import { PlaceholderTab } from '../screens/placeholder/PlaceholderTab';
+import { SearchTab } from '../screens/search/SearchTab';
 import { SettingsTab } from '../screens/settings/SettingsTab';
 import type { TabId } from './tabs';
 import './TabContent.css';
@@ -12,11 +14,11 @@ export const ROOT_CONTENT_FOCUS_KEY = 'root:content';
 
 /** Each tab's screen. Later tickets replace a placeholder with the real screen here. */
 const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
-  search: PlaceholderTab,
+  search: SearchTab,
   home: HomeTab,
   movies: PlaceholderTab,
   series: PlaceholderTab,
-  iwatch: PlaceholderTab,
+  iwatch: IWatchTab,
   tv: PlaceholderTab,
   sport: PlaceholderTab,
   bookmarks: BookmarksTab,

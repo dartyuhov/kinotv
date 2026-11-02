@@ -1,14 +1,17 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { ItemSummary } from '../../../core/api/types';
 import { resumePoint } from '../../../core/catalog/resume';
 import { splitTitle } from '../../../core/catalog/titles';
 import { t } from '../../../core/i18n';
+import { withNewEpisodes } from '../../../core/catalog/following';
+import { followingQuery } from '../../app/following';
 import { watchingQuery } from '../../app/queries';
 import { artwork } from '../../components/artwork';
 import { Card, type CardSlot, type CardVariant } from '../../components/Card';
 import { Row } from '../../components/Row';
+import { renderSeriesCard } from '../iwatch/seriesCard';
 import { screenStack } from '../../nav/stack';
 import { useRootBackdrop } from '../../root/rootBackdrop';
 import { Hero } from './Hero';
@@ -24,6 +27,8 @@ interface HomeRow {
   title: string;
   variant: CardVariant;
   query: UseQueryResult<ItemSummary[]>;
+  /** The row's own card; poster cards otherwise (Continue watching has its own too). */
+  renderCard?(item: ItemSummary, slot: CardSlot): ReactNode;
 }
 
 /**
@@ -33,11 +38,20 @@ interface HomeRow {
 export function HomeTab() {
   const rows: HomeRow[] = [
     { id: 'continue', title: t('home.continue'), variant: 'landscape', query: useQuery(continueWatchingQuery) },
+    {
+      id: 'new',
+      title: t('home.newEpisodes'),
+      variant: 'poster',
+      query: useQuery({ ...followingQuery, select: withNewEpisodes }),
+      renderCard: renderSeriesCard,
+    },
     { id: 'fresh', title: t('home.fresh'), variant: 'poster', query: useQuery(shortcutQuery('fresh')) },
     { id: 'popular', title: t('home.popular'), variant: 'poster', query: useQuery(shortcutQuery('popular')) },
   ];
   // Nothing to continue: no row at all, rather than an empty one.
   const shown = rows.filter((row) => !(row.id === 'continue' && row.query.data?.length === 0));
+  // New episodes only shows when there are some (not while loading, nor when the list failed).
+  const shownRows = shown.filter((row) => row.id !== 'new' || (row.query.data?.length ?? 0) > 0);
 
   const featured = useQuery(shortcutQuery('hot')).data?.slice(0, FEATURED_COUNT) ?? [];
   const heroIndex = useHomeStore((s) => s.heroIndex) % Math.max(1, featured.length);
@@ -69,7 +83,7 @@ export function HomeTab() {
   const openFeatured = useCallback(() => featuredItem && openTitle(featuredItem), [featuredItem, openTitle]);
   const onItemFocus = useCallback((item: ItemSummary) => setFocusedItem(item), []);
   const onRowFocus = useCallback((rowKey: string) => useHomeStore.setState({ activeRow: rowKey }), []);
-  const { trackRef, offsetY, animate } = useRowsScroll(shown.map((row) => row.id).join());
+  const { trackRef, offsetY, animate } = useRowsScroll(shownRows.map((row) => row.id).join());
 
   return (
     <div className="home">
@@ -90,7 +104,7 @@ export function HomeTab() {
             className={animate ? 'home__rows-track home__rows-track--animated' : 'home__rows-track'}
             style={{ transform: `translate3d(0, ${-offsetY}px, 0)` }}
           >
-            {shown.map((row) => (
+            {shownRows.map((row) => (
               <Row
                 key={row.id}
                 focusKey={`home:row:${row.id}`}
@@ -100,7 +114,7 @@ export function HomeTab() {
                 // Minimal on purpose: retry and recovery per row come with the errors ticket (18).
                 message={row.query.isError ? t('home.rowFailed') : undefined}
                 itemKey={itemId}
-                renderCard={row.id === 'continue' ? renderContinueCard : renderPosterCard}
+                renderCard={row.renderCard ?? (row.id === 'continue' ? renderContinueCard : renderPosterCard)}
                 onItemFocus={onItemFocus}
                 onItemPress={openTitle}
                 onRowFocus={onRowFocus}
