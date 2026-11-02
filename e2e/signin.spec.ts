@@ -148,3 +148,39 @@ test('restarting the app with a stored session goes straight to Home', async ({ 
     'access-1',
   ]);
 });
+
+test('Back on Sign-in offers to exit the app, and cancelling returns to the code', async ({ app, api, page, remote }) => {
+  fakeDeviceFlow(api);
+  await app.open({ signedIn: false });
+  await expect(page.getByText('CODE1')).toBeVisible();
+
+  await remote.press('back');
+  await expect(page.getByRole('alertdialog', { name: 'Выйти из приложения?' })).toBeVisible();
+  await expect(app.focused).toHaveAccessibleName('Выйти');
+
+  await remote.press('back');
+  await expect(page.getByRole('alertdialog')).toBeHidden();
+  await expect(app.focused).toHaveAccessibleName('Получить новый код');
+  await expect(page.getByText('CODE1')).toBeVisible();
+
+  await remote.press('back', 'ok');
+  await expect(page.locator('html')).toHaveAttribute('data-exit-requested', 'true');
+});
+
+test('tokens and the client secret never reach the console', async ({ app, api, clock, page }) => {
+  const lines: string[] = [];
+  page.on('console', (message) => lines.push(message.text()));
+  page.on('pageerror', (error) => lines.push(String(error)));
+  // Sign in, refresh after a 401, then fail: the paths that handle secrets and report errors.
+  api.on('POST', '/oauth2/token', tokens(2));
+  api.on('GET', '/v1/user', (req) =>
+    req.query.access_token === 'access-2' ? { status: 500, json: {} } : { status: 401, json: { error: 'unauthorized' } },
+  );
+  await signInWithCode(app, api, clock, page);
+  await clock.runFor(10_000);
+  expect(api.requestsTo('POST', '/oauth2/token')).toHaveLength(1);
+  expect(api.requestsTo('GET', '/v1/user').length).toBeGreaterThan(2);
+
+  const secrets = ['device-code-1', 'access-1', 'refresh-1', 'access-2', 'refresh-2', CLIENT_QUERY.client_secret];
+  for (const line of lines) for (const secret of secrets) expect(line).not.toContain(secret);
+});

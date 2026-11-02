@@ -2,9 +2,12 @@ import { FocusContext, setFocus, useFocusable } from '@noriginmedia/norigin-spat
 import { useEffect, useRef, useState } from 'react';
 import { startDeviceFlow, type DeviceFlow, type DeviceFlowState } from '../../../core/auth/deviceFlow';
 import { t } from '../../../core/i18n';
+import { exitApp } from '../../../core/platform/app';
 import { oauth, session } from '../../../core/services';
 import { Button } from '../../components/Button';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { QrCode } from '../../components/QrCode';
+import { useBackHandler } from '../../nav/useBackHandler';
 import './SignInScreen.css';
 
 const ACTION_FOCUS_KEY = 'signin:action';
@@ -28,6 +31,11 @@ export function SignInScreen() {
   useEffect(() => {
     void setFocus(ACTION_FOCUS_KEY);
   }, []);
+
+  // Sign-in is the bottom layer while signed out: Back offers to exit, as on Home. Handling it here also
+  // keeps Back from popping the screen stack waiting underneath.
+  const [askingToExit, setAskingToExit] = useState(false);
+  useBackHandler(() => setAskingToExit(true));
 
   return (
     <FocusContext.Provider value={focusKey}>
@@ -62,6 +70,19 @@ export function SignInScreen() {
             onPress={() => flow.current?.restart()}
           />
         </div>
+        {askingToExit && (
+          <ConfirmDialog
+            id="signin:exit-dialog"
+            title={t('exit.title')}
+            confirmLabel={t('exit.confirm')}
+            cancelLabel={t('exit.cancel')}
+            onConfirm={() => {
+              exitApp();
+              setAskingToExit(false);
+            }}
+            onCancel={() => setAskingToExit(false)}
+          />
+        )}
       </div>
     </FocusContext.Provider>
   );
