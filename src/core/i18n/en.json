@@ -25,5 +25,7 @@
   "signin.failed": "Couldn't get a sign-in code. Check the internet connection and try again.",
   "signin.retry": "Retry",
   "settings.account": "Account: {name}",
-  "settings.signOut": "Sign out"
+  "settings.signOut": "Sign out",
+  "settings.updateAvailable": "Update available (v{version})",
+  "settings.updateHint": "To update KinoTV, run the installer on your computer again"
 }

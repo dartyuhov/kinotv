@@ -15,6 +15,14 @@ export class UserError extends Error {
   }
 }
 
+// How the user runs the setup steps again: `npm run tv:setup` in a checkout, `bash install.sh` for the
+// end-user installer. Messages that end in "run … again" use it.
+let setupCommandText = '`npm run tv:setup`';
+export const setupCommand = (): string => setupCommandText;
+export function setSetupCommand(command: string): void {
+  setupCommandText = command;
+}
+
 export interface RunResult {
   code: number;
   /** stdout and stderr together, in order (the Tizen tools are not consistent about which one they use). */
@@ -115,4 +123,21 @@ export function saveSettings(update: Settings): void {
   const saved: Settings = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Settings) : {};
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify({ ...saved, ...update }, null, 2)}\n`);
+}
+
+/**
+ * Runs a command's main function: a UserError is printed as the title plus the steps (no stack trace)
+ * and sets exit code 1; anything else is a bug and is rethrown.
+ */
+export async function runMain(main: () => Promise<void>): Promise<void> {
+  try {
+    await main();
+  } catch (error) {
+    if (!(error instanceof UserError)) throw error;
+    print(`\n${style.red('✗')} ${style.bold(error.message)}`);
+    for (const step of error.steps) print(`  ${step}`);
+    process.exitCode = 1;
+  } finally {
+    closeInput();
+  }
 }

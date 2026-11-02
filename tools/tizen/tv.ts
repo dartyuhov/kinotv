@@ -3,7 +3,7 @@ import { networkInterfaces } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { APP_ID, APP_NAME } from './configXml.ts';
-import { findTool, loadSettings, ok, print, run, runAttached, UserError, warn } from './host.ts';
+import { findTool, loadSettings, ok, print, run, runAttached, setupCommand, UserError, warn } from './host.ts';
 import { copyWidget, createUnsignedWgt } from './wgt.ts';
 
 export interface TizenTools {
@@ -17,7 +17,7 @@ export function requireTools(): TizenTools {
   const missing = [!tizen && 'Tizen CLI (tizen)', !sdb && 'sdb'].filter(Boolean).join(' and ');
   if (!tizen || !sdb) {
     throw new UserError(`${missing} not found.`, [
-      'Run `npm run tv:setup` to install or locate the Tizen tools.',
+      `Run ${setupCommand()} to install or locate the Tizen tools.`,
       'They are looked up on PATH and in $TIZEN_HOME (default ~/tizen-studio).',
     ]);
   }
@@ -67,14 +67,14 @@ export function connectTv(sdb: string, address: string): ConnectedTv {
   if (device?.state === 'device') return { serial, name: device.name };
   throw new UserError(`Can't reach the TV at ${address}${device ? ` (sdb says "${device.state}")` : ''}.`, [
     ...developerModeSteps(),
-    'Then run `npm run tv:setup` again (or check the saved address in tizen/.signing/settings.json).',
+    `Then run ${setupCommand()} again (or check the saved address in tizen/.signing/settings.json).`,
   ]);
 }
 
 function requireTv(sdb: string): ConnectedTv {
   const { tv } = loadSettings();
   if (!tv) {
-    throw new UserError('No TV address saved.', ['Run `npm run tv:setup` to connect a TV, or set KINOTV_TV=<tv-ip>.']);
+    throw new UserError('No TV address saved.', [`Run ${setupCommand()} to connect a TV, or set KINOTV_TV=<tv-ip>.`]);
   }
   const connected = connectTv(sdb, tv);
   ok(`Connected to ${connected.name} (${connected.serial})`);
@@ -97,7 +97,7 @@ interface Packaged {
 }
 
 /** Signs a copy of the widget folder with `tizen package`, into outDir/KinoTV.wgt. */
-function signWidget(tizen: string, profile: string, appDir: string, outDir: string): string {
+export function signWidget(tizen: string, profile: string, appDir: string, outDir: string): string {
   const stage = join(outDir, 'widget');
   rmSync(stage, { recursive: true, force: true });
   copyWidget(appDir, stage); // tizen package writes its signature files into the folder it signs
@@ -108,7 +108,7 @@ function signWidget(tizen: string, profile: string, appDir: string, outDir: stri
   if (result.code !== 0 || !signed) {
     throw new UserError(`tizen package could not sign the app with profile "${profile}".`, [
       ...result.output.trim().split('\n').map((line) => `| ${line}`),
-      'Check the certificate passwords with `tizen security-profiles list`, or recreate the profile with `npm run tv:setup`.',
+      `Check the certificate passwords with \`tizen security-profiles list\`, or recreate the profile with ${setupCommand()}.`,
     ]);
   }
   return file;
@@ -140,7 +140,7 @@ export function packageWidget(appDir: string, outDir: string, signing: { require
   if (signing.required) {
     throw new UserError(`Can't make a signed package: ${whyUnsigned}.`, [
       'A TV only installs packages signed with a Samsung certificate for that TV.',
-      'Run `npm run tv:setup` to create or select the certificate profile.',
+      `Run ${setupCommand()} to create or select the certificate profile.`,
     ]);
   }
   const file = join(outDir, WGT_NAME);
@@ -154,7 +154,7 @@ function describePackage({ file, signedWith }: Packaged): void {
     ok(`Signed package: ${where} (profile "${signedWith}")`);
   } else {
     ok(`Unsigned package: ${where}`);
-    print('  A TV only installs signed packages. Run `npm run tv:setup` to set up a Samsung certificate,');
+    print(`  A TV only installs signed packages. Run ${setupCommand()} to set up a Samsung certificate,`);
     print('  then `npm run package` signs it, or `npm run tv` signs, installs and launches it.');
   }
 }
@@ -170,12 +170,12 @@ function requireProfile(tizen: string): string {
   if (!profile) {
     throw new UserError('No security profile saved.', [
       'The TV only installs apps signed with a Samsung certificate made for it.',
-      'Run `npm run tv:setup` to create one, or set KINOTV_TIZEN_PROFILE=<profile name>.',
+      `Run ${setupCommand()} to create one, or set KINOTV_TIZEN_PROFILE=<profile name>.`,
     ]);
   }
   if (!listProfiles(tizen).includes(profile)) {
     throw new UserError(`Security profile "${profile}" was not found in the Tizen CLI.`, [
-      'See the profiles you have with `tizen security-profiles list`, then run `npm run tv:setup` again.',
+      `See the profiles you have with \`tizen security-profiles list\`, then run ${setupCommand()} again.`,
     ]);
   }
   return profile;
@@ -192,7 +192,7 @@ function installFailureSteps(output: string): string[] {
   if (/118,\s*-12|invalid certificate chain|1010/i.test(output)) {
     return [
       "The certificate doesn't allow this TV. Its distributor certificate must list this TV's DUID.",
-      'Run `npm run tv:setup` to read the DUID and recreate the Samsung certificate.',
+      `Run ${setupCommand()} to read the DUID and recreate the Samsung certificate.`,
     ];
   }
   return [
@@ -201,7 +201,7 @@ function installFailureSteps(output: string): string[] {
   ];
 }
 
-function install(tizen: string, tv: ConnectedTv, wgt: string): void {
+export function install(tizen: string, tv: ConnectedTv, wgt: string): void {
   const result = run(tizen, ['install', '-n', WGT_NAME, '-s', tv.serial, '--', dirname(wgt)]);
   // The Tizen CLI can report a failed install and still exit with 0, so read what it says.
   if (result.code !== 0 || /install failed|failed\[|cmd_ret:\s*[1-9]/i.test(result.output)) {
@@ -211,11 +211,11 @@ function install(tizen: string, tv: ConnectedTv, wgt: string): void {
   ok(`Installed on ${tv.name}`);
 }
 
-function launch(tizen: string, tv: ConnectedTv): void {
+export function launch(tizen: string, tv: ConnectedTv): void {
   const result = run(tizen, ['run', '-p', APP_ID, '-s', tv.serial]);
   if (result.code !== 0 || /fail|error/i.test(result.output)) {
     print(result.output.trim());
-    throw new UserError(`${APP_NAME} is installed but did not start.`, ['Open it from Apps on the TV, or try `npm run tv` again.']);
+    throw new UserError(`${APP_NAME} is installed but did not start.`, ['Open it from Apps on the TV.']);
   }
   ok(`Launched ${APP_NAME} on ${tv.name}`);
 }

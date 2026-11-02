@@ -25,5 +25,7 @@
   "signin.failed": "Не удалось получить код для входа. Проверьте подключение к интернету и попробуйте ещё раз.",
   "signin.retry": "Повторить",
   "settings.account": "Аккаунт: {name}",
-  "settings.signOut": "Выйти из аккаунта"
+  "settings.signOut": "Выйти из аккаунта",
+  "settings.updateAvailable": "Доступно обновление (v{version})",
+  "settings.updateHint": "Чтобы обновить KinoTV, снова запустите установщик на компьютере"
 }

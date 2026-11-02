@@ -1,5 +1,12 @@
 .settings-tab {
+  position: relative;
   padding: var(--space-5) var(--screen-gutter) var(--space-6);
+}
+
+.settings-tab__update {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--screen-gutter);
 }
 
 .settings-tab__title {
