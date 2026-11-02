@@ -1,28 +1,106 @@
-.title-screen {
+/*
+ * Title page (mockup tvos-style, second frame). A pushed, full-stage screen: the backdrop fills it, the
+ * details sit top-left over the scrims, and a series' seasons and episodes run along the bottom.
+ */
+.title-page {
   position: absolute;
   inset: 0;
 }
 
-.title-screen__info {
+.title-page__details {
   position: absolute;
   left: var(--screen-gutter);
-  top: 260px;
-  width: 960px;
+  top: 104px;
+  width: 1000px;
 }
 
-.title-screen__title {
+/* A film has no seasons below, so its details sit low over the art, like a tvOS film page. */
+.title-page--film .title-page__details {
+  top: auto;
+  bottom: 120px;
+}
+
+.title-page__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: var(--font-size-hero);
   font-weight: var(--font-weight-heavy);
   letter-spacing: -0.03em;
   line-height: 1;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
 }
 
-.title-screen__original {
+.title-page__original {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+.title-page__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   margin-top: var(--space-2);
   color: var(--color-text-secondary);
 }
 
-.title-screen__note {
-  margin-top: var(--space-5);
-  color: var(--color-text-tertiary);
+.title-page__badge {
+  padding: 0 6px;
+  border: 1px solid var(--color-badge-border);
+  border-radius: 4px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 26px;
+}
+
+.title-page__plot {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-top: var(--space-2);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.title-page__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+/* "IMDb 7.8 · КП 8.1 · …": a dot between chips. */
+.title-page__chip + .title-page__chip::before {
+  content: '·';
+  margin-right: var(--space-2);
+}
+
+.title-page__languages {
+  margin-top: var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+/* With nothing to rate, the languages line takes the chips' place under the buttons. */
+.title-page__actions + .title-page__languages {
+  margin-top: var(--space-3);
+}
+
+.title-page__error {
+  position: absolute;
+  left: var(--screen-gutter);
+  right: var(--screen-gutter);
+  top: 50%;
+  text-align: center;
+  font-size: var(--font-size-headline);
+  color: var(--color-text-secondary);
+}
+
+.title-page__actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
 }

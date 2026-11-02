@@ -6,8 +6,10 @@ export interface ResumePoint {
   season: number | null;
   /** Episode number for series; part number for films. */
   number: number;
-  /** 0..1 of the video watched. */
+  /** 0..1 of the video watched; 1 once it is marked watched. */
   fraction: number;
+  /** Saved position in seconds. */
+  time: number;
 }
 
 /**
@@ -26,5 +28,5 @@ export function resumePoint(item: WatchingItem): ResumePoint | null {
 
   const { video, season } = best as { video: WatchingVideo; season: number | null };
   const fraction = video.status === 1 ? 1 : video.duration > 0 ? Math.min(1, Math.max(0, video.time / video.duration)) : 0;
-  return { season, number: video.number, fraction };
+  return { season, number: video.number, fraction, time: video.time };
 }

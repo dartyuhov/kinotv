@@ -1,0 +1,44 @@
+/* A series' seasons run along the bottom of the title page: the tabs, then the episode row. */
+.title-page__seasons {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+}
+
+/* Shifted left by a tab's inner space, so the first tab's text lines up with the details above. */
+.season-tabs {
+  position: relative;
+  margin: 0 var(--screen-gutter) 0 calc(var(--screen-gutter) - 32px);
+}
+
+/* Scrolled by a transform, by whole tabs, so the picked one stays on screen (see TAB_PITCH in Seasons.tsx). */
+.season-tabs__track {
+  display: flex;
+  gap: var(--space-1);
+  transition: transform var(--motion-scroll) var(--ease-out);
+}
+
+.season-tab {
+  flex: 0 0 160px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.season-tab--selected {
+  color: var(--color-text);
+}
+
+.season-tab[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  transform: scale(var(--scale-focus-tab));
+  box-shadow: var(--shadow-focus);
+}

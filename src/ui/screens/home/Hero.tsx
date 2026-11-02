@@ -1,22 +1,13 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { Play, Plus } from 'lucide-react';
 import type { ItemSummary } from '../../../core/api/types';
+import { is4k, ratingLabels, typeLabel } from '../../../core/catalog/facts';
 import { splitTitle } from '../../../core/catalog/titles';
-import { t, type MessageKey } from '../../../core/i18n';
+import { t } from '../../../core/i18n';
 import { Button } from '../../components/Button';
 import './Hero.css';
 
 export const HERO_FOCUS_KEY = 'home:hero';
-
-const TYPE_LABELS: Record<string, MessageKey> = {
-  movie: 'type.movie',
-  serial: 'type.serial',
-  documovie: 'type.documovie',
-  docuserial: 'type.docuserial',
-  tvshow: 'type.tvshow',
-  concert: 'type.concert',
-  '3d': 'type.3d',
-};
 
 interface HeroProps {
   /** The title whose details are shown: the focused card's, or the featured one. */
@@ -44,8 +35,8 @@ export function Hero({ item, featuredCount, index, showingCard, onPlay, onBookma
             <h1 className="hero__title">{names.title}</h1>
             <p className="hero__meta">
               <span>{metaLine(item)}</span>
-              {(item.quality ?? 0) >= 2160 && <span className="hero__badge">4K</span>}
-              {ratings(item).map((rating) => (
+              {is4k(item) && <span className="hero__badge">4K</span>}
+              {ratingLabels(item).map((rating) => (
                 <span key={rating} className="hero__rating">
                   {rating}
                 </span>
@@ -74,15 +65,7 @@ export function Hero({ item, featuredCount, index, showingCard, onPlay, onBookma
 
 /** "Сериал · Триллер · 2024": type, up to two genres, year. */
 function metaLine(item: ItemSummary): string {
-  const type = TYPE_LABELS[item.type.toLowerCase()];
-  return [type ? t(type) : null, ...(item.genres ?? []).slice(0, 2).map((g) => g.title), item.year || null]
+  return [typeLabel(item.type), ...(item.genres ?? []).slice(0, 2).map((g) => g.title), item.year || null]
     .filter(Boolean)
     .join(' · ');
-}
-
-function ratings(item: ItemSummary): string[] {
-  const out: string[] = [];
-  if (item.imdb_rating) out.push(t('rating.imdb', { value: item.imdb_rating.toFixed(1) }));
-  if (item.kinopoisk_rating) out.push(t('rating.kinopoisk', { value: item.kinopoisk_rating.toFixed(1) }));
-  return out;
 }

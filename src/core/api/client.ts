@@ -4,7 +4,9 @@ import type {
   ItemSummary,
   Page,
   Pagination,
+  Season,
   User,
+  Video,
   WatchingItem,
   WatchingMovie,
   WatchingSerial,
@@ -79,7 +81,7 @@ export function createApiClient(http: Http): ApiClient {
     },
     async item(id) {
       const res = await http<{ item: ItemDetails }>({ method: 'GET', path: `/v1/items/${id}`, query: { nolinks: 1 } });
-      return res.item;
+      return details(res.item);
     },
     async watchingMovies() {
       const res = await http<{ items?: WatchingMovie[] }>({ method: 'GET', path: '/v1/watching/movies' });
@@ -128,5 +130,30 @@ function video(v: WatchingVideo): WatchingVideo {
     time: num(v.time),
     status: num(v.status) as WatchStatus,
     updated: v.updated === null || v.updated === undefined ? null : num(v.updated),
+  };
+}
+
+function details(item: ItemDetails): ItemDetails {
+  const { duration } = item;
+  return {
+    ...item,
+    ...(duration ? { duration: { average: num(duration.average), total: num(duration.total) } } : {}),
+    videos: item.videos?.map(detailVideo),
+    seasons: item.seasons?.map(
+      (s): Season => ({ ...s, number: num(s.number), title: s.title ?? '', episodes: (s.episodes ?? []).map(detailVideo) }),
+    ),
+  };
+}
+
+function detailVideo(v: Video): Video {
+  return {
+    ...v,
+    id: num(v.id),
+    number: num(v.number),
+    snumber: num(v.snumber),
+    title: v.title ?? '',
+    duration: num(v.duration),
+    audios: v.audios ?? [],
+    subtitles: v.subtitles ?? [],
   };
 }

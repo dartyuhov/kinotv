@@ -28,11 +28,11 @@ describe('resumePoint', () => {
         { id: 20, number: 2, episodes: [video(1, { time: 900, status: 0, updated: 200 })] },
       ],
     });
-    expect(point).toEqual({ season: 1, number: 2, fraction: 0.25 });
+    expect(point).toEqual({ season: 1, number: 2, fraction: 0.25, time: 250 });
   });
 
   it('counts a watched video as complete whatever its saved time', () => {
     const point = resumePoint({ id: 1, type: 'movie', title: '', videos: [video(1, { status: 1, time: 0, updated: 5 })] });
-    expect(point).toEqual({ season: null, number: 1, fraction: 1 });
+    expect(point).toEqual({ season: null, number: 1, fraction: 1, time: 0 });
   });
 });

@@ -17,6 +17,17 @@
   margin-left: calc(-1 * var(--space-1));
 }
 
+.button--icon-only {
+  justify-content: center;
+  width: 72px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+}
+
+.button--icon-only .button__icon {
+  margin: 0;
+}
+
 .button--primary {
   background: var(--color-primary);
   color: var(--color-on-primary);

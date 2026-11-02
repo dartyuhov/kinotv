@@ -25,6 +25,167 @@ export interface FakeItem {
   imdb_rating: number | null;
   kinopoisk_rating: number | null;
   posters: FakePosters;
+  // Details only (GET /v1/items/<id>); see fakeFilm and fakeSeries.
+  /** Seconds; `total` is the whole film (all parts) or series. */
+  duration?: { average: number; total: number };
+  /** Not a known API v1 field (research 10-kp-api §11): shown when the server sends it. */
+  age_rating?: string | number | null;
+  /** Films: one video per part. */
+  videos?: FakeVideo[];
+  /** Series. */
+  seasons?: FakeSeason[];
+}
+
+/** An audio track of a video, as GET /v1/items/<id> lists it. */
+export interface FakeAudio {
+  id: number;
+  index: number;
+  codec: string;
+  channels: number;
+  /** ISO 639-2, e.g. "rus", "eng". */
+  lang: string;
+  type: { id: number; title: string; short_title: string | null } | null;
+  author: { id: number; title: string; short_title: string | null } | null;
+}
+
+export interface FakeSubtitle {
+  lang: string;
+  shift: number;
+  embed: boolean;
+  url: string;
+}
+
+/** A film part or an episode in the item details. The viewer's progress comes from GET /v1/watching instead. */
+export interface FakeVideo {
+  id: number;
+  number: number;
+  snumber: number;
+  title: string;
+  thumbnail: string;
+  /** Seconds. */
+  duration: number;
+  tracks: number;
+  audios: FakeAudio[];
+  subtitles: FakeSubtitle[];
+  files: never[];
+}
+
+export interface FakeSeason {
+  id: number;
+  number: number;
+  title: string;
+  episodes: FakeVideo[];
+}
+
+/** What a video can be played with: audio languages (ISO 639-2) and subtitle languages. */
+export interface FakeTracks {
+  audio?: string[];
+  subtitles?: string[];
+}
+
+function fakeVideo(id: number, snumber: number, number: number, title: string, duration: number, tracks: FakeTracks = {}): FakeVideo {
+  const audio = tracks.audio ?? ['rus'];
+  return {
+    id,
+    number,
+    snumber,
+    title,
+    thumbnail: `${FAKE_CDN_BASE_URL}/thumb/${id}.jpg`,
+    duration,
+    tracks: audio.length,
+    audios: audio.map((lang, i) => ({
+      id: id * 10 + i,
+      index: i + 1,
+      codec: 'aac',
+      channels: 2,
+      lang,
+      type: lang === 'rus' ? { id: 1, title: 'Дубляж', short_title: 'DUB' } : null,
+      author: null,
+    })),
+    subtitles: (tracks.subtitles ?? []).map((lang, i) => ({ lang, shift: 0, embed: false, url: `${FAKE_CDN_BASE_URL}/sub/${id}-${i}.srt` })),
+    files: [],
+  };
+}
+
+/** A film's details: one part of `minutes` minutes, with the given audio and subtitle languages. */
+export function fakeFilm(
+  id: number,
+  title: string,
+  { minutes = 100, ...extra }: Partial<FakeItem> & FakeTracks & { minutes?: number } = {},
+): FakeItem {
+  const { audio, subtitles, ...item } = extra;
+  const seconds = minutes * 60;
+  return fakeItem(id, title, {
+    type: 'movie',
+    duration: { average: seconds, total: seconds },
+    videos: [fakeVideo(id * 10, 0, 1, '', seconds, { audio, subtitles })],
+    ...item,
+  });
+}
+
+/**
+ * A series' details. `seasons` lists each season's episode titles, e.g. `[['Возвращение', 'Причал'], ['Шторм']]`
+ * is season 1 with two episodes and season 2 with one. Episodes run `minutes` minutes.
+ */
+export function fakeSeries(
+  id: number,
+  title: string,
+  seasons: string[][],
+  { minutes = 45, ...extra }: Partial<FakeItem> & FakeTracks & { minutes?: number } = {},
+): FakeItem {
+  const { audio, subtitles, ...item } = extra;
+  return fakeItem(id, title, {
+    type: 'serial',
+    duration: { average: minutes * 60, total: minutes * 60 * seasons.flat().length },
+    seasons: seasons.map((titles, s) => ({
+      id: id * 100 + s + 1,
+      number: s + 1,
+      title: '',
+      episodes: titles.map((episodeTitle, e) =>
+        fakeVideo(id * 10_000 + (s + 1) * 100 + e + 1, s + 1, e + 1, episodeTitle, minutes * 60, { audio, subtitles }),
+      ),
+    })),
+    ...item,
+  });
+}
+
+/** Where the viewer is in one episode: watched to the end, or stopped after this many seconds. */
+export type EpisodeMark = [season: number, episode: number, progress: 'watched' | number];
+
+/**
+ * GET /v1/watching?id= for a series from fakeSeries. `marks` are listed oldest first: the last one is the
+ * episode the viewer watched most recently. Episodes without a mark are unwatched.
+ */
+export function seriesProgress(series: FakeItem, marks: EpisodeMark[]): FakeResponse {
+  const at = (s: number, e: number) => marks.findIndex(([ms, me]) => ms === s && me === e);
+  return {
+    json: {
+      status: 200,
+      item: {
+        id: series.id,
+        title: series.title,
+        type: series.type,
+        seasons: (series.seasons ?? []).map((season) => ({
+          id: season.id,
+          number: season.number,
+          status: 0,
+          episodes: season.episodes.map((episode) => {
+            const i = at(season.number, episode.number);
+            const progress = i < 0 ? null : marks[i]![2];
+            return {
+              id: episode.id,
+              number: episode.number,
+              title: episode.title,
+              duration: episode.duration,
+              time: progress === null ? 0 : progress === 'watched' ? episode.duration : progress,
+              status: progress === null ? -1 : progress === 'watched' ? 1 : 0,
+              updated: i < 0 ? null : 1_790_000_000 + i,
+            };
+          }),
+        })),
+      },
+    },
+  };
 }
 
 /** An entry of GET /v1/watching/serials. `total` and `watched` arrive as strings. */

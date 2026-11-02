@@ -105,6 +105,27 @@
   transform-origin: left center;
 }
 
+/* Watched mark: a white disc with a black tick, top right. */
+.card__watched {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.card__watched svg {
+  width: 22px;
+  height: 22px;
+}
+
 .card__sheen {
   position: absolute;
   inset: 0;
@@ -119,6 +140,27 @@
 }
 
 .card[data-focused='true']::before,
-.card[data-focused='true'] .card__sheen {
+.card[data-focused='true'] /* Watched mark: a white disc with a black tick, top right. */
+.card__watched {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.card__watched svg {
+  width: 22px;
+  height: 22px;
+}
+
+.card__sheen {
   opacity: 1;
 }

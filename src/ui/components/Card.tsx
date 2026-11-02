@@ -1,4 +1,5 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import { Check } from 'lucide-react';
 import { memo, useCallback, type CSSProperties } from 'react';
 import './Card.css';
 
@@ -31,6 +32,8 @@ export interface CardProps extends CardSlot {
   image: string;
   /** 0..1 watched; a progress bar is drawn when set. */
   progress?: number | null;
+  /** Draws a watched mark. Say so in `label` too: the mark itself is not announced. */
+  watched?: boolean;
 }
 
 /**
@@ -49,6 +52,7 @@ export const Card = memo(function Card({
   subtitle,
   image,
   progress,
+  watched,
 }: CardProps) {
   const onFocus = useCallback(() => onFocusIndex(index), [index, onFocusIndex]);
   const onEnterPress = useCallback(() => onPressIndex(index), [index, onPressIndex]);
@@ -72,6 +76,11 @@ export const Card = memo(function Card({
           <div className="card__progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
             <div className="card__progress-fill" style={{ transform: `scaleX(${percent / 100})` }} />
           </div>
+        )}
+        {watched && (
+          <span className="card__watched" aria-hidden>
+            <Check strokeWidth={3} />
+          </span>
         )}
         <div className="card__sheen" aria-hidden />
       </div>

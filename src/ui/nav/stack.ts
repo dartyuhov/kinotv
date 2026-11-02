@@ -10,6 +10,11 @@ export interface ScreenParams {
   demo: { n: number };
   /** A film or series page, by kino.watch item id. */
   title: { id: number };
+  /**
+   * Plays a title. `season` and `episode` pick a series episode; `episode` alone picks a part of a
+   * multi-part film; neither means the film's only video. `startAt` is seconds into the video.
+   */
+  player: { itemId: number; season?: number; episode?: number; startAt: number };
 }
 export type ScreenName = keyof ScreenParams;
 

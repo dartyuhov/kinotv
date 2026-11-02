@@ -28,6 +28,8 @@ export interface RowProps<T> {
   onRowFocus?(rowKey: string): void;
   /** Shown instead of the cards, e.g. when the list failed to load. */
   message?: string;
+  /** Leaves the heading out, e.g. when tabs above the row say what it is. `title` still names the region. */
+  hideTitle?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export function Row<T>({
   onItemPress,
   onRowFocus,
   message,
+  hideTitle = false,
 }: RowProps<T>) {
   const remembered = useRowMemory((s) => s.index[rowKey] ?? 0);
   const remember = useRowMemory((s) => s.remember);
@@ -104,7 +107,7 @@ export function Row<T>({
   return (
     <FocusContext.Provider value={focusKey}>
       <section ref={ref} className="row" aria-label={title} data-row={rowKey}>
-        <h2 className="row__title">{title}</h2>
+        {!hideTitle && <h2 className="row__title">{title}</h2>}
         <div
           className={`row__track row__track--${variant}`}
           style={{ width: Math.max(0, items.length * pitch - GAP), transform: `translate3d(${-offset}px, 0, 0)` }}
