@@ -57,6 +57,11 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /**
+   * GET /v1/watching/togglewatchlist?id=: follows the series if the viewer doesn't, unfollows it if they
+   * do (I Watch). Resolves with whether the series is followed now. A toggle, so it is never retried.
+   */
+  toggleWatchlist(id: number): Promise<boolean>;
   /** GET /v1/items/search: titles whose name matches `q`, ranked by the server (research 10-kp-api §6.3). */
   search(q: string, options?: SearchOptions): Promise<Page<ItemSummary>>;
 }
@@ -111,6 +116,10 @@ export function createApiClient(http: Http): ApiClient {
         videos: item.videos?.map(video),
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
+    },
+    async toggleWatchlist(id) {
+      const res = await http<{ watching?: unknown }>({ method: 'GET', path: '/v1/watching/togglewatchlist', query: { id }, retry: false });
+      return Boolean(res.watching);
     },
     async search(q, { perpage, signal } = {}) {
       // field=title, as other kino.watch TV clients send for their search box: ranked title matches only.

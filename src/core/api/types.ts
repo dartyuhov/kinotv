@@ -178,4 +178,7 @@ export interface ItemDetails extends ItemSummary {
   age_rating?: string | number | null;
   videos?: Video[];
   seasons?: Season[];
+  /** Series: whether the viewer follows it (I Watch). The API sends both names for the same flag. */
+  subscribed?: boolean;
+  in_watchlist?: boolean;
 }
