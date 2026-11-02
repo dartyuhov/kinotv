@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
+import pkg from '../package.json' with { type: 'json' };
 import { FAKE_CLIENT, type FakeApi, type FakeResponse, type RecordedRequest } from './harness/fakeApi';
-import { expect, test, TEST_START_TIME } from './harness/test';
+import { expect, test, TEST_START_TIME, type App } from './harness/test';
 
 const CLIENT_QUERY = { client_id: FAKE_CLIENT.id, client_secret: FAKE_CLIENT.secret };
 const PENDING: FakeResponse = { status: 400, json: { error: 'authorization_pending' } };
@@ -144,4 +145,47 @@ test('if no code can be had, the screen says so and OK retries', async ({ app, a
   await remote.press('ok');
   await expect(page.getByText('CODE1')).toBeVisible();
   await expect(app.focused).toHaveAccessibleName('Получить новый код');
+});
+
+/** Signs in through the device flow: the first poll is approved and returns tokens `access-1` / `refresh-1`. */
+async function signInWithCode(app: App, api: FakeApi, page: Page) {
+  fakeDeviceFlow(api, () => tokens(1));
+  await pauseClock(page);
+  await app.open({ signedIn: false });
+  await expect(page.getByText('CODE1')).toBeVisible();
+  await page.clock.runFor(5_000);
+  await expect(homeTab(page)).toBeVisible();
+}
+
+test('after sign-in the TV registers itself once, as "KinoTV · <model>" with its versions', async ({ app, api, page }) => {
+  await signInWithCode(app, api, page);
+
+  await expect.poll(() => api.requestsTo('POST', '/v1/device/notify').length).toBe(1);
+  await page.clock.runFor(60_000);
+  const notifies = api.requestsTo('POST', '/v1/device/notify');
+  expect(notifies).toHaveLength(1);
+  // In the browser the platform has no TV model; on the TV it is the real model, e.g. "QE65Q60CAUXXC".
+  expect(notifies[0]).toEqual(
+    expect.objectContaining({
+      query: { access_token: 'access-1' },
+      body: { title: 'KinoTV · Browser', hardware: 'Browser', software: `Browser / KinoTV ${pkg.version}` },
+    }),
+  );
+});
+
+test('restarting the app with a stored session goes straight to Home', async ({ app, api, page }) => {
+  await signInWithCode(app, api, page);
+  const codeRequests = api.requestsTo('POST', '/oauth2/device').length;
+
+  await page.reload();
+
+  await expect(homeTab(page)).toHaveAttribute('aria-selected', 'true');
+  await expect(app.focused).toHaveAccessibleName('Главная');
+  await expect(signInHeading(page)).toBeHidden();
+  expect(api.requestsTo('POST', '/oauth2/device')).toHaveLength(codeRequests);
+  // The restored session is the one from sign-in: the TV checks in with its token.
+  await expect.poll(() => api.requestsTo('POST', '/v1/device/notify').map((r) => r.query.access_token)).toEqual([
+    'access-1',
+    'access-1',
+  ]);
 });

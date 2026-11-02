@@ -24,6 +24,11 @@ export interface FakeResponse {
 
 export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeResponse | Promise<FakeResponse>);
 
+/** What the app calls whenever a session starts (sign-in or launch with a stored session). */
+const SESSION_DEFAULTS: Array<[method: string, path: string, response: FakeResponse]> = [
+  ['POST', '/v1/device/notify', { json: { status: 200 } }],
+];
+
 /**
  * A fake kino.watch HTTP API for one test.
  *
@@ -32,12 +37,18 @@ export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeRespons
  * - `requests` logs every request the app made, in order.
  * - A request with no route gets a 501 and is listed in `unhandled`; the test fixture fails the test
  *   if any are left, so the route table always describes everything the app called.
+ * - Routes every signed-in session calls are answered by default (see `SESSION_DEFAULTS`); `on()`
+ *   overrides them like any other route.
  */
 export class FakeApi {
   readonly baseUrl = FAKE_API_BASE_URL;
   readonly requests: RecordedRequest[] = [];
   readonly unhandled: RecordedRequest[] = [];
   private readonly routes = new Map<string, RouteHandler>();
+
+  constructor() {
+    for (const [method, path, response] of SESSION_DEFAULTS) this.on(method, path, response);
+  }
 
   on(method: string, path: string, handler: RouteHandler): this {
     this.routes.set(routeKey(method, path), handler);

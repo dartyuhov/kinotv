@@ -1,9 +1,11 @@
+import type { AccessTokenSource } from '../api/authedHttp';
+import { ApiError } from '../api/errors';
 import type { KeyValueStore } from '../platform/storage';
 import type { Tokens } from './oauth';
 
 export type SessionStatus = 'signedIn' | 'signedOut';
 
-export interface Session {
+export interface Session extends AccessTokenSource {
   status(): SessionStatus;
   /** Calls `listener` after every status change. Returns an unsubscribe function. */
   subscribe(listener: () => void): () => void;
@@ -36,5 +38,9 @@ export function createSession({ storage }: SessionOptions): Session {
       return () => listeners.delete(listener);
     },
     signIn: (next) => setTokens(next),
+    async accessToken() {
+      if (!tokens) throw new ApiError('auth', null, null, 'Not signed in');
+      return tokens.accessToken;
+    },
   };
 }

@@ -12,6 +12,7 @@ import './ui/theme/tokens.css';
 import './ui/theme/global.css';
 import { remoteBus } from './core/input/remoteBus';
 import { registerRemoteKeys } from './core/platform/keys';
+import { startServices } from './core/services';
 import { startSpatialNavigation } from './ui/focus/spatialNavigation';
 import { screenStack } from './ui/nav/stack';
 import { App } from './ui/app/App';
@@ -21,6 +22,7 @@ startSpatialNavigation(remoteBus);
 // The bottom of the Back stack: pop the top screen. Screens and dialogs push their own handlers above it.
 remoteBus.pushBackHandler(() => screenStack.pop());
 remoteBus.listen(window);
+startServices();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
