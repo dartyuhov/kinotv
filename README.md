@@ -154,6 +154,13 @@ values from `playwright.config.ts`, so real credentials never reach a test.
 The API host defaults to `https://api.service-kp.com`. Set `VITE_API_BASE_URL` in `.env.local` to use another
 one (for example the mirror `https://api.srvkp.com`).
 
+### Playback in the browser
+
+In Chrome the player uses a plain `<video>` element. Current desktop Chrome plays kino.watch's HLS streams
+natively, so there is no hls.js; a browser without native HLS gets the MP4 stream instead. The e2e build sets
+`VITE_PLAYER=fake` to play through the FakePlayer, which tests script from `e2e/harness/player.ts`. You can use
+it in development too (`VITE_PLAYER=fake npm run dev`): playback is simulated, no video is fetched.
+
 ## On the TV
 
 The app is a Tizen web app (`.wgt`). A Samsung TV only installs packages signed with a Samsung certificate

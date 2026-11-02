@@ -1,0 +1,109 @@
+/* Controls overlay (mockup player-remote, first frame). Layout in 1920×1080 logical pixels. */
+
+.player-controls {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-6) var(--screen-gutter) var(--space-5);
+  background: var(--scrim-player);
+  opacity: 1;
+  transition: opacity var(--motion-overlay) var(--ease-out);
+}
+
+.player-controls[data-state='hiding'],
+.player-controls[data-state='hidden'] {
+  opacity: 0;
+}
+
+/* After the fade: gone for real, so it doesn't count as on screen. */
+.player-controls[data-state='hidden'] {
+  visibility: hidden;
+}
+
+.player-controls__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.player-controls__eyebrow {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.player-controls__title {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.02em;
+}
+
+.player-bar {
+  position: relative;
+  height: 8px;
+}
+
+.player-bar__track {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-progress-track);
+}
+
+.player-bar__played {
+  height: 100%;
+  background: var(--color-text);
+  transform-origin: left center;
+}
+
+/* As wide as the bar, so translateX(n%) puts its left edge at n% of the bar. */
+.player-bar__head {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.player-bar__knob {
+  position: absolute;
+  left: -12px;
+  top: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.player-bar__preview {
+  position: absolute;
+  left: 0;
+  bottom: 32px;
+  transform: translateX(-50%);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-button);
+  background: var(--color-dialog);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.player-controls__times {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+  font-size: var(--font-size-body);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.player-controls__hint {
+  margin-top: var(--space-3);
+  text-align: center;
+  font-size: var(--font-size-caption);
+  color: var(--color-text-tertiary);
+}

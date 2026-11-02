@@ -91,18 +91,18 @@ test.describe('a film', () => {
     await expect(app.focused).toHaveAccessibleName('Продолжить · 48 мин');
   });
 
-  test('Resume opens the player where the viewer stopped; Back returns to Resume', async ({ app, api, page, remote }) => {
+  test('Resume opens the player where the viewer stopped; Back returns to Resume', async ({ app, api, page, player, remote }) => {
     fakeHome(api, { hot: [RIVER], movies: [], serials: [], progress: { [RIVER.id]: filmProgress(RIVER, 48 * 60 + 10, 112 * 60) } });
     await app.open();
     await openFromHero(page, remote);
     await expect(app.focused).toHaveAccessibleName('Продолжить · 48 мин');
 
     await remote.press('ok');
-    const player = page.locator('[data-screen="player"]');
-    await expect(player.getByRole('heading', { level: 1 })).toHaveText('Медленная река');
-    await expect(player).toContainText('Начать с 48:10');
+    const playerScreen = page.locator('[data-screen="player"]');
+    await expect(playerScreen.getByRole('heading', { level: 1 })).toHaveText('Медленная река');
+    await expect.poll(() => player.loads()).toEqual([expect.objectContaining({ startAt: 48 * 60 + 10 })]);
 
-    await remote.press('back');
+    await remote.press('back', 'back'); // hide the controls, then leave
     await expect(heading(page)).toHaveText('Медленная река');
     await expect(app.focused).toHaveAccessibleName('Продолжить · 48 мин');
   });
@@ -232,29 +232,29 @@ test.describe('a series', () => {
     expect(api.requests.length).toBe(requests);
   });
 
-  test('OK on an episode plays it; Back returns to the same episode of the same season', async ({ app, api, page, remote }) => {
+  test('OK on an episode plays it; Back returns to the same episode of the same season', async ({ app, api, page, player, remote }) => {
     fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });
     await app.open();
     await openFromHero(page, remote);
-    const player = page.locator('[data-screen="player"]');
+    const playerScreen = page.locator('[data-screen="player"]');
 
     // Resume plays the episode the viewer stopped in, from where they stopped.
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
     await remote.press('ok');
-    await expect(player.getByRole('heading', { level: 1 })).toHaveText('Тихая гавань');
-    await expect(player).toContainText('S1 · E3');
-    await expect(player).toContainText('Начать с 30:00');
-    await remote.press('back');
+    await expect(playerScreen.getByRole('heading', { level: 1 })).toHaveText('Старые письма');
+    await expect(playerScreen).toContainText('Тихая гавань · S1 · E3');
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(30 * 60);
+    await remote.press('back', 'back'); // hide the controls, then leave
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
 
     // An episode the viewer hasn't started plays from the beginning.
     await remote.press('down', 'right', 'down', 'right');
     await expect(app.focused).toHaveAccessibleName('2. Маяк');
     await remote.press('ok');
-    await expect(player).toContainText('S2 · E2');
-    await expect(player).toContainText('Начать с 0:00');
+    await expect(playerScreen).toContainText('Тихая гавань · S2 · E2');
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(0);
 
-    await remote.press('back');
+    await remote.press('back', 'back');
     await expect(app.focused).toHaveAccessibleName('2. Маяк');
     await expect(page.getByRole('tab', { name: 'Сезон 2' })).toHaveAttribute('aria-selected', 'true');
   });
@@ -284,7 +284,7 @@ test('Home card → title → episode → player, and Back all the way returns t
   await remote.press('down', 'down', 'right', 'ok');
   await expect(page.locator('[data-screen="player"]')).toContainText('S1 · E4');
 
-  await remote.press('back');
+  await remote.press('back', 'back'); // hide the player's controls, then leave
   await expect(app.focused).toHaveAccessibleName('4. Шторм');
   await remote.press('back');
   await expect(app.focused).toHaveAccessibleName('Тихая гавань, S1 · E3');

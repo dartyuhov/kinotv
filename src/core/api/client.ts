@@ -3,12 +3,14 @@ import type {
   BookmarkFolder,
   ItemDetails,
   ItemSummary,
+  MediaLinks,
   Page,
   Pagination,
   Ref,
   Season,
   User,
   Video,
+  WatchedToggle,
   WatchingItem,
   WatchingMovie,
   WatchingSerial,
@@ -103,6 +105,15 @@ export interface ApiClient {
   addBookmark(itemId: number, folderId: number): Promise<void>;
   /** POST /v1/bookmarks/remove-item: takes a title out of a folder. */
   removeBookmark(itemId: number, folderId: number): Promise<void>;
+  /** GET /v1/items/media-links?mid=: a video's stream links (signed, short-lived) and subtitles. */
+  mediaLinks(mediaId: number): Promise<MediaLinks>;
+  /** GET /v1/watching/marktime: saves the viewer's position in a part or episode. */
+  markTime(where: WatchedVideo, seconds: number): Promise<void>;
+  /**
+   * GET /v1/watching/toggle: flips a part or episode between watched and not watched. It toggles, it
+   * doesn't set: check the current status first. Never retried, so it can't flip twice.
+   */
+  toggleWatched(where: WatchedVideo): Promise<WatchedToggle>;
   /** GET /v1/collections: one page of the curated collections (research 10-kp-api §9). */
   collections(query: CollectionsQuery): Promise<Page<Collection>>;
   /** GET /v1/collections/view?id=: one page of a collection's titles, and the collection itself. */
@@ -121,6 +132,13 @@ export interface SearchOptions {
   perpage?: number;
   /** Cancels the request, e.g. when the viewer has typed more. */
   signal?: AbortSignal;
+}
+
+/** A part or episode in the watching calls: the item, the season for series, and the 1-based video number. */
+export interface WatchedVideo {
+  id: number;
+  season?: number;
+  video: number;
 }
 
 export function createApiClient(http: Http): ApiClient {
@@ -235,6 +253,21 @@ export function createApiClient(http: Http): ApiClient {
     },
     async removeBookmark(itemId, folderId) {
       await http({ method: 'POST', path: '/v1/bookmarks/remove-item', form: { item: itemId, folder: folderId } });
+    },
+    async mediaLinks(mediaId) {
+      const res = await http<Partial<MediaLinks>>({ method: 'GET', path: '/v1/items/media-links', query: { mid: mediaId } });
+      return {
+        files: (res.files ?? []).map((f) => ({ ...f, w: num(f.w), h: num(f.h), quality_id: num(f.quality_id) })),
+        subtitles: res.subtitles ?? [],
+      };
+    },
+    // The watching calls change state but are GETs, as every client sends them (research 10-kp-api §7).
+    async markTime({ id, season, video }, seconds) {
+      await http({ method: 'GET', path: '/v1/watching/marktime', query: { id, season, video, time: Math.floor(seconds) } });
+    },
+    async toggleWatched({ id, season, video }) {
+      const res = await http<{ watched?: unknown }>({ method: 'GET', path: '/v1/watching/toggle', query: { id, season, video }, retry: false });
+      return { watched: num(res.watched) === 1 };
     },
     async collections({ sort, page = 1, perpage }) {
       const res = await http<{ items?: Collection[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
