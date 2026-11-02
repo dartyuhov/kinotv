@@ -16,6 +16,8 @@ import type {
   WatchStatus,
   ContentType,
   Genre,
+  Collection,
+  CollectionPage,
 } from './types';
 
 /** The device's entry in the account's device list (research 10-kp-api §1.5). */
@@ -101,6 +103,18 @@ export interface ApiClient {
   addBookmark(itemId: number, folderId: number): Promise<void>;
   /** POST /v1/bookmarks/remove-item: takes a title out of a folder. */
   removeBookmark(itemId: number, folderId: number): Promise<void>;
+  /** GET /v1/collections: one page of the curated collections (research 10-kp-api §9). */
+  collections(query: CollectionsQuery): Promise<Page<Collection>>;
+  /** GET /v1/collections/view?id=: one page of a collection's titles, and the collection itself. */
+  collection(id: number, query?: { page?: number; perpage?: number }): Promise<CollectionPage>;
+}
+
+export interface CollectionsQuery {
+  /** A field (id, title, views, watchers, created, updated) with `-` appended for descending order. */
+  sort?: string;
+  /** 1-based. */
+  page?: number;
+  perpage?: number;
 }
 
 export interface SearchOptions {
@@ -222,7 +236,34 @@ export function createApiClient(http: Http): ApiClient {
     async removeBookmark(itemId, folderId) {
       await http({ method: 'POST', path: '/v1/bookmarks/remove-item', form: { item: itemId, folder: folderId } });
     },
+    async collections({ sort, page = 1, perpage }) {
+      const res = await http<{ items?: Collection[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+        method: 'GET',
+        path: '/v1/collections',
+        query: { sort, page, perpage },
+      });
+      return { items: (res.items ?? []).map(collection), pagination: pagination(res.pagination) };
+    },
+    async collection(id, { page = 1, perpage } = {}) {
+      const res = await http<{
+        collection?: Collection;
+        items?: ItemSummary[];
+        pagination?: Partial<Record<keyof Pagination, unknown>>;
+      }>({ method: 'GET', path: '/v1/collections/view', query: { id, page, perpage } });
+      return {
+        collection: collection(res.collection ?? { id, title: '', posters: NO_POSTERS }),
+        items: res.items ?? [],
+        // Without pagination the collection came whole, as one page.
+        pagination: pagination(res.pagination ?? { total: 1, current: 1 }),
+      };
+    },
   };
+}
+
+const NO_POSTERS = { small: '', medium: '', big: '' };
+
+function collection(c: Collection): Collection {
+  return { id: num(c.id), title: String(c.title ?? ''), posters: c.posters ?? NO_POSTERS };
 }
 
 const BOOKMARK_PAGE_SIZE = 50;

@@ -15,6 +15,8 @@ export interface ScreenParams {
    * multi-part film; neither means the film's only video. `startAt` is seconds into the video.
    */
   player: { itemId: number; season?: number; episode?: number; startAt: number };
+  /** A curated collection's titles, by kino.watch collection id. */
+  collection: { id: number };
 }
 export type ScreenName = keyof ScreenParams;
 

@@ -201,3 +201,15 @@ export interface Genre {
   id: number;
   title: string;
 }
+
+/** GET /v1/collections → `items`: a curated collection of titles. Its artwork has no `wide`. */
+export interface Collection {
+  id: number;
+  title: string;
+  posters: Posters;
+}
+
+/** GET /v1/collections/view?id=: one page of a collection's titles, with the collection itself. */
+export interface CollectionPage extends Page<ItemSummary> {
+  collection: Collection;
+}

@@ -1,0 +1,25 @@
+/* A collection: a pushed, full-stage screen. The focused title's art fills it; the name, then the grid. */
+.collection {
+  position: absolute;
+  inset: 0;
+}
+
+/* Keep its height in step with HEADER_HEIGHT in CollectionScreen.tsx. */
+.collection__header {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 184px;
+  padding: 0 var(--screen-gutter) var(--space-3);
+}
+
+.collection__title {
+  overflow: hidden;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}

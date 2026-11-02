@@ -127,5 +127,9 @@
   "bookmarks.pickerFailed": "Не удалось загрузить папки",
   "bookmarks.noFolders": "Папок пока нет. Создайте папку на kino.watch",
   "bookmarks.addFailed": "Не удалось добавить «{title}» в «{folder}»",
-  "bookmarks.removeFailed": "Не удалось убрать «{title}» из «{folder}»"
+  "bookmarks.removeFailed": "Не удалось убрать «{title}» из «{folder}»",
+  "home.collections": "Подборки",
+  "collection.title": "Подборка",
+  "collection.empty": "В этой подборке пока ничего нет",
+  "collection.failed": "Не удалось загрузить подборку"
 }

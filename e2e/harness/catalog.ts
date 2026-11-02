@@ -304,6 +304,8 @@ export interface HomeCatalog {
   followed?: FakeSerialProgress[];
   /** GET /v1/watching?id=<id>, per item id. Items without an entry have no saved position. */
   progress: Record<number, FakeResponse>;
+  /** GET /v1/collections: the Collections row; GET /v1/collections/view?id= pages each one's titles. None by default. */
+  collections?: FakeCollection[];
 }
 
 const NORTH_WIND = fakeItem(101, 'Северный ветер / North Wind', { type: 'serial', year: 2024, genres: [{ id: 9, title: 'Триллер' }], quality: 2160 });
@@ -352,6 +354,7 @@ export function fakeHome(api: FakeApi, catalog: Partial<HomeCatalog> = {}): Home
     const id = Number(req.query.id);
     return home.progress[id] ?? { json: { status: 200, item: { id, title: '', type: 'movie', videos: [] } } };
   });
+  fakeCollections(api, home.collections ?? []);
   const everything = [...home.hot, ...home.fresh, ...home.popular, ...home.movies];
   for (const item of everything) fakeTitle(api, item);
   for (const serial of [...home.serials, ...(home.followed ?? [])]) {
@@ -485,3 +488,59 @@ export function fakeSearch(api: FakeApi, results: Record<string, FakeItem[]>): v
 
 /** One page of a list endpoint (items, search), for routing by hand, e.g. to answer a request late. */
 export const fakeList = (items: FakeItem[]): FakeResponse => list(items);
+
+// ---- Collections: GET /v1/collections and /v1/collections/view ----
+
+/** A curated collection. `items` are its titles (served by /v1/collections/view, not by the list). */
+export interface FakeCollection {
+  id: number;
+  title: string;
+  /** Collection artwork has no `wide` (research 10-kp-api §9). */
+  posters: { small: string; medium: string; big: string };
+  items: FakeItem[];
+}
+
+/** A collection with artwork on the fake CDN. */
+export function fakeCollection(id: number, title: string, items: FakeItem[]): FakeCollection {
+  const base = `${FAKE_CDN_BASE_URL}/collection/${id}`;
+  return { id, title, posters: { small: `${base}/small.jpg`, medium: `${base}/medium.jpg`, big: `${base}/big.jpg` }, items };
+}
+
+/**
+ * Routes GET /v1/collections (one page with every collection) and GET /v1/collections/view?id=, which pages
+ * a collection's titles by `page` and `perpage` like the real API (an unknown id is a 404). Also routes the
+ * title page of every title in them. fakeHome calls it with `HomeCatalog.collections`.
+ */
+export function fakeCollections(api: FakeApi, collections: FakeCollection[]): void {
+  const summary = ({ items: _items, ...collection }: FakeCollection) => ({
+    ...collection,
+    // Counts and dates arrive as numbers or strings; the app shows none of them.
+    watchers: '12',
+    views: 340,
+    created: 1_790_000_000,
+    updated: 1_790_000_000,
+  });
+  api.on('GET', '/v1/collections', {
+    json: {
+      status: 200,
+      items: collections.map(summary),
+      pagination: { total: 1, current: 1, perpage: Math.max(collections.length, 1), total_items: collections.length },
+    },
+  });
+  api.on('GET', '/v1/collections/view', (req) => {
+    const collection = collections.find((c) => c.id === Number(req.query.id));
+    if (!collection) return { status: 404, json: { status: 404, error: 'Not found' } };
+    const perpage = Number(req.query.perpage ?? 20);
+    const page = Number(req.query.page ?? 1);
+    const pages = Math.max(1, Math.ceil(collection.items.length / perpage));
+    return {
+      json: {
+        status: 200,
+        collection: summary(collection),
+        items: collection.items.slice((page - 1) * perpage, page * perpage),
+        pagination: { total: String(pages), current: String(page), perpage: String(perpage), total_items: collection.items.length },
+      },
+    };
+  });
+  for (const item of collections.flatMap((c) => c.items)) fakeTitle(api, item);
+}
