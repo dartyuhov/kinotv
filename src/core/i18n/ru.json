@@ -15,5 +15,7 @@
   "placeholder.comingSoon": "Этот раздел скоро появится",
   "demo.open": "Открыть демо-экран {n}",
   "demo.title": "Демо-экран {n}",
-  "demo.hint": "Нажмите «Назад», чтобы вернуться"
+  "demo.hint": "Нажмите «Назад», чтобы вернуться",
+  "settings.updateAvailable": "Доступно обновление (v{version})",
+  "settings.updateHint": "Чтобы обновить KinoTV, снова запустите установщик на компьютере"
 }

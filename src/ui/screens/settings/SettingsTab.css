@@ -1,0 +1,9 @@
+.settings-tab {
+  position: relative;
+}
+
+.settings-tab__update {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--screen-gutter);
+}

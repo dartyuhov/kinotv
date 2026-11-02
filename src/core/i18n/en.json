@@ -15,5 +15,7 @@
   "placeholder.comingSoon": "This section is coming soon",
   "demo.open": "Open demo screen {n}",
   "demo.title": "Demo screen {n}",
-  "demo.hint": "Press Back to return"
+  "demo.hint": "Press Back to return",
+  "settings.updateAvailable": "Update available (v{version})",
+  "settings.updateHint": "To update KinoTV, run the installer on your computer again"
 }

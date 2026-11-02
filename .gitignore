@@ -20,3 +20,4 @@ playwright-report/
 
 # Claude Code agent worktrees
 .claude/
+dist-release/

@@ -2,6 +2,7 @@ import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-naviga
 import type { ComponentType } from 'react';
 import { useScreenScroller } from '../nav/ScreenHost';
 import { PlaceholderTab } from '../screens/placeholder/PlaceholderTab';
+import { SettingsTab } from '../screens/settings/SettingsTab';
 import type { TabId } from './tabs';
 import './TabContent.css';
 
@@ -18,7 +19,7 @@ const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
   sport: PlaceholderTab,
   bookmarks: PlaceholderTab,
   history: PlaceholderTab,
-  settings: PlaceholderTab,
+  settings: SettingsTab,
 };
 
 /**

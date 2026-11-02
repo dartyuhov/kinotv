@@ -2,7 +2,7 @@
 // certificate. Safe to re-run: it remembers the TV address and profile and skips what is already done.
 import { chmodSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ask, findTool, heading, loadSettings, ok, print, run, runAttached, saveSettings, style, tizenHome, UserError, warn } from './host.ts';
+import { ask, findTool, heading, loadSettings, ok, print, run, runAttached, saveSettings, setupCommand, style, tizenHome, UserError, warn } from './host.ts';
 import { connectTv, developerModeSteps, listProfiles, type ConnectedTv, type TizenTools } from './tv.ts';
 
 const STEPS = 4;
@@ -27,7 +27,7 @@ async function ensureRosetta(): Promise<void> {
     ok('Rosetta is installed');
     return;
   }
-  throw new UserError('Rosetta is required.', [`Install it with: sudo ${command.join(' ')}`, 'Then run `npm run tv:setup` again.']);
+  throw new UserError('Rosetta is required.', [`Install it with: sudo ${command.join(' ')}`, `Then run ${setupCommand()} again.`]);
 }
 
 function workingTizen(): { tizen: string; version: string } | null {
@@ -47,15 +47,15 @@ async function installTizenCli(): Promise<void> {
   const installer = await ask('Path to the downloaded installer (Enter to stop):');
   if (!installer) {
     throw new UserError('The Tizen CLI (tizen) is not installed.', [
-      'Download the CLI installer from https://samsungtizenos.com/tools-download/ and run `npm run tv:setup` again,',
+      `Download the CLI installer from https://samsungtizenos.com/tools-download/ and run ${setupCommand()} again,`,
       'or set TIZEN_HOME to an existing Tizen SDK folder (one with tools/ide/bin/tizen and tools/sdb).',
     ]);
   }
   const path = resolve(installer.replace(/^~(?=\/)/, process.env.HOME ?? '~'));
-  if (!existsSync(path)) throw new UserError(`No file at ${path}.`, ['Check the path and run `npm run tv:setup` again.']);
+  if (!existsSync(path)) throw new UserError(`No file at ${path}.`, [`Check the path and run ${setupCommand()} again.`]);
   chmodSync(path, 0o755);
   if ((await runAttached(path, ['--accept-license', home])) !== 0) {
-    throw new UserError('The Tizen CLI installer failed (see above).', ['Fix the problem it reports and run `npm run tv:setup` again.']);
+    throw new UserError('The Tizen CLI installer failed (see above).', [`Fix the problem it reports and run ${setupCommand()} again.`]);
   }
 
   // Samsung's certificate tooling is an extra package; its exact package names change between SDK releases.
@@ -69,7 +69,7 @@ async function installTizenCli(): Promise<void> {
   await ask('Press Enter when that is done.', 'done');
 }
 
-async function setUpTools(): Promise<TizenTools> {
+export async function setUpTools(): Promise<TizenTools> {
   let tizen = workingTizen();
   if (!tizen) {
     await ensureRosetta();
@@ -82,7 +82,7 @@ async function setUpTools(): Promise<TizenTools> {
     tizen = workingTizen();
     if (!tizen) {
       throw new UserError(`The Tizen CLI is still not found in ${tizenHome()}.`, [
-        'If the installer used another folder, set TIZEN_HOME to it and run `npm run tv:setup` again.',
+        `If the installer used another folder, set TIZEN_HOME to it and run ${setupCommand()} again.`,
       ]);
     }
   }
@@ -102,7 +102,7 @@ async function askTvAddress(): Promise<string> {
     const answer = await ask("The TV's IP address:", loadSettings().tv ?? '');
     if (!answer) {
       throw new UserError("The TV's IP address is needed.", [
-        'Find it on the TV in Settings → General → Network → Network Status → IP Settings, then run `npm run tv:setup` again.',
+        `Find it on the TV in Settings → General → Network → Network Status → IP Settings, then run ${setupCommand()} again.`,
       ]);
     }
     if (IPV4.test(answer)) return answer;
@@ -110,7 +110,7 @@ async function askTvAddress(): Promise<string> {
   }
 }
 
-async function setUpTv(sdb: string): Promise<ConnectedTv> {
+export async function setUpTv(sdb: string): Promise<ConnectedTv> {
   print('Turn on Developer Mode on the TV if it is not on yet:');
   for (const line of developerModeSteps()) print(`  ${line}`);
   const address = await askTvAddress();
@@ -120,7 +120,7 @@ async function setUpTv(sdb: string): Promise<ConnectedTv> {
   return tv;
 }
 
-function readDuid(sdb: string, tv: ConnectedTv): void {
+export function readDuid(sdb: string, tv: ConnectedTv): void {
   const duid = run(sdb, ['-s', tv.serial, 'shell', '0', 'getduid']).output.trim();
   if (duid && !/error|not found|closed/i.test(duid)) {
     ok(`The TV's DUID: ${style.bold(duid)}`);
@@ -130,7 +130,7 @@ function readDuid(sdb: string, tv: ConnectedTv): void {
   }
 }
 
-async function setUpCertificate(tizen: string, tv: ConnectedTv): Promise<string> {
+export async function setUpCertificate(tizen: string, tv: ConnectedTv): Promise<string> {
   const saved = loadSettings().profile;
   if (saved && listProfiles(tizen).includes(saved)) {
     ok(`Using security profile "${saved}"`);
@@ -148,7 +148,7 @@ async function setUpCertificate(tizen: string, tv: ConnectedTv): Promise<string>
   if (!name || !profiles.includes(name)) {
     throw new UserError(`Security profile "${name}" was not found.`, [
       `Profiles the Tizen CLI knows: ${profiles.length ? profiles.join(', ') : 'none'}.`,
-      'Finish creating the certificate in Certificate Manager, then run `npm run tv:setup` again.',
+      `Finish creating the certificate in Certificate Manager, then run ${setupCommand()} again.`,
     ]);
   }
   saveSettings({ profile: name });

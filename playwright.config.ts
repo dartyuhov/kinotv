@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { FAKE_API_BASE_URL } from './e2e/harness/fakeApi';
+import { FAKE_API_BASE_URL, FAKE_RELEASES_URL } from './e2e/harness/fakeApi';
 
 // One port per checkout, so parallel worktrees can run e2e at the same time without sharing a server.
 function portFor(dir: string): number {
@@ -30,6 +30,6 @@ export default defineConfig({
     url: `http://localhost:${port}`,
     // Never attach to a server we didn't start: it could be serving another checkout.
     reuseExistingServer: false,
-    env: { VITE_API_BASE_URL: FAKE_API_BASE_URL },
+    env: { VITE_API_BASE_URL: FAKE_API_BASE_URL, VITE_RELEASES_URL: FAKE_RELEASES_URL },
   },
 });

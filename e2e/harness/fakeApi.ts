@@ -1,7 +1,18 @@
+import { readFileSync } from 'node:fs';
 import type { Page, Request, Route } from '@playwright/test';
 
 /** The app under test is built with VITE_API_BASE_URL set to this host (see playwright.config.ts). */
 export const FAKE_API_BASE_URL = 'http://fake-api.kinotv.test';
+
+/**
+ * The GitHub "latest release" endpoint the app's update check calls. The e2e build points
+ * VITE_RELEASES_URL here (see playwright.config.ts), so it is routed like any other fake API path.
+ */
+export const RELEASES_PATH = '/github/repos/example/kinotv/releases/latest';
+export const FAKE_RELEASES_URL = `${FAKE_API_BASE_URL}${RELEASES_PATH}`;
+
+/** The version the app under test reports: package.json's, which the build injects. */
+export const APP_VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version;
 
 export interface RecordedRequest {
   method: string;
@@ -29,12 +40,14 @@ export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeRespons
  * - `requests` logs every request the app made, in order.
  * - A request with no route gets a 501 and is listed in `unhandled`; the test fixture fails the test
  *   if any are left, so the route table always describes everything the app called.
+ * - One route is there from the start: the app checks for updates at launch, so RELEASES_PATH says the
+ *   latest release is the app's own version (no update). Tests about updates replace it.
  */
 export class FakeApi {
   readonly baseUrl = FAKE_API_BASE_URL;
   readonly requests: RecordedRequest[] = [];
   readonly unhandled: RecordedRequest[] = [];
-  private readonly routes = new Map<string, RouteHandler>();
+  private readonly routes = new Map<string, RouteHandler>([[routeKey('GET', RELEASES_PATH), { json: { tag_name: `v${APP_VERSION}` } }]]);
 
   on(method: string, path: string, handler: RouteHandler): this {
     this.routes.set(routeKey(method, path), handler);

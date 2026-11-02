@@ -3,7 +3,7 @@
 //   npm run package     build, then package dist/ as dist-tizen/KinoTV.wgt (signed if a profile is set up)
 //   npm run tv          build, package signed, install and launch on the TV
 //   npm run tv:debug    the same, launched in debug mode; prints the DevTools address
-import { closeInput, print, style, UserError } from './host.ts';
+import { print, runMain } from './host.ts';
 import { runSetup } from './setup.ts';
 import { packageCommand, tvCommand } from './tv.ts';
 
@@ -34,13 +34,4 @@ async function main(argv: string[]): Promise<void> {
   }
 }
 
-try {
-  await main(process.argv.slice(2));
-} catch (error) {
-  if (!(error instanceof UserError)) throw error;
-  print(`\n${style.red('✗')} ${style.bold(error.message)}`);
-  for (const step of error.steps) print(`  ${step}`);
-  process.exitCode = 1;
-} finally {
-  closeInput();
-}
+await runMain(() => main(process.argv.slice(2)));

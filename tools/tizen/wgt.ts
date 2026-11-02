@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
-import { zipSync, type Zippable } from 'fflate';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { unzipSync, zipSync, type Zippable } from 'fflate';
 
 // A .wgt is a zip of the widget folder with config.xml at its root. Signing (tizen package -s) adds
 // author-signature.xml and signature1.xml; an unsigned .wgt has neither.
@@ -35,6 +35,22 @@ export function createUnsignedWgt(appDir: string, outFile: string): void {
   for (const path of listFiles(appDir)) files[path] = [readFileSync(join(appDir, path)), { mtime }];
   mkdirSync(dirname(outFile), { recursive: true });
   writeFileSync(outFile, zipSync(files, { level: 9 }));
+}
+
+/**
+ * Unpacks a .wgt (for example the unsigned one from a GitHub release) into `toDir`. Throws if an entry's
+ * path would land outside `toDir`, since the package is downloaded and can't be trusted blindly.
+ */
+export function extractWgt(wgtFile: string, toDir: string): void {
+  const entries = unzipSync(readFileSync(wgtFile));
+  const root = resolve(toDir);
+  for (const [path, data] of Object.entries(entries)) {
+    const target = resolve(root, path);
+    if (isAbsolute(path) || !target.startsWith(root + sep)) throw new Error(`unsafe path in the package: ${path}`);
+    if (path.endsWith('/')) continue; // a folder entry
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, data);
+  }
 }
 
 /** Copies the packaged files of a widget folder to `toDir`, for `tizen package` to sign in place. */

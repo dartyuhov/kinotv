@@ -1,67 +1,19 @@
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { NO_TV, TV, TV_CONNECTED, useSandbox } from './sandbox.ts';
 
-// These tests run the real CLI as a subprocess against a sandbox: a temp project folder, a temp HOME and a
-// PATH that holds only `node` and the stub tools a test puts there. Nothing real (Tizen CLI, sdb, a TV)
-// is needed. Stubs append their arguments to calls.log, so tests can check what was run.
+// These tests run the real CLI as a subprocess against a sandbox of stub tools (see sandbox.ts).
 
 const CLI = resolve(import.meta.dirname, 'cli.ts');
-const FFLATE = resolve(import.meta.dirname, '../../node_modules/fflate/lib/node.cjs');
-const TV = '192.0.2.10'; // TEST-NET-1: documentation-only address
 
+const { paths, stub, calls, node, saveSettings, savedSettings, tizenStub } = useSandbox();
 let box: string;
-let bin: string;
 let project: string;
+beforeEach(() => ({ box, project } = paths));
 
-beforeEach(() => {
-  box = mkdtempSync(join(tmpdir(), 'kinotv-cli-'));
-  bin = join(box, 'bin');
-  project = join(box, 'project');
-  mkdirSync(bin);
-  mkdirSync(join(box, 'home'));
-  mkdirSync(project);
-  symlinkSync(process.execPath, join(bin, 'node'));
-});
-
-afterEach(() => rmSync(box, { recursive: true, force: true }));
-
-/** A stub tool written in JavaScript. `body` sees `args` (argv without node and script) and `log`. */
-function stub(name: string, body: string): void {
-  const path = join(bin, name);
-  writeFileSync(
-    path,
-    `#!${process.execPath}
-const args = process.argv.slice(2);
-require('node:fs').appendFileSync(${JSON.stringify(join(box, 'calls.log'))}, ${JSON.stringify(name)} + ' ' + args.join(' ') + '\\n');
-${body}
-`,
-  );
-  chmodSync(path, 0o755);
-}
-
-function calls(): string[] {
-  const log = join(box, 'calls.log');
-  return existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [];
-}
-
-function cli(args: string[], input = '') {
-  const result = spawnSync(join(bin, 'node'), [CLI, ...args], {
-    cwd: project,
-    input,
-    encoding: 'utf8',
-    env: { PATH: bin, HOME: join(box, 'home'), TIZEN_HOME: join(box, 'home', 'tizen-studio') },
-  });
-  return { code: result.status, out: `${result.stdout}${result.stderr}` };
-}
-
-function saveSettings(settings: { tv?: string; profile?: string }): void {
-  mkdirSync(join(project, 'tizen/.signing'), { recursive: true });
-  writeFileSync(join(project, 'tizen/.signing/settings.json'), JSON.stringify(settings));
-}
+const cli = (args: string[], input = '') => node(CLI, args, input);
 
 describe('npm run tv', () => {
   it('stops with setup instructions when the Tizen CLI is not installed', () => {
@@ -166,10 +118,6 @@ function appleSilicon({ rosetta }: { rosetta: boolean }) {
   stub('uname', `console.log(args[0] === '-s' ? 'Darwin' : 'arm64');`);
   stub('sysctl', `console.log('1');`);
   stub('arch', rosetta ? '' : `console.error('Bad CPU type in executable'); process.exit(1);`);
-}
-
-function savedSettings(): unknown {
-  return JSON.parse(readFileSync(join(project, 'tizen/.signing/settings.json'), 'utf8'));
 }
 
 describe('npm run tv:setup', () => {
@@ -347,41 +295,3 @@ describe('npm run package', () => {
     expect(out).toContain('npm run build');
   });
 });
-
-// sdb that never finds a TV: connect fails, devices lists nothing.
-const NO_TV = `
-if (args[0] === 'connect') console.log('failed to connect to ' + args[1] + ':26101');
-if (args[0] === 'devices') console.log('List of devices attached ');
-`;
-
-// sdb with the TV connected. Debug launches report port 34541.
-const TV_CONNECTED = `
-if (args[0] === 'connect') console.log('connected to ${TV}:26101');
-if (args[0] === 'devices') console.log('List of devices attached \\n${TV}:26101      device          QE55Q60CAU');
-if (args.includes('getduid')) console.log('FAKE-DUID-0001');
-if (args.includes('debug')) console.log('... successfully launched pid = 12915 with debug 1 port: 34541');
-`;
-
-/** A Tizen CLI with one security profile, "KinoTV". `package -o out -- dir` signs dir into out/KinoTV.wgt. */
-function tizenStub(extra = '') {
-  stub(
-    'tizen',
-    `
-if (args[0] === 'version') console.log('Tizen CLI 2.5.25');
-if (args[0] === 'security-profiles' && args[1] === 'list') console.log('[Profile Name]   [Active]\\nKinoTV           O');
-if (args[0] === 'package') {
-  const fs = require('node:fs'), path = require('node:path');
-  const { zipSync } = require(${JSON.stringify(FFLATE)});
-  const dir = args[args.indexOf('--') + 1], out = args[args.indexOf('-o') + 1];
-  const files = { 'author-signature.xml': Buffer.from('<signed/>') };
-  for (const name of fs.readdirSync(dir, { recursive: true })) {
-    const full = path.join(dir, name);
-    if (fs.statSync(full).isFile()) files[name] = fs.readFileSync(full);
-  }
-  fs.writeFileSync(path.join(out, 'KinoTV.wgt'), zipSync(files));
-  console.log('Package File Location: ' + path.join(out, 'KinoTV.wgt'));
-}
-${extra}
-`,
-  );
-}

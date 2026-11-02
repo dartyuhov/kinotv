@@ -1,0 +1,79 @@
+# Publishes a GitHub Release when a version tag is pushed (spec §11):
+#
+#   git tag v1.2.3 && git push origin v1.2.3        (the tag must equal "version" in package.json)
+#
+# The release carries the unsigned app (KinoTV.wgt) and the installer (install.sh plus
+# kinotv-installer.mjs). Users sign the app with their own Samsung certificate when they install it.
+#
+# Before the first release, set on GitHub (see README → "Publishing a release"):
+#   - repository secrets KP_CLIENT_ID and KP_CLIENT_SECRET: the project's OWN kino.watch API client;
+#   - "kinotv": { "githubRepo" } in package.json: this repository, "<owner>/<repo>".
+# The gate job refuses to publish without them.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Fails with a clear message unless the project's own API credentials are repository secrets, the
+      # tag matches package.json, and package.json names this repo. Logic and tests: tools/release/gate*.ts.
+      - name: Check credentials, version and repo
+        run: node tools/release/gate.ts
+        env:
+          KP_CLIENT_ID: ${{ secrets.KP_CLIENT_ID }}
+          KP_CLIENT_SECRET: ${{ secrets.KP_CLIENT_SECRET }}
+
+  test:
+    name: Tests
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Build and publish
+    needs: [gate, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The app is built with the project's own API client (spec §7.6), never the development one.
+      - name: Build the app
+        run: npm run build
+        env:
+          KP_CLIENT_ID: ${{ secrets.KP_CLIENT_ID }}
+          KP_CLIENT_SECRET: ${{ secrets.KP_CLIENT_SECRET }}
+
+      - name: Make the release files
+        run: npm run release:assets
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "KinoTV $GITHUB_REF_NAME" --generate-notes dist-release/KinoTV.wgt dist-release/install.sh dist-release/kinotv-installer.mjs
