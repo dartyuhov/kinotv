@@ -30,5 +30,12 @@ The keyboard stands in for the remote:
 | Rewind / Fast-forward | `[` / `]` |
 | CH ▲ / CH ▼ | Page Up / Page Down |
 
+### Sign-in credentials
+
+Sign-in uses kino.watch's OAuth device flow, which needs an OAuth client. Copy `.env.example` to `.env.local`
+(git-ignored) and fill in `VITE_KP_CLIENT_ID` and `VITE_KP_CLIENT_SECRET`. Without them the Sign-in screen
+can't get a code. Never commit real credentials. The e2e build overrides both (and the API host) with fake
+values from `playwright.config.ts`, so real credentials never reach a test.
+
 The API host defaults to `https://api.service-kp.com`. Set `VITE_API_BASE_URL` in `.env.local` to use another
 one (for example the mirror `https://api.srvkp.com`).

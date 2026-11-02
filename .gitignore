@@ -2,6 +2,7 @@ node_modules/
 dist/
 .superpowers/
 .env.local
+.env.*.local
 *.wgt
 *.p12
 tizen/.signing/
