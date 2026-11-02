@@ -6,6 +6,7 @@ import type {
   MediaLinks,
   Page,
   Pagination,
+  Ref,
   Season,
   User,
   Video,
@@ -15,6 +16,8 @@ import type {
   WatchingSerial,
   WatchingVideo,
   WatchStatus,
+  ContentType,
+  Genre,
 } from './types';
 
 /** The device's entry in the account's device list (research 10-kp-api §1.5). */
@@ -30,6 +33,21 @@ export type Shortcut = 'fresh' | 'hot' | 'popular';
 export interface ShortcutQuery {
   /** Required by the API. Several types (e.g. `['movie', 'serial']`) give one merged, ranked feed. */
   types: readonly string[];
+  /** 1-based. */
+  page?: number;
+  perpage?: number;
+}
+
+/** GET /v1/items filters (research 10-kp-api §6.1). Unset filters are left out of the request. */
+export interface ItemsQuery {
+  /** A content type id from GET /v1/types. Left out: every type. */
+  type?: string;
+  genre?: number;
+  country?: number;
+  /** A year (`2024`) or a range of years (`2010-2019`). */
+  year?: string;
+  /** A field with `-` appended for descending order, e.g. `created-`. */
+  sort?: string;
   /** 1-based. */
   page?: number;
   perpage?: number;
@@ -60,6 +78,14 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /** GET /v1/items: one page of the catalog, filtered and sorted. */
+  items(query: ItemsQuery): Promise<Page<ItemSummary>>;
+  /** GET /v1/types: the catalog's content types. */
+  types(): Promise<ContentType[]>;
+  /** GET /v1/genres?type=: the genres of a content type's family. */
+  genres(type: string): Promise<Genre[]>;
+  /** GET /v1/countries. */
+  countries(): Promise<Ref[]>;
   /**
    * GET /v1/watching/togglewatchlist?id=: follows the series if the viewer doesn't, unfollows it if they
    * do (I Watch). Resolves with whether the series is followed now. A toggle, so it is never retried.
@@ -145,6 +171,27 @@ export function createApiClient(http: Http): ApiClient {
         videos: item.videos?.map(video),
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
+    },
+    async items({ type, genre, country, year, sort, page = 1, perpage }) {
+      const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+        method: 'GET',
+        path: '/v1/items',
+        query: { type, genre, country, year, sort, page, perpage },
+      });
+      return { items: res.items ?? [], pagination: pagination(res.pagination) };
+    },
+    // Reference lists come wrapped as {status, items} (research 10-kp-api §5).
+    async types() {
+      const res = await http<{ items?: ContentType[] }>({ method: 'GET', path: '/v1/types' });
+      return (res.items ?? []).map((type) => ({ id: String(type.id), title: type.title }));
+    },
+    async genres(type) {
+      const res = await http<{ items?: Genre[] }>({ method: 'GET', path: '/v1/genres', query: { type } });
+      return (res.items ?? []).map((genre) => ({ id: num(genre.id), title: genre.title }));
+    },
+    async countries() {
+      const res = await http<{ items?: Ref[] }>({ method: 'GET', path: '/v1/countries' });
+      return (res.items ?? []).map((country) => ({ id: num(country.id), title: country.title }));
     },
     async toggleWatchlist(id) {
       const res = await http<{ watching?: unknown }>({ method: 'GET', path: '/v1/watching/togglewatchlist', query: { id }, retry: false });

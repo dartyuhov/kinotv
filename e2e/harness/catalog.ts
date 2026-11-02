@@ -432,6 +432,102 @@ export function fakeMediaLinks(api: FakeApi, videos: FakeVideo[]): void {
   for (const video of videos) known.set(video.id, video);
 }
 
+// ---- Movies and Series tabs: GET /v1/items with filters, and the filter references ----
+
+/** GET /v1/types: content types. Their ids are strings, and 3D's is upper case (research 10-kp-api §5). */
+export const FAKE_TYPES = [
+  { id: 'movie', title: 'Фильмы' },
+  { id: 'serial', title: 'Сериалы' },
+  { id: '3D', title: '3D' },
+  { id: 'concert', title: 'Концерты' },
+  { id: 'documovie', title: 'Документальные фильмы' },
+  { id: 'docuserial', title: 'Документальные сериалы' },
+  { id: 'tvshow', title: 'ТВ шоу' },
+];
+
+const MOVIE_GENRES = [
+  { id: 1, title: 'Комедия' },
+  { id: 8, title: 'Драма' },
+  { id: 9, title: 'Триллер' },
+];
+const DOCU_GENRES = [
+  { id: 31, title: 'Природа' },
+  { id: 32, title: 'История' },
+];
+
+/** GET /v1/genres?type=<type>: genres per `type` value. Types of one family share their genres. */
+export const FAKE_GENRES: Record<string, { id: number; title: string }[]> = {
+  movie: MOVIE_GENRES,
+  serial: MOVIE_GENRES,
+  '3d': MOVIE_GENRES,
+  documovie: DOCU_GENRES,
+  docuserial: DOCU_GENRES,
+  concert: [{ id: 41, title: 'Рок' }],
+  tvshow: [{ id: 51, title: 'Реалити' }],
+};
+
+/** GET /v1/countries. */
+export const FAKE_COUNTRIES = [
+  { id: 1, title: 'США' },
+  { id: 2, title: 'Россия' },
+  { id: 3, title: 'Франция' },
+];
+
+/** The query string of a GET /v1/items request. */
+export type ItemsQuery = Record<string, string>;
+
+export interface FakeCatalog {
+  types: { id: string; title: string }[];
+  genres: Record<string, { id: number; title: string }[]>;
+  countries: { id: number; title: string }[];
+  /** Every title matching a GET /v1/items query, before paging. Default: DEFAULT_CATALOG_ITEMS of `query.type`. */
+  items(query: ItemsQuery): FakeItem[];
+}
+
+/** 30 films and 30 series: more than one page of each. */
+export const DEFAULT_CATALOG_ITEMS: FakeItem[] = [
+  ...Array.from({ length: 30 }, (_, i) => fakeItem(5001 + i, `Кино ${i + 1} / Movie ${i + 1}`)),
+  ...Array.from({ length: 30 }, (_, i) => fakeItem(6001 + i, `Сериал ${i + 1} / Series ${i + 1}`, { type: 'serial' })),
+];
+
+/**
+ * Routes what the Movies and Series tabs call: GET /v1/types, /v1/genres, /v1/countries and /v1/items,
+ * which pages `items(query)` by `page` and `perpage` like the real API. Each title it returns also gets
+ * GET /v1/items/<id> (the title page). Every test gets the default catalog; pass parts to replace them.
+ */
+export function fakeCatalog(api: FakeApi, catalog: Partial<FakeCatalog> = {}): FakeCatalog {
+  const full: FakeCatalog = {
+    types: FAKE_TYPES,
+    genres: FAKE_GENRES,
+    countries: FAKE_COUNTRIES,
+    items: (query) => DEFAULT_CATALOG_ITEMS.filter((item) => !query.type || item.type === query.type),
+    ...catalog,
+  };
+  api.on('GET', '/v1/types', { json: { status: 200, items: full.types } });
+  api.on('GET', '/v1/genres', (req) => {
+    const type = req.query.type ?? '';
+    return { json: { status: 200, items: (full.genres[type] ?? []).map((genre) => ({ ...genre, type })) } };
+  });
+  api.on('GET', '/v1/countries', { json: { status: 200, items: full.countries } });
+  api.on('GET', '/v1/items', (req) => {
+    const all = full.items(req.query);
+    const perpage = Number(req.query.perpage ?? 20);
+    const page = Number(req.query.page ?? 1);
+    const items = all.slice((page - 1) * perpage, page * perpage);
+    for (const item of items) fakeTitle(api, item);
+    // `total` counts pages, not items, and the numbers may arrive as strings (research 10-kp-api §2.1).
+    const pages = Math.max(1, Math.ceil(all.length / perpage));
+    return {
+      json: {
+        status: 200,
+        items,
+        pagination: { total: String(pages), current: String(page), perpage: String(perpage), total_items: all.length },
+      },
+    };
+  });
+  return full;
+}
+
 /**
  * GET /v1/items/search (research 10-kp-api §6.3): `results` maps a query (`q`) to the titles found; any
  * other query finds nothing. Also routes the title page of every result.

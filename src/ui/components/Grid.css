@@ -1,0 +1,24 @@
+/*
+ * The grid's viewport: a fixed height set by the screen, clipped. Padding leaves room for the focused
+ * card's scale and lift at the top and bottom edges.
+ */
+.grid {
+  position: relative;
+  overflow: hidden;
+  padding: 0 var(--screen-gutter);
+}
+
+/*
+ * The track holds every card position; cards are placed with `left`/`top`, never transforms, so Norigin
+ * measures their real positions. Scrolling is a transform of the track (spec §6.3).
+ */
+.grid__track {
+  position: relative;
+  margin-top: 28px;
+  transition: transform var(--motion-scroll) var(--ease-out);
+}
+
+.grid__message {
+  padding-top: var(--space-4);
+  color: var(--color-text-tertiary);
+}
