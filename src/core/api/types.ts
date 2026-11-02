@@ -179,3 +179,15 @@ export interface ItemDetails extends ItemSummary {
   videos?: Video[];
   seasons?: Season[];
 }
+
+/** GET /v1/types → `items`: a content type. Its id is a string: movie, serial, 3D, concert… */
+export interface ContentType {
+  id: string;
+  title: string;
+}
+
+/** GET /v1/genres → `items`. Genres belong to a family of types; the same title can recur with another id. */
+export interface Genre {
+  id: number;
+  title: string;
+}

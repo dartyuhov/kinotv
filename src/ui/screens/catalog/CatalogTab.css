@@ -1,0 +1,21 @@
+/* Movies and Series fill the content region under the tab bar (1920×920): a header row, then the grid. */
+.catalog {
+  position: absolute;
+  inset: 0;
+}
+
+/* Keep its height in step with HEADER_HEIGHT in CatalogTab.tsx. */
+.catalog__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 112px;
+  padding: 0 var(--screen-gutter);
+}
+
+.catalog__title {
+  margin-right: var(--space-2);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.02em;
+}

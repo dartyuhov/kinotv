@@ -79,5 +79,20 @@
   "lang.jpn": "Japanese",
   "lang.kor": "Korean",
   "lang.zho": "Chinese",
-  "title.failed": "Couldn't load this page. Press Back to return"
+  "title.failed": "Couldn't load this page. Press Back to return",
+  "catalog.filter.type": "Type",
+  "catalog.filter.genre": "Genre",
+  "catalog.filter.year": "Year",
+  "catalog.filter.country": "Country",
+  "catalog.filter.sort": "Sort",
+  "catalog.chip": "{name}: {value}",
+  "catalog.anyGenre": "All genres",
+  "catalog.anyYear": "Any year",
+  "catalog.anyCountry": "All countries",
+  "catalog.sort.newest": "Newest",
+  "catalog.sort.popular": "Popular",
+  "catalog.sort.rating": "Top rated",
+  "catalog.years": "{from}–{to}",
+  "catalog.empty": "Nothing found",
+  "catalog.failed": "Couldn't load"
 }

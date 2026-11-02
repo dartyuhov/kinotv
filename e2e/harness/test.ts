@@ -1,5 +1,5 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
-import { fakeHome } from './catalog';
+import { fakeCatalog, fakeHome } from './catalog';
 import { FakeApi } from './fakeApi';
 import { FakeCdn } from './fakeCdn';
 import { Remote } from './remote';
@@ -125,6 +125,8 @@ export const test = base.extend<Fixtures>({
       // Every signed-in launch lands on Home, so its endpoints get default answers too. Tests about Home
       // call fakeHome(api, …) with their own catalog.
       fakeHome(api);
+      // Movies and Series load their catalog as soon as their tab gets focus, even in passing.
+      fakeCatalog(api);
       await api.attach(page);
       await use(api);
       expect(api.unhandled, 'the app called endpoints that have no fake route').toEqual([]);

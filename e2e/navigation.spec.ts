@@ -3,7 +3,8 @@ import { expect, test } from './harness/test';
 test('Back from pushed screens returns to each previous screen with the same element focused', async ({ app, remote, page }) => {
   const heading = page.getByRole('heading', { level: 1 });
   await app.open();
-  await remote.press('right', 'ok', 'down'); // Фильмы → its screen → second action
+  await remote.repeat('right', 4); // ТВ, still a placeholder with demo actions
+  await remote.press('ok', 'down'); // its screen → second action
   await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 2');
 
   await remote.press('ok');
@@ -19,16 +20,17 @@ test('Back from pushed screens returns to each previous screen with the same ele
   await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 3');
 
   await remote.press('back');
-  await expect(heading).toHaveText('Фильмы');
-  await expect(page.getByRole('tab', { name: 'Фильмы' })).toHaveAttribute('aria-selected', 'true');
+  await expect(heading).toHaveText('ТВ');
+  await expect(page.getByRole('tab', { name: 'ТВ' })).toHaveAttribute('aria-selected', 'true');
   await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 2');
 });
 
 test('focus scrolls the screen, and Back restores the scroll position', async ({ app, remote, page }) => {
   const heading = page.getByRole('heading', { level: 1 });
   await app.open();
-  await remote.press('right', 'ok'); // Фильмы → its screen
-  await expect(heading).toHaveText('Фильмы');
+  await remote.repeat('right', 4); // ТВ, still a placeholder with demo actions
+  await remote.press('ok'); // its screen
+  await expect(heading).toHaveText('ТВ');
   const unscrolled = await heading.boundingBox();
 
   await remote.repeat('down', 7);
