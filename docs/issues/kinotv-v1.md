@@ -1,6 +1,5 @@
 # KinoTV v1 — unofficial kino.watch app for Samsung Tizen TVs
 
-> Draft issue: not yet published (no issue tracker is configured). Intended label: `ready-for-agent`.
 > Design reference: the KinoTV Tizen app design spec dated 2026-11-02 in this repo's docs.
 
 ## Problem Statement
@@ -170,17 +169,13 @@ KinoTV is an installed Tizen TV app (a packaged web app with its own icon in App
 - **UI:** screens, components and a screen-stack navigator. Pushing a screen records the focus key and scroll position, and popping restores them. Each screen declares its initial focus. Back on the root screen opens the exit dialog.
 - **API client:** a typed kino.watch API client. Errors are normalised into one error type with kinds: network, timeout, auth, subscription, server, notFound. 15 s timeout. Two retries with backoff (1 s, 3 s) for network, timeout and 5xx errors, on reads only. Base URL and mirror are configurable (`api.service-kp.com` primary, `api.srvkp.com` mirror).
 - **Auth:** OAuth 2 device flow. Request a code, show the user code, address and QR code, and poll at the server's interval. Handle authorization-pending, and request a new code on expiry. Tokens are stored in the app's private storage and refreshed 5 minutes before expiry. All concurrent requests wait on one shared refresh. A 401 triggers one refresh and retry, then sign-out with the pending screen restored after sign-in. After sign-in, the TV registers itself with kino.watch as "KinoTV · <TV model>" with the Tizen and app versions.
-- **Player:** the `PlayerAdapter` interface is the contract between the player screen and the playback engine. It has two real implementations (AVPlay for the TV, HTML video for desktop) and one fake for tests. Its shape, from the design spec:
-  ```ts
-  interface PlayerAdapter {
-    load(src: MediaSource, opts: { startAt: number }): Promise<void>;
-    play(): void; pause(): void; seekTo(sec: number): void;
-    getTracks(): { audio: AudioTrack[]; subtitles: SubtitleTrack[]; qualities: Quality[] };
-    selectAudio(id: string): void; selectSubtitle(id: string | null): void; selectQuality(id: string): Promise<void>;
-    on(event: 'time' | 'buffering' | 'ended' | 'error' | 'state', cb: (e: unknown) => void): () => void;
-    destroy(): void;
-  }
-  ```
+- **Player:** the `PlayerAdapter` interface is the contract between the player screen and the playback engine. It has two real implementations (AVPlay for the TV, HTML video for desktop) and one fake for tests. It covers:
+  - Loading a media source at a start position (asynchronous).
+  - Play, pause and seek-to-seconds.
+  - Listing the available audio tracks, subtitle tracks and qualities.
+  - Selecting an audio track, a subtitle track (or none) and a quality (asynchronous, because it may reload the stream).
+  - Subscribing to time, buffering, ended, error and state-change events, with an unsubscribe handle.
+  - Destroying the player.
 - **Sync:** the progress reporter saves the position every 30 s, and immediately on pause, exit, episode change and the app going to the background. At ≥ 90% (or reaching the end-credits marker) the item is marked watched. Resume reads the saved position from kino.watch.
 - **Platform:** the only module that touches Tizen or Samsung APIs. It handles key registration and mapping, app lifecycle (visibility, exit), storage, network status and TV info (model, language). Each part has a browser fallback, so the same build runs in Chrome.
 - **i18n:** flat Russian and English dictionaries, with Russian plurals handled by the standard plural rules. The initial language comes from the TV's language and can be changed in Settings.
