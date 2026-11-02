@@ -1,4 +1,5 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { fakeBookmarks } from './bookmarks';
 import { fakeCatalog, fakeHome } from './catalog';
 import { FakeApi } from './fakeApi';
 import { FakeCdn } from './fakeCdn';
@@ -127,6 +128,8 @@ export const test = base.extend<Fixtures>({
       fakeHome(api);
       // Movies and Series load their catalog as soon as their tab gets focus, even in passing.
       fakeCatalog(api);
+      // The Bookmarks tab and the title page's folder picker: no folders unless a test routes its own.
+      fakeBookmarks(api);
       await api.attach(page);
       await use(api);
       expect(api.unhandled, 'the app called endpoints that have no fake route').toEqual([]);

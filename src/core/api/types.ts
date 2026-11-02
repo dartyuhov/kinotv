@@ -178,6 +178,16 @@ export interface ItemDetails extends ItemSummary {
   age_rating?: string | number | null;
   videos?: Video[];
   seasons?: Season[];
+  /** Series: whether the viewer follows it (I Watch). The API sends both names for the same flag. */
+  subscribed?: boolean;
+  in_watchlist?: boolean;
+}
+
+/** GET /v1/bookmarks: one of the viewer's bookmark folders. `count` (titles in it) is coerced by the client. */
+export interface BookmarkFolder {
+  id: number;
+  title: string;
+  count: number;
 }
 
 /** GET /v1/types → `items`: a content type. Its id is a string: movie, serial, 3D, concert… */

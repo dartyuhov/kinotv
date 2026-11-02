@@ -1,7 +1,7 @@
-import { doesFocusableExist, FocusContext, getCurrentFocusKey, setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { Check } from 'lucide-react';
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useBackHandler } from '../nav/useBackHandler';
+import { memo, useCallback, useRef, useState } from 'react';
+import { Overlay } from './Overlay';
 import './OptionPicker.css';
 
 export interface PickerOption {
@@ -11,7 +11,7 @@ export interface PickerOption {
 }
 
 interface OptionPickerProps {
-  /** Prefix for the picker's focus keys; must be unique among mounted pickers. */
+  /** The picker's focus key, and the prefix of its options' keys. Unique among mounted overlays. */
   id: string;
   title: string;
   options: readonly PickerOption[];
@@ -24,40 +24,26 @@ interface OptionPickerProps {
 
 // Layout in logical pixels; keep in step with OptionPicker.css.
 const OPTION_PITCH = 72;
-const LIST_HEIGHT = 720;
+const LIST_HEIGHT = 792;
 /** Options rendered beyond each end of the list's viewport. */
 const BUFFER = 10;
 
 /**
- * A panel listing the choices for one setting, over the right side of the screen. Render it only while open.
+ * A list of choices for one setting, in an Overlay panel. Render it only while open.
  *
- * - It is a focus boundary: Up/Down move through the options, nothing else leaves it. Focus starts on
- *   the current choice. OK picks the focused option (`onPick`); the owner closes the picker.
- * - It takes Back (`onClose`) ahead of the screen underneath.
- * - When it closes, focus returns to whatever was focused before it opened (usually what opened it).
+ * - Focus starts on the current choice; Up/Down move, OK picks (`onPick`), and the owner closes it.
+ * - From Overlay: arrows can't leave it, Back closes it (`onClose`), and focus returns to whatever
+ *   opened it.
  * - Long lists (countries) are virtualised and scroll with focus.
  */
 export function OptionPicker({ id, title, options, selected, onPick, onClose }: OptionPickerProps) {
-  const titleId = useId();
-  const optionKey = useCallback((value: string) => `${id}:option:${value}`, [id]);
+  const optionKey = (value: string) => `${id}:option:${value}`;
   const selectedIndex = Math.max(
     0,
     options.findIndex((o) => o.value === selected),
   );
   const [index, setIndex] = useState(selectedIndex);
-  // Read during the first render, before the picker moves focus.
-  const [returnFocusKey] = useState(getCurrentFocusKey);
-  const { ref, focusKey } = useFocusable({ focusKey: id, isFocusBoundary: true, preferredChildFocusKey: optionKey(selected) });
-
-  useBackHandler(() => onClose());
-
-  const startKey = useRef(optionKey(options[selectedIndex]?.value ?? selected));
-  useEffect(() => {
-    void setFocus(startKey.current);
-    return () => {
-      if (doesFocusableExist(returnFocusKey)) void setFocus(returnFocusKey);
-    };
-  }, [returnFocusKey]);
+  const [initialFocusKey] = useState(() => optionKey(options[selectedIndex]?.value ?? selected));
 
   const latest = useRef({ options, onPick });
   latest.current = { options, onPick };
@@ -72,35 +58,28 @@ export function OptionPicker({ id, title, options, selected, onPick, onClose }: 
   const last = Math.min(options.length, Math.ceil((offset + LIST_HEIGHT) / OPTION_PITCH) + BUFFER);
 
   return (
-    <div className="option-picker">
-      <FocusContext.Provider value={focusKey}>
-        <div ref={ref} className="option-picker__panel" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-          <h2 id={titleId} className="option-picker__title">
-            {title}
-          </h2>
-          <div className="option-picker__viewport">
-            <div
-              role="listbox"
-              aria-labelledby={titleId}
-              className="option-picker__list"
-              style={{ height: options.length * OPTION_PITCH, transform: `translate3d(0, ${-offset}px, 0)` }}
-            >
-              {options.slice(first, last).map((option, i) => (
-                <PickerItem
-                  key={option.value}
-                  focusKey={optionKey(option.value)}
-                  index={first + i}
-                  label={option.label}
-                  selected={option.value === selected}
-                  onFocusIndex={setIndex}
-                  onPickIndex={onPickIndex}
-                />
-              ))}
-            </div>
-          </div>
+    <Overlay id={id} title={title} initialFocusKey={initialFocusKey} onClose={onClose}>
+      <div className="option-picker">
+        <div
+          role="listbox"
+          aria-label={title}
+          className="option-picker__list"
+          style={{ height: options.length * OPTION_PITCH, transform: `translate3d(0, ${-offset}px, 0)` }}
+        >
+          {options.slice(first, last).map((option, i) => (
+            <PickerItem
+              key={option.value}
+              focusKey={optionKey(option.value)}
+              index={first + i}
+              label={option.label}
+              selected={option.value === selected}
+              onFocusIndex={setIndex}
+              onPickIndex={onPickIndex}
+            />
+          ))}
         </div>
-      </FocusContext.Provider>
-    </div>
+      </div>
+    </Overlay>
   );
 }
 

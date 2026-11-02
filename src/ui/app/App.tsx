@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { Toast } from '../components/Toast';
 import { ScreenStack } from '../nav/ScreenStack';
 import { SignInScreen } from '../screens/signin/SignInScreen';
 import { queryClient, userQuery } from './queries';
@@ -11,7 +12,10 @@ export function App() {
   const signedIn = useSessionStatus() === 'signedIn';
   return (
     <QueryClientProvider client={queryClient}>
-      <Stage>{signedIn ? <SignedIn /> : <SignInScreen />}</Stage>
+      <Stage>
+        {signedIn ? <SignedIn /> : <SignInScreen />}
+        <Toast />
+      </Stage>
     </QueryClientProvider>
   );
 }

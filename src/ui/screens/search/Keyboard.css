@@ -1,0 +1,61 @@
+/* Rows are centred, like the mockup; keep the gap in step with KEY_GAP in Keyboard.tsx. */
+.keyboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.keyboard__row {
+  display: flex;
+  gap: 12px;
+}
+
+.keyboard__key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: 60px;
+  border-radius: var(--radius-card);
+  background: var(--color-control);
+  color: var(--color-text);
+  font-size: 28px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.keyboard__key--layout,
+.keyboard__key--space,
+.keyboard__key--delete,
+.keyboard__key--clear {
+  font-size: var(--font-size-label);
+}
+
+/* The language key stands out a little, as in the mockup. */
+.keyboard__key--layout {
+  background: var(--color-key-accent);
+  font-weight: var(--font-weight-bold);
+}
+
+.keyboard__key[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: var(--font-weight-bold);
+  transform: scale(var(--scale-focus-key));
+  box-shadow: var(--shadow-focus);
+}
+
+/* Wide keys grow less, so they don't cover their neighbours. */
+.keyboard__key--layout[data-focused='true'],
+.keyboard__key--space[data-focused='true'],
+.keyboard__key--delete[data-focused='true'],
+.keyboard__key--clear[data-focused='true'] {
+  transform: scale(var(--scale-focus-button));
+}
+
+.keyboard__icon {
+  width: 26px;
+  height: 26px;
+}

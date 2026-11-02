@@ -233,8 +233,8 @@ export function fakeItems(firstId: number, count: number): FakeItem[] {
   return Array.from({ length: count }, (_, i) => fakeItem(firstId + i));
 }
 
-/** A series the viewer has started: `watched` of `total` episodes seen. */
-export function fakeSerialProgress(item: FakeItem, watched: number, total: number): FakeSerialProgress {
+/** A series the viewer has started: `watched` of `total` episodes seen, `fresh` of them new since the viewer last watched. */
+export function fakeSerialProgress(item: FakeItem, watched: number, total: number, fresh = 0): FakeSerialProgress {
   return {
     id: item.id,
     type: item.type,
@@ -243,7 +243,7 @@ export function fakeSerialProgress(item: FakeItem, watched: number, total: numbe
     posters: item.posters,
     total: String(total),
     watched: String(watched),
-    new: '0',
+    new: String(fresh),
   };
 }
 
@@ -297,6 +297,11 @@ export interface HomeCatalog {
   movies: FakeItem[];
   /** GET /v1/watching/serials?subscribed=0: series with unwatched episodes. */
   serials: FakeSerialProgress[];
+  /**
+   * GET /v1/watching/serials?subscribed=1: the series the viewer follows (I Watch). GET
+   * /v1/watching/togglewatchlist follows and unfollows; assign a new array to change the list mid-test.
+   */
+  followed?: FakeSerialProgress[];
   /** GET /v1/watching?id=<id>, per item id. Items without an entry have no saved position. */
   progress: Record<number, FakeResponse>;
 }
@@ -337,17 +342,35 @@ export function fakeHome(api: FakeApi, catalog: Partial<HomeCatalog> = {}): Home
   api.on('GET', '/v1/watching/movies', {
     json: { status: 200, items: home.movies.map(({ id, type, subtype, title, posters }) => ({ id, type, subtype, title, posters })) },
   });
-  api.on('GET', '/v1/watching/serials', { json: { status: 200, items: home.serials } });
+  api.on('GET', '/v1/watching/serials', (req) => ({
+    json: { status: 200, items: req.query.subscribed === '1' ? (home.followed ?? []) : home.serials },
+  }));
+  api.on('GET', '/v1/watching/togglewatchlist', (req) => ({
+    json: { status: 200, watching: toggleFollowed(home, Number(req.query.id)) },
+  }));
   api.on('GET', '/v1/watching', (req) => {
     const id = Number(req.query.id);
     return home.progress[id] ?? { json: { status: 200, item: { id, title: '', type: 'movie', videos: [] } } };
   });
   const everything = [...home.hot, ...home.fresh, ...home.popular, ...home.movies];
   for (const item of everything) fakeTitle(api, item);
-  for (const serial of home.serials) {
+  for (const serial of [...home.serials, ...(home.followed ?? [])]) {
     if (!everything.some((item) => item.id === serial.id)) fakeTitle(api, fakeItem(serial.id, serial.title, { type: serial.type, posters: serial.posters }));
   }
   return home;
+}
+
+/** The fake server's togglewatchlist: follows or unfollows series `id` in `home.followed`; returns the new state. */
+function toggleFollowed(home: HomeCatalog, id: number): boolean {
+  const followed = home.followed ?? [];
+  if (followed.some((s) => s.id === id)) {
+    home.followed = followed.filter((s) => s.id !== id);
+    return false;
+  }
+  const known = [...home.hot, ...home.fresh, ...home.popular].find((item) => item.id === id);
+  const entry = known ? fakeSerialProgress(known, 0, 0) : home.serials.find((s) => s.id === id);
+  if (entry) home.followed = [...followed, { ...entry, new: '0' }];
+  return true;
 }
 
 /** GET /v1/items/<id>: the title's details. */
@@ -450,3 +473,15 @@ export function fakeCatalog(api: FakeApi, catalog: Partial<FakeCatalog> = {}): F
   });
   return full;
 }
+
+/**
+ * GET /v1/items/search (research 10-kp-api §6.3): `results` maps a query (`q`) to the titles found; any
+ * other query finds nothing. Also routes the title page of every result.
+ */
+export function fakeSearch(api: FakeApi, results: Record<string, FakeItem[]>): void {
+  api.on('GET', '/v1/items/search', (req) => list(results[req.query.q ?? ''] ?? []));
+  for (const item of Object.values(results).flat()) fakeTitle(api, item);
+}
+
+/** One page of a list endpoint (items, search), for routing by hand, e.g. to answer a request late. */
+export const fakeList = (items: FakeItem[]): FakeResponse => list(items);

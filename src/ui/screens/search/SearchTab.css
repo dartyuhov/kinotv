@@ -1,0 +1,75 @@
+/*
+ * Search fills the content region under the tab bar (1920×920): the query field, the keyboard centred
+ * under it, and a full-width row of results at the bottom (mockup keyboard-v2.html).
+ */
+.search {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: var(--space-2);
+}
+
+/* For screen readers and tests; the tab bar already says where the viewer is. */
+.search__heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* As wide as the widest keyboard row (12 keys). */
+.search__field {
+  display: flex;
+  align-items: center;
+  width: 1476px;
+  height: 64px;
+  margin-bottom: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--color-field);
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-semibold);
+}
+
+.search__query {
+  white-space: pre;
+  overflow: hidden;
+}
+
+.search__caret {
+  flex: none;
+  width: 3px;
+  height: 40px;
+  margin-left: 2px;
+  background: var(--color-text);
+}
+
+.search__placeholder {
+  margin-left: var(--space-2);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-regular);
+}
+
+.search__badge {
+  margin-left: auto;
+  padding: 4px var(--space-2);
+  border-radius: 8px;
+  background: var(--color-field-badge);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+}
+
+.search__results {
+  align-self: stretch;
+  margin-top: var(--space-3);
+}
+
+.search__message {
+  padding: 0 var(--screen-gutter);
+  line-height: 32px;
+  color: var(--color-text-secondary);
+}

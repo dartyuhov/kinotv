@@ -126,6 +126,24 @@
   height: 22px;
 }
 
+/* Count badge (e.g. new episodes): a white pill with a black number, top left. */
+.card__badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-bold);
+  line-height: 36px;
+  text-align: center;
+}
+
 .card__sheen {
   position: absolute;
   inset: 0;

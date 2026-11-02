@@ -80,4 +80,10 @@
   --motion-scroll: 300ms;
   --motion-backdrop: 400ms;
   --scale-focus-tab: 1.08;
+
+  /* Search: on-screen keyboard and query field (mockup keyboard-v2.html) */
+  --color-field: rgba(255, 255, 255, 0.1);
+  --color-key-accent: rgba(255, 255, 255, 0.22);
+  --color-field-badge: rgba(255, 255, 255, 0.18);
+  --scale-focus-key: 1.15;
 }

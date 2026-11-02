@@ -1,41 +1,7 @@
-/*
- * A panel of choices over the right side of its screen, on a plain translucent scrim (no backdrop-filter,
- * spec §6.3). It fills its positioned parent, so the owner decides what it covers.
- */
+/* The list's viewport inside the Overlay panel. Keep its height in step with LIST_HEIGHT in OptionPicker.tsx. */
 .option-picker {
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  background: var(--color-scrim);
-  animation: option-picker-fade var(--motion-overlay) var(--ease-out);
-}
-
-.option-picker__panel {
-  position: absolute;
-  top: 0;
-  right: var(--screen-gutter);
-  bottom: var(--space-4);
-  width: 600px;
-  padding: var(--space-4);
-  border-radius: var(--radius-dialog);
-  background: var(--color-dialog);
-  box-shadow: var(--shadow-focus);
-  animation: option-picker-slide var(--motion-overlay) var(--ease-out);
-}
-
-.option-picker__title {
-  height: 56px;
-  padding: 0 var(--space-2);
-  font-size: var(--font-size-row-title);
-  font-weight: var(--font-weight-bold);
-  line-height: 56px;
-}
-
-/* Keep its height in step with LIST_HEIGHT in OptionPicker.tsx. */
-.option-picker__viewport {
   position: relative;
-  height: 720px;
-  margin-top: var(--space-2);
+  height: 792px;
   overflow: hidden;
 }
 
@@ -79,17 +45,4 @@
 .option-picker__option[data-focused='true'] {
   background: var(--color-primary);
   color: var(--color-on-primary);
-}
-
-@keyframes option-picker-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes option-picker-slide {
-  from {
-    opacity: 0;
-    transform: translateX(48px);
-  }
 }

@@ -12,11 +12,13 @@ interface ButtonProps {
   icon?: LucideIcon;
   /** Shows only the icon, as a round button; the label is still its accessible name. Needs `icon`. */
   iconOnly?: boolean;
+  /** Makes it a toggle button, on (`true`) or off: announced as pressed, and an icon is drawn filled. */
+  pressed?: boolean;
   onPress(): void;
 }
 
 /** A remote-focusable pill button: primary is white, secondary is translucent grey (spec §6.1). */
-export function Button({ focusKey, label, variant = 'secondary', icon: Icon, iconOnly = false, onPress }: ButtonProps) {
+export function Button({ focusKey, label, variant = 'secondary', icon: Icon, iconOnly = false, pressed, onPress }: ButtonProps) {
   const { ref } = useFocusable({
     focusKey,
     onEnterPress: onPress,
@@ -27,7 +29,8 @@ export function Button({ focusKey, label, variant = 'secondary', icon: Icon, ico
       ref={ref}
       role="button"
       aria-label={Icon ? label : undefined}
-      className={`button button--${variant}${Icon && iconOnly ? ' button--icon-only' : ''}`}
+      aria-pressed={pressed}
+      className={`button button--${variant}${Icon && iconOnly ? ' button--icon-only' : ''}${pressed ? ' button--pressed' : ''}`}
     >
       {Icon && <Icon className="button__icon" aria-hidden strokeWidth={2.5} />}
       {!(Icon && iconOnly) && label}
