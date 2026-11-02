@@ -29,7 +29,7 @@ KinoTV is a fast, polished, remote-first app for watching kino.watch (formerly k
 | v1 features | Sign-in, Home, browse, search, playback, Continue watching, I Watch, Bookmarks, History, Collections, live TV, Sport, audio/subtitle/quality pickers |
 | Display | 4K target: 2160p video with HDR; 4K-ready artwork; UI at 1080p logical resolution (see §6.4) |
 | API credentials | Development reuses an existing open-source client's credentials from a local, git-ignored file. **Public release is blocked until the project has its own credentials** |
-| Testing | Chrome on the Mac (keyboard as remote), Vitest, Playwright remote-only end-to-end tests, then the real TV over Wi-Fi. Samsung's emulator is not used because it doesn't run on Apple Silicon |
+| Testing | Chrome on the Mac (keyboard as remote). Automated tests at two seams: the whole app driven by remote keys against a fake API, plus a fake player (§10). Then the real TV over Wi-Fi. Samsung's emulator is not used because it doesn't run on Apple Silicon |
 
 ### Non-goals (v1)
 
@@ -249,14 +249,23 @@ Colours, radii, spacing, shadows and motion timings live in `ui/theme/tokens.css
 
 ## 10. Testing
 
+**Test seams (agreed 2026-11-02).** There are as few seams as possible, placed as high as possible:
+
+1. **Primary seam: the whole app, driven by remote key presses, against a fake kino.watch HTTP API.**
+   - Playwright runs the real app in Chromium at 1920×1080 and uses key presses only.
+   - The fake API intercepts the app's HTTP requests, so `core/api`, `core/auth`, `core/sync` and the caching all run for real.
+   - Assertions cover visible UI, which element has focus, and recorded API requests.
+   - Playwright's clock controls timing (polling, refresh, 30 s marktime, auto-hide, countdowns, debounce).
+   - Tizen lifecycle behaviour is covered through the browser fallbacks (`visibilitychange`, online/offline events).
+2. **Player seam: `PlayerAdapter`, with a `FakePlayer`.** It emits scripted tracks, time, buffering, ended and error events. It covers pickers, track memory, quality and stream fallback, connection-lost/retry, the 90% watched threshold, next episode and channel zapping.
+
 | Layer | Tool | Covers |
 |---|---|---|
-| Unit | Vitest | API client (with `msw`), token refresh and races, device-flow polling, progress-sync timing, keyboard layout logic, i18n plurals |
-| Component | Vitest + Testing Library | Focus behaviour of rows, grids, keyboard and dialogs |
-| End-to-end | Playwright (Chromium, 1920×1080) | Remote-only journeys with key presses only and a mocked API: sign-in → Home → title → play → back · search RU and EN · bookmark add/remove · Back-stack focus restore · exit dialog · offline screen |
+| End-to-end (primary) | Playwright + fake API + `FakePlayer` | Sign-in (expiry, refresh races) → Home → title → play → back · search RU and EN · bookmarks with rollback · I Watch ordering · History resume · exit dialog · offline and recovery · subscription expired · per-row errors · empty states · settings effects |
+| Small direct tests | Vitest | Pure logic that is awkward to reach through the UI: keyboard layouts and wrapping, plural rules |
 | Device | Manual checklist on the Q60C | AVPlay 4K/HDR start, audio-track switch, external subtitles, quality switch, media and channel keys, Home/standby resume, 60 fps scrolling, cold-start time |
 
-Tests are written first for `core/` modules (TDD). CI runs unit and e2e tests on every push.
+`core/` modules are **not** unit-tested one by one; they are covered through the primary seam. Tests only check external behaviour. CI runs both automated layers on every push.
 
 ## 11. Tooling, packaging and distribution
 
@@ -265,7 +274,7 @@ Tests are written first for `core/` modules (TDD). CI runs unit and e2e tests on
 | Command | Purpose |
 |---|---|
 | `npm run dev` | Vite dev server with a 1920×1080 frame and keyboard as the remote. An optional dev proxy for the API and streams if CORS blocks the browser |
-| `npm test` / `npm run e2e` | Unit and component tests / Playwright |
+| `npm test` / `npm run e2e` | Small direct tests (Vitest) / remote-driven Playwright journeys |
 | `npm run tv` | Build → `tizen package -t wgt -s <profile>` → `tizen install` → launch on the TV connected via `sdb` |
 | `npm run tv:debug` | Same, launched in debug mode, printing the DevTools address |
 
