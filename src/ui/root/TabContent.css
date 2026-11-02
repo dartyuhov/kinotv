@@ -9,3 +9,10 @@
   right: 0;
   bottom: 0;
 }
+
+/* Scrolled programmatically by revealInScroller (focus), never by the user. */
+.tab-content__scroller {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}

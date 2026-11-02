@@ -1,6 +1,7 @@
 import { init, navigateByDirection, SpatialNavigation } from '@noriginmedia/norigin-spatial-navigation';
 import type { RemoteBus } from '../../core/input/remoteBus';
 import { isDirection } from '../../core/platform/keys';
+import { layoutAdapter } from './layoutAdapter';
 
 /**
  * Starts Norigin spatial navigation and drives it from the remote bus. Norigin's own keyboard
@@ -14,10 +15,10 @@ import { isDirection } from '../../core/platform/keys';
 export function startSpatialNavigation(bus: RemoteBus): void {
   init({
     throttle: 0,
-    // Must stay true: Norigin only removes data-focused on blur when it also moves DOM focus.
-    // preventScroll stops the browser scrolling on its own; screens manage scrolling themselves.
-    shouldFocusDOMNode: true,
-    domNodeFocusOptions: { preventScroll: true },
+    // Focus lives in Norigin and the data-focused attribute, not in DOM focus, so the browser
+    // never scrolls on its own. Screens scroll through revealInScroller.
+    shouldFocusDOMNode: false,
+    layoutAdapter,
   });
   SpatialNavigation.unbindEventHandlers();
 

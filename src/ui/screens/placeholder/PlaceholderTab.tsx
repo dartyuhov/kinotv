@@ -1,5 +1,6 @@
 import { t } from '../../../core/i18n';
 import { Button } from '../../components/Button';
+import { screenStack } from '../../nav/stack';
 import type { TabId } from '../../root/tabs';
 import './PlaceholderTab.css';
 
@@ -16,7 +17,12 @@ export function PlaceholderTab({ tab }: { tab: TabId }) {
       <p className="placeholder-tab__note">{t('placeholder.comingSoon')}</p>
       <div className="placeholder-tab__actions">
         {DEMO_ACTIONS.map((n) => (
-          <Button key={n} focusKey={`${tab}:demo:${n}`} label={t('demo.open', { n })} onPress={() => {}} />
+          <Button
+            key={n}
+            focusKey={`${tab}:demo:${n}`}
+            label={t('demo.open', { n })}
+            onPress={() => screenStack.push('demo', { n })}
+          />
         ))}
       </div>
     </div>

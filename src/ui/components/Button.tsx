@@ -1,4 +1,5 @@
 import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import { revealInScroller } from '../focus/reveal';
 import './Button.css';
 
 interface ButtonProps {
@@ -11,7 +12,11 @@ interface ButtonProps {
 
 /** A remote-focusable pill button: primary is white, secondary is translucent grey (spec §6.1). */
 export function Button({ focusKey, label, variant = 'secondary', onPress }: ButtonProps) {
-  const { ref } = useFocusable({ focusKey, onEnterPress: onPress });
+  const { ref } = useFocusable({
+    focusKey,
+    onEnterPress: onPress,
+    onFocus: ({ node }) => revealInScroller(node),
+  });
   return (
     <div ref={ref} role="button" className={`button button--${variant}`}>
       {label}

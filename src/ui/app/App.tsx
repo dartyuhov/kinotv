@@ -1,10 +1,11 @@
-import { RootScreen } from '../root/RootScreen';
+import { ScreenStack } from '../nav/ScreenStack';
+import { SCREENS } from './screens';
 import { Stage } from './Stage';
 
 export function App() {
   return (
     <Stage>
-      <RootScreen />
+      <ScreenStack screens={SCREENS} />
     </Stage>
   );
 }

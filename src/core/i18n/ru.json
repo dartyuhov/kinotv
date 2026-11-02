@@ -10,5 +10,7 @@
   "tabs.history": "История",
   "tabs.settings": "Настройки",
   "placeholder.comingSoon": "Этот раздел скоро появится",
-  "demo.open": "Открыть демо-экран {n}"
+  "demo.open": "Открыть демо-экран {n}",
+  "demo.title": "Демо-экран {n}",
+  "demo.hint": "Нажмите «Назад», чтобы вернуться"
 }
