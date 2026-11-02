@@ -16,3 +16,6 @@ tizen/.signing/
 dist-e2e/
 test-results/
 playwright-report/
+
+# Claude Code agent worktrees
+.claude/
