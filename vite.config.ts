@@ -1,10 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import pkg from './package.json' with { type: 'json' };
 
 export default defineConfig({
   // Tizen loads the app from local files inside the .wgt, so every asset URL must be relative.
   base: './',
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     // Tizen 7.0 is about Chrome 94; Chrome 85 keeps Tizen 6.5 (2022) in reach. See spec §2.
     target: 'chrome85',

@@ -15,5 +15,13 @@
   "placeholder.comingSoon": "This section is coming soon",
   "demo.open": "Open demo screen {n}",
   "demo.title": "Demo screen {n}",
-  "demo.hint": "Press Back to return"
+  "demo.hint": "Press Back to return",
+  "signin.title": "Sign in to KinoTV",
+  "signin.open": "On your phone or computer, open",
+  "signin.enterCode": "and enter the code",
+  "signin.scan": "or point your phone's camera at the QR code",
+  "signin.qr": "QR code: {url}",
+  "signin.newCode": "Get a new code",
+  "signin.failed": "Couldn't get a sign-in code. Check the internet connection and try again.",
+  "signin.retry": "Retry"
 }

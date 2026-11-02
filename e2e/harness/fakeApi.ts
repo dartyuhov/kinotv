@@ -3,6 +3,9 @@ import type { Page, Request, Route } from '@playwright/test';
 /** The app under test is built with VITE_API_BASE_URL set to this host (see playwright.config.ts). */
 export const FAKE_API_BASE_URL = 'http://fake-api.kinotv.test';
 
+/** Fake OAuth client credentials baked into the e2e build. Real ones live only in a git-ignored .env.local. */
+export const FAKE_CLIENT = { id: 'e2e-client-id', secret: 'e2e-client-secret' } as const;
+
 export interface RecordedRequest {
   method: string;
   /** Path without the query string, e.g. "/v1/items". */
