@@ -89,6 +89,7 @@ test.describe('a 401 from the API', () => {
     await remote.repeat('right', 8);
     await expect(app.focused).toHaveAccessibleName('Настройки');
     await expect(page.getByText(`Аккаунт: ${FAKE_USER.username}`)).toBeVisible();
+    await clock.settle(); // no account request still on its way when the server changes its mind
 
     // The token is revoked on the server, and so is the refresh token.
     api.on('GET', '/v1/user', acceptsOnly('access-1', { json: { status: 200, user: FAKE_USER } }));

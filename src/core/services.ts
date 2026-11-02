@@ -28,5 +28,5 @@ export function signOut(): void {
 
 /** Starts the background work that follows the session. Called once from main.tsx. */
 export function startServices(): void {
-  registerDeviceOnSessionStart(session, api, () => describeDevice(deviceInfo(), config.appVersion));
+  registerDeviceOnSessionStart(session, api, async () => describeDevice(await deviceInfo(), config.appVersion));
 }

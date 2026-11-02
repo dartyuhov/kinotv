@@ -1,4 +1,4 @@
-import { tizen, webapis } from './tizenGlobals';
+import { loadWebapis, tizen } from './tizenGlobals';
 
 export interface DeviceInfo {
   /** The TV model, e.g. "QE65Q60CAUXXC", or "Browser" outside a TV. */
@@ -7,13 +7,13 @@ export interface DeviceInfo {
   platform: string;
 }
 
-/** What this device is, for the kino.watch device list. Never throws. */
-export function deviceInfo(): DeviceInfo {
-  return { model: tvModel() ?? 'Browser', platform: tizenVersion() ?? 'Browser' };
+/** What this device is, for the kino.watch device list. Never rejects. */
+export async function deviceInfo(): Promise<DeviceInfo> {
+  return { model: (await tvModel()) ?? 'Browser', platform: tizenVersion() ?? 'Browser' };
 }
 
-function tvModel(): string | null {
-  const productinfo = webapis()?.productinfo;
+async function tvModel(): Promise<string | null> {
+  const productinfo = (await loadWebapis())?.productinfo;
   if (!productinfo) return null;
   try {
     return productinfo.getRealModel() || productinfo.getModel() || null;

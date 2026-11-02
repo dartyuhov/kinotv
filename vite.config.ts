@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import pkg from './package.json' with { type: 'json' };
+import { tizenWidget } from './tools/tizen/vitePlugin.ts';
 
 export default defineConfig({
   // Tizen loads the app from local files inside the .wgt, so every asset URL must be relative.
   base: './',
-  plugins: [react()],
+  plugins: [react(), tizenWidget()],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
@@ -15,7 +16,7 @@ export default defineConfig({
   },
   test: {
     // Vitest is only for small pure-logic tests next to the code. Journeys live in e2e/ (Playwright).
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tools/**/*.test.ts'],
     environment: 'node',
   },
 });

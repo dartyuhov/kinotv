@@ -33,19 +33,25 @@ export class App {
    * the seeded session is written once per test, so a reload sees whatever the app stored since.
    */
   async open({ signedIn = true, expiresIn = 3600 }: OpenOptions = {}): Promise<void> {
-    if (signedIn) {
-      const session = { ...SEEDED_SESSION, expiresAt: TEST_START_TIME.getTime() + expiresIn * 1000 };
-      await this.page.addInitScript(
-        ({ key, value }) => {
-          if (sessionStorage.getItem('e2e:seeded')) return;
-          sessionStorage.setItem('e2e:seeded', '1');
-          localStorage.setItem(key, value);
-        },
-        { key: SESSION_STORAGE_KEY, value: JSON.stringify(session) },
-      );
-    }
+    if (signedIn) await this.seedSession({ expiresIn });
     await this.page.goto('/');
     await expect(this.focused).toHaveCount(1);
+  }
+
+  /**
+   * Makes the next launch find a stored session (SEEDED_SESSION), for tests that navigate on their own
+   * instead of calling `open()`. Seeds once per test, so a reload is a restart with whatever the app stored.
+   */
+  async seedSession({ expiresIn = 3600 }: Pick<OpenOptions, 'expiresIn'> = {}): Promise<void> {
+    const session = { ...SEEDED_SESSION, expiresAt: TEST_START_TIME.getTime() + expiresIn * 1000 };
+    await this.page.addInitScript(
+      ({ key, value }) => {
+        if (sessionStorage.getItem('e2e:seeded')) return;
+        sessionStorage.setItem('e2e:seeded', '1');
+        localStorage.setItem(key, value);
+      },
+      { key: SESSION_STORAGE_KEY, value: JSON.stringify(session) },
+    );
   }
 }
 

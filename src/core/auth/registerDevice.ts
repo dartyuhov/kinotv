@@ -15,8 +15,12 @@ export function describeDevice(info: DeviceInfo, appVersion: string): DeviceDesc
  * Tells kino.watch about this device whenever a session starts: right after sign-in, and on every
  * launch with a stored session, as the API docs ask. Failures are ignored; the next start retries.
  */
-export function registerDeviceOnSessionStart(session: Session, api: ApiClient, device: () => DeviceDescription): void {
-  const notify = () => void api.deviceNotify(device()).catch(() => undefined);
+export function registerDeviceOnSessionStart(
+  session: Session,
+  api: ApiClient,
+  device: () => Promise<DeviceDescription>,
+): void {
+  const notify = () => void device().then((d) => api.deviceNotify(d)).catch(() => undefined);
   if (session.status() === 'signedIn') notify();
   session.subscribe(() => {
     if (session.status() === 'signedIn') notify();
