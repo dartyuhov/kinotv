@@ -8,5 +8,7 @@
   "tabs.sport": "Sport",
   "tabs.bookmarks": "Bookmarks",
   "tabs.history": "History",
-  "tabs.settings": "Settings"
+  "tabs.settings": "Settings",
+  "placeholder.comingSoon": "This section is coming soon",
+  "demo.open": "Open demo screen {n}"
 }

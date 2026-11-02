@@ -8,5 +8,7 @@
   "tabs.sport": "Спорт",
   "tabs.bookmarks": "Закладки",
   "tabs.history": "История",
-  "tabs.settings": "Настройки"
+  "tabs.settings": "Настройки",
+  "placeholder.comingSoon": "Этот раздел скоро появится",
+  "demo.open": "Открыть демо-экран {n}"
 }

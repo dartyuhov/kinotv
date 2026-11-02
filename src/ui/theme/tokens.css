@@ -42,7 +42,7 @@
   --space-6: 64px;
   --screen-gutter: 96px;
   --tabbar-top: 40px;
-  --content-top: 200px; /* first content row sits below the floating tab bar */
+  --content-top: 160px; /* the content region starts below the floating tab bar */
 
   /* Elevation */
   --shadow-float: 0 12px 40px rgba(0, 0, 0, 0.35);

@@ -1,0 +1,29 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  height: 72px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  transition: transform var(--motion-focus) var(--ease-out);
+}
+
+.button--primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.button--secondary {
+  background: var(--color-control);
+  color: var(--color-text);
+}
+
+/* Focus: white pill, lifted. Same look for both variants, like tvOS. */
+.button[data-focused='true'] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  transform: scale(var(--scale-focus-button));
+  box-shadow: var(--shadow-focus);
+}

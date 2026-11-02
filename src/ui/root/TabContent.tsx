@@ -1,0 +1,34 @@
+import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import type { ComponentType } from 'react';
+import { PlaceholderTab } from '../screens/placeholder/PlaceholderTab';
+import type { TabId } from './tabs';
+import './TabContent.css';
+
+export const ROOT_CONTENT_FOCUS_KEY = 'root:content';
+
+/** Each tab's screen. Later tickets replace a placeholder with the real screen here. */
+const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
+  search: PlaceholderTab,
+  home: PlaceholderTab,
+  movies: PlaceholderTab,
+  series: PlaceholderTab,
+  iwatch: PlaceholderTab,
+  tv: PlaceholderTab,
+  sport: PlaceholderTab,
+  bookmarks: PlaceholderTab,
+  history: PlaceholderTab,
+  settings: PlaceholderTab,
+};
+
+/** The area under the tab bar. Focusing ROOT_CONTENT_FOCUS_KEY moves focus into the active tab's screen. */
+export function TabContent({ tab }: { tab: TabId }) {
+  const { ref, focusKey } = useFocusable({ focusKey: ROOT_CONTENT_FOCUS_KEY });
+  const Screen = TAB_SCREENS[tab];
+  return (
+    <FocusContext.Provider value={focusKey}>
+      <div ref={ref} role="tabpanel" className="tab-content">
+        <Screen tab={tab} />
+      </div>
+    </FocusContext.Provider>
+  );
+}

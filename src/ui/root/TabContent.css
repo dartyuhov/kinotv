@@ -1,0 +1,11 @@
+/*
+ * The content region starts below the floating tab bar. Spatial navigation compares box edges,
+ * so this is what makes "Up" from the content land on the tab bar.
+ */
+.tab-content {
+  position: absolute;
+  top: var(--content-top);
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
