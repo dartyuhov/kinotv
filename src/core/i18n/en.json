@@ -79,5 +79,15 @@
   "lang.jpn": "Japanese",
   "lang.kor": "Korean",
   "lang.zho": "Chinese",
-  "title.failed": "Couldn't load this page. Press Back to return"
+  "title.failed": "Couldn't load this page. Press Back to return",
+  "search.field": "Search",
+  "search.placeholder": "Film or series title",
+  "search.key.space": "space",
+  "search.key.delete": "delete",
+  "search.key.clear": "clear",
+  "search.results": "Results",
+  "search.searching": "Searching…",
+  "search.failed": "Search failed",
+  "search.nothing": "Nothing found for “{query}”",
+  "search.popular": "Popular right now"
 }

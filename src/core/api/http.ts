@@ -10,6 +10,8 @@ export interface HttpRequest {
   query?: Params;
   /** POST body, sent as application/x-www-form-urlencoded (kino.watch ignores JSON bodies). */
   form?: Params;
+  /** Cancels the request (e.g. a search superseded by a newer one). It then fails, and is not retried. */
+  signal?: AbortSignal;
 }
 
 /** Sends one request and returns the parsed JSON body, or throws an ApiError. */
@@ -45,6 +47,9 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
       timedOut = true;
       controller.abort();
     }, timeoutMs);
+    const cancel = () => controller.abort();
+    if (req.signal?.aborted) cancel();
+    req.signal?.addEventListener('abort', cancel);
     try {
       let response: Response;
       try {
@@ -60,6 +65,7 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
       return body as T;
     } finally {
       clearTimeout(timer);
+      req.signal?.removeEventListener('abort', cancel);
     }
   }
 
@@ -69,7 +75,7 @@ export function createHttp({ baseUrl, timeoutMs = 15_000, retryDelaysMs = [1_000
         return await once<T>(req);
       } catch (error) {
         const delay = retryDelaysMs[attempt];
-        if (req.method !== 'GET' || delay === undefined || !isRetryable(error)) throw error;
+        if (req.method !== 'GET' || delay === undefined || !isRetryable(error) || req.signal?.aborted) throw error;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

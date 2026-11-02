@@ -79,5 +79,15 @@
   "lang.jpn": "японский",
   "lang.kor": "корейский",
   "lang.zho": "китайский",
-  "title.failed": "Не удалось загрузить страницу. Нажмите «Назад», чтобы вернуться"
+  "title.failed": "Не удалось загрузить страницу. Нажмите «Назад», чтобы вернуться",
+  "search.field": "Поиск",
+  "search.placeholder": "Название фильма или сериала",
+  "search.key.space": "пробел",
+  "search.key.delete": "стереть",
+  "search.key.clear": "очистить",
+  "search.results": "Результаты",
+  "search.searching": "Ищем…",
+  "search.failed": "Не удалось выполнить поиск",
+  "search.nothing": "По запросу «{query}» ничего не нашлось",
+  "search.popular": "Популярное сейчас"
 }

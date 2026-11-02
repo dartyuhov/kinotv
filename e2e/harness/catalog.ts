@@ -354,3 +354,15 @@ export function fakeHome(api: FakeApi, catalog: Partial<HomeCatalog> = {}): Home
 export function fakeTitle(api: FakeApi, item: FakeItem): void {
   api.on('GET', `/v1/items/${item.id}`, { json: { status: 200, item } });
 }
+
+/**
+ * GET /v1/items/search (research 10-kp-api §6.3): `results` maps a query (`q`) to the titles found; any
+ * other query finds nothing. Also routes the title page of every result.
+ */
+export function fakeSearch(api: FakeApi, results: Record<string, FakeItem[]>): void {
+  api.on('GET', '/v1/items/search', (req) => list(results[req.query.q ?? ''] ?? []));
+  for (const item of Object.values(results).flat()) fakeTitle(api, item);
+}
+
+/** One page of a list endpoint (items, search), for routing by hand, e.g. to answer a request late. */
+export const fakeList = (items: FakeItem[]): FakeResponse => list(items);

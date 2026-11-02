@@ -57,6 +57,14 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /** GET /v1/items/search: titles whose name matches `q`, ranked by the server (research 10-kp-api §6.3). */
+  search(q: string, options?: SearchOptions): Promise<Page<ItemSummary>>;
+}
+
+export interface SearchOptions {
+  perpage?: number;
+  /** Cancels the request, e.g. when the viewer has typed more. */
+  signal?: AbortSignal;
 }
 
 export function createApiClient(http: Http): ApiClient {
@@ -103,6 +111,16 @@ export function createApiClient(http: Http): ApiClient {
         videos: item.videos?.map(video),
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
+    },
+    async search(q, { perpage, signal } = {}) {
+      // field=title, as other kino.watch TV clients send for their search box: ranked title matches only.
+      const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+        method: 'GET',
+        path: '/v1/items/search',
+        query: { q, field: 'title', perpage },
+        signal,
+      });
+      return { items: res.items ?? [], pagination: pagination(res.pagination) };
     },
   };
 }
