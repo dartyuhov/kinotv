@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.superpowers/
+.env.local
+*.wgt
+*.p12
+tizen/.signing/
+.DS_Store
