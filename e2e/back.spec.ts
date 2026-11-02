@@ -16,7 +16,7 @@ test('Back on any tab other than Home goes to Home', async ({ app, remote, page 
   await remote.press('back');
   await expect(app.focused).toHaveAccessibleName('Главная');
   await expect(page.getByRole('tab', { name: 'Главная' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Главная');
+  await expect(page.getByRole('region', { name: 'Популярное' })).toBeVisible();
 });
 
 test.describe('the exit dialog', () => {

@@ -30,3 +30,18 @@ export const userQuery = queryOptions({
   queryFn: () => api.user(),
   staleTime: 0,
 });
+
+/** One title's details (catalog data: the 10-minute default). */
+export const itemQuery = (id: number) =>
+  queryOptions({
+    queryKey: ['item', id],
+    queryFn: () => api.item(id),
+  });
+
+/** The viewer's saved positions in a title. Personal, so re-fetched whenever a screen showing it mounts. */
+export const watchingQuery = (id: number) =>
+  queryOptions({
+    queryKey: ['watching', id],
+    queryFn: () => api.watching(id),
+    staleTime: 0,
+  });

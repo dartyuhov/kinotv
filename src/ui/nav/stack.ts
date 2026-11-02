@@ -8,6 +8,8 @@ import { create } from 'zustand';
 export interface ScreenParams {
   root: undefined;
   demo: { n: number };
+  /** A film or series page, by kino.watch item id. */
+  title: { id: number };
 }
 export type ScreenName = keyof ScreenParams;
 

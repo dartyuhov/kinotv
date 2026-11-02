@@ -27,7 +27,8 @@ test('Back from pushed screens returns to each previous screen with the same ele
 test('focus scrolls the screen, and Back restores the scroll position', async ({ app, remote, page }) => {
   const heading = page.getByRole('heading', { level: 1 });
   await app.open();
-  await remote.press('ok'); // Home → its screen
+  await remote.press('right', 'ok'); // Фильмы → its screen
+  await expect(heading).toHaveText('Фильмы');
   const unscrolled = await heading.boundingBox();
 
   await remote.repeat('down', 7);

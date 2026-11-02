@@ -1,0 +1,28 @@
+.title-screen {
+  position: absolute;
+  inset: 0;
+}
+
+.title-screen__info {
+  position: absolute;
+  left: var(--screen-gutter);
+  top: 260px;
+  width: 960px;
+}
+
+.title-screen__title {
+  font-size: var(--font-size-hero);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.title-screen__original {
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.title-screen__note {
+  margin-top: var(--space-5);
+  color: var(--color-text-tertiary);
+}

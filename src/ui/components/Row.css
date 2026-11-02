@@ -1,0 +1,40 @@
+.row {
+  position: relative;
+  padding: 0 var(--screen-gutter);
+}
+
+.row__title {
+  font-size: var(--font-size-row-title);
+  font-weight: var(--font-weight-bold);
+  line-height: 40px;
+  color: var(--color-text);
+}
+
+/*
+ * The track holds every card position; only a window of cards is rendered, each placed with `left`.
+ * Padding leaves room for the focused card's scale and lift. Scrolling is a transform (spec §6.3).
+ */
+.row__track {
+  position: relative;
+  box-sizing: content-box;
+  padding: 28px 0 36px;
+  transition: transform var(--motion-scroll) var(--ease-out);
+}
+
+.row__track > .card {
+  top: 28px;
+}
+
+.row__track--landscape {
+  height: var(--card-landscape-height);
+}
+
+.row__track--poster {
+  height: var(--card-poster-height);
+}
+
+/* A row whose list couldn't load: a quiet line in place of the cards, so the screen keeps its shape. */
+.row__message {
+  white-space: nowrap;
+  color: var(--color-text-tertiary);
+}

@@ -1,5 +1,7 @@
 import { test as base, expect, type Locator, type Page } from '@playwright/test';
+import { fakeHome } from './catalog';
 import { FakeApi } from './fakeApi';
+import { FakeCdn } from './fakeCdn';
 import { Remote } from './remote';
 
 /** The page clock starts here in every test. It runs normally until a test pauses or advances it. */
@@ -102,6 +104,7 @@ export class Clock {
 
 interface Fixtures {
   api: FakeApi;
+  cdn: FakeCdn;
   clock: Clock;
   remote: Remote;
   app: App;
@@ -119,9 +122,21 @@ export const test = base.extend<Fixtures>({
   api: [
     async ({ page }, use) => {
       const api = new FakeApi();
+      // Every signed-in launch lands on Home, so its endpoints get default answers too. Tests about Home
+      // call fakeHome(api, …) with their own catalog.
+      fakeHome(api);
       await api.attach(page);
       await use(api);
       expect(api.unhandled, 'the app called endpoints that have no fake route').toEqual([]);
+    },
+    { auto: true },
+  ],
+  // Artwork URLs in fixtures point at the fake CDN, which answers with tiny generated images.
+  cdn: [
+    async ({ page }, use) => {
+      const cdn = new FakeCdn();
+      await cdn.attach(page);
+      await use(cdn);
     },
     { auto: true },
   ],

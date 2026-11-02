@@ -10,6 +10,13 @@
   transition: transform var(--motion-focus) var(--ease-out);
 }
 
+.button__icon {
+  width: 28px;
+  height: 28px;
+  margin-right: var(--space-1);
+  margin-left: calc(-1 * var(--space-1));
+}
+
 .button--primary {
   background: var(--color-primary);
   color: var(--color-on-primary);

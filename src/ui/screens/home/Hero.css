@@ -1,0 +1,91 @@
+/* Hero text over the backdrop (content-region coordinates; the region starts under the tab bar). */
+.hero {
+  position: absolute;
+  left: var(--screen-gutter);
+  top: 40px;
+  width: 920px;
+  height: calc(var(--home-rows-top) - 40px);
+}
+
+.hero__details {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 136px;
+}
+
+.hero__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--font-size-hero);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}
+
+.hero__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  color: var(--color-text-secondary);
+}
+
+.hero__badge {
+  padding: 0 6px;
+  border: 1px solid var(--color-badge-border);
+  border-radius: 4px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 26px;
+}
+
+.hero__plot {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin-top: var(--space-2);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
+.hero__actions {
+  position: absolute;
+  left: 0;
+  bottom: 40px;
+  display: flex;
+  gap: var(--space-3);
+  transition: opacity var(--motion-overlay) var(--ease-out);
+}
+
+.hero__dots {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  display: flex;
+  gap: var(--space-1);
+  transition: opacity var(--motion-overlay) var(--ease-out);
+}
+
+.hero__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-dot);
+}
+
+.hero__dot--active {
+  width: 28px;
+  background: var(--color-text);
+}
+
+/* While the details describe a focused card, the featured title's buttons and dots step back. */
+.hero--card .hero__actions,
+.hero--card .hero__dots {
+  opacity: 0;
+}

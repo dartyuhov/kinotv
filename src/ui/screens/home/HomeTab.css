@@ -1,0 +1,23 @@
+/*
+ * Home fills the content region under the tab bar (1920×920). The hero's text sits in the upper part;
+ * the rows have their own viewport below it, scrolled by a transform so the focused row is at its top.
+ * The full-bleed backdrop is drawn by the root screen, behind the tab bar too.
+ */
+.home {
+  position: absolute;
+  inset: 0;
+}
+
+.home__rows {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--home-rows-top);
+  bottom: 0;
+  overflow: hidden;
+}
+
+/* Scrolled by a transform so the active row sits at the top; not animated when Home first lays out. */
+.home__rows-track--animated {
+  transition: transform var(--motion-scroll) var(--ease-out);
+}

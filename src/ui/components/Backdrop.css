@@ -1,0 +1,49 @@
+.backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.backdrop__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--motion-backdrop) var(--ease-out);
+}
+
+.backdrop__image--loaded {
+  opacity: 1;
+}
+
+.backdrop__scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-top), var(--scrim-left), var(--scrim-bottom);
+}
+
+/* Frosted surface: the tiny image upscaled (it blurs on its own) under a translucent fill. No backdrop-filter. */
+.frosted {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.frosted__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* A little oversize, so the soft edges of the stretched image stay off screen. */
+  transform: scale(1.15);
+}
+
+.frosted__fill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-frost);
+}
