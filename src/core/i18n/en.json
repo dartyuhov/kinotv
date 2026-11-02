@@ -23,5 +23,7 @@
   "signin.qr": "QR code: {url}",
   "signin.newCode": "Get a new code",
   "signin.failed": "Couldn't get a sign-in code. Check the internet connection and try again.",
-  "signin.retry": "Retry"
+  "signin.retry": "Retry",
+  "settings.account": "Account: {name}",
+  "settings.signOut": "Sign out"
 }

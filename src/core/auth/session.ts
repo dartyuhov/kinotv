@@ -10,6 +10,8 @@ export interface Session extends AccessTokenSource {
   /** Calls `listener` after every status change. Returns an unsubscribe function. */
   subscribe(listener: () => void): () => void;
   signIn(tokens: Tokens): void;
+  /** Forgets the tokens. The status becomes signedOut. */
+  signOut(): void;
 }
 
 export const SESSION_STORAGE_KEY = 'kinotv:session';
@@ -97,6 +99,14 @@ export function createSession({ storage, oauth, now = Date.now }: SessionOptions
       return () => listeners.delete(listener);
     },
     signIn: (next) => setTokens(next),
+    signOut: () => setTokens(null),
+    expire: () => setTokens(null),
+
+    async renewAfterRejection(rejected) {
+      if (!tokens) throw notSignedIn();
+      if (!refreshing && tokens.accessToken !== rejected) return tokens.accessToken; // already renewed
+      return refresh();
+    },
 
     async accessToken() {
       if (!tokens) throw notSignedIn();

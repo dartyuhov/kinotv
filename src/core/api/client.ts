@@ -21,6 +21,8 @@ export interface ApiClient {
   user(): Promise<User>;
   /** Registers this device in the account's device list, or updates its entry. */
   deviceNotify(device: DeviceDescription): Promise<void>;
+  /** Removes this device from the account's device list. */
+  deviceUnlink(): Promise<void>;
 }
 
 export function createApiClient(http: Http): ApiClient {
@@ -31,6 +33,9 @@ export function createApiClient(http: Http): ApiClient {
     },
     async deviceNotify(device) {
       await http({ method: 'POST', path: '/v1/device/notify', form: { ...device } });
+    },
+    async deviceUnlink() {
+      await http({ method: 'POST', path: '/v1/device/unlink' });
     },
   };
 }

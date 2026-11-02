@@ -76,4 +76,9 @@ export const screenStack = {
   depth(): number {
     return useScreenStackStore.getState().stack.length;
   },
+
+  /** Drops every screen above the root, e.g. on sign-out, so the next viewer starts fresh. */
+  reset(): void {
+    useScreenStackStore.setState({ stack: [rootEntry()] });
+  },
 };

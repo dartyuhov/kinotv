@@ -17,6 +17,15 @@ export const session = createSession({ storage, oauth });
 /** The kino.watch API, authenticated with the current session. */
 export const api = createApiClient(withAuth(http, session));
 
+/**
+ * Signs the viewer out: the TV leaves the account's device list (best effort; it uses the token, so it
+ * starts first) and the session is forgotten at once, whether or not the server answers.
+ */
+export function signOut(): void {
+  void api.deviceUnlink().catch(() => undefined);
+  session.signOut();
+}
+
 /** Starts the background work that follows the session. Called once from main.tsx. */
 export function startServices(): void {
   registerDeviceOnSessionStart(session, api, () => describeDevice(deviceInfo(), config.appVersion));

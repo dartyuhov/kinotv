@@ -1,5 +1,9 @@
-import { QueryClient, queryOptions } from '@tanstack/react-query';
+import { notifyManager, QueryClient, queryOptions } from '@tanstack/react-query';
 import { api, session } from '../../core/services';
+
+// Deliver query updates in a microtask rather than TanStack's default setTimeout(0). React batches them
+// either way, and this keeps rendering independent of timers, which e2e tests pause and step.
+notifyManager.setScheduler(queueMicrotask);
 
 /**
  * Server state cache (spec §7.4).

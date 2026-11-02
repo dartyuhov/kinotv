@@ -1,0 +1,24 @@
+.settings-tab {
+  padding: var(--space-5) var(--screen-gutter) var(--space-6);
+}
+
+.settings-tab__title {
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-heavy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.settings-tab__account {
+  margin-top: var(--space-2);
+  min-height: 1.2em;
+  color: var(--color-text-secondary);
+}
+
+.settings-tab__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}

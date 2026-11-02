@@ -23,5 +23,7 @@
   "signin.qr": "QR-код: {url}",
   "signin.newCode": "Получить новый код",
   "signin.failed": "Не удалось получить код для входа. Проверьте подключение к интернету и попробуйте ещё раз.",
-  "signin.retry": "Повторить"
+  "signin.retry": "Повторить",
+  "settings.account": "Аккаунт: {name}",
+  "settings.signOut": "Выйти из аккаунта"
 }
