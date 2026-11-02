@@ -24,9 +24,18 @@ export interface FakeResponse {
 
 export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeResponse | Promise<FakeResponse>);
 
+/** The signed-in account, as GET /v1/user returns it by default. Made-up data only. */
+export const FAKE_USER = {
+  username: 'test-viewer',
+  reg_date: 1600000000,
+  subscription: { active: true, end_time: 1800000000, days: 120.5 },
+  profile: { name: null, avatar: '' },
+};
+
 /** What the app calls whenever a session starts (sign-in or launch with a stored session). */
 const SESSION_DEFAULTS: Array<[method: string, path: string, response: FakeResponse]> = [
   ['POST', '/v1/device/notify', { json: { status: 200 } }],
+  ['GET', '/v1/user', { json: { status: 200, user: FAKE_USER } }],
 ];
 
 /**

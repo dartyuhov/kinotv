@@ -1,49 +1,17 @@
 import type { Page } from '@playwright/test';
 import pkg from '../package.json' with { type: 'json' };
-import { FAKE_CLIENT, type FakeApi, type FakeResponse, type RecordedRequest } from './harness/fakeApi';
-import { expect, test, TEST_START_TIME, type App } from './harness/test';
+import {
+  CLIENT_QUERY,
+  fakeDeviceFlow,
+  pauseClock,
+  PENDING,
+  signInHeading,
+  signInWithCode,
+  tokens,
+} from './harness/auth';
+import type { FakeResponse } from './harness/fakeApi';
+import { expect, test } from './harness/test';
 
-const CLIENT_QUERY = { client_id: FAKE_CLIENT.id, client_secret: FAKE_CLIENT.secret };
-const PENDING: FakeResponse = { status: 400, json: { error: 'authorization_pending' } };
-
-function deviceCode(n: number, overrides: Record<string, unknown> = {}): FakeResponse {
-  return {
-    json: {
-      code: `device-code-${n}`,
-      user_code: `CODE${n}`,
-      verification_uri: 'https://kino.pub/device',
-      expires_in: 300,
-      interval: 5,
-      ...overrides,
-    },
-  };
-}
-
-function tokens(n: number, expiresIn = 3600): FakeResponse {
-  return {
-    json: { access_token: `access-${n}`, token_type: 'bearer', expires_in: expiresIn, refresh_token: `refresh-${n}`, scope: null },
-  };
-}
-
-/**
- * The kino.watch device flow on POST /oauth2/device. Codes are handed out as CODE1, CODE2, …;
- * `poll` answers each device_token poll (pending until the test says otherwise).
- */
-function fakeDeviceFlow(api: FakeApi, poll: (req: RecordedRequest) => FakeResponse = () => PENDING) {
-  let issued = 0;
-  api.on('POST', '/oauth2/device', (req) => (req.query.grant_type === 'device_code' ? deviceCode(++issued) : poll(req)));
-  return {
-    codeRequests: () => api.requestsTo('POST', '/oauth2/device').filter((r) => r.query.grant_type === 'device_code'),
-    polls: () => api.requestsTo('POST', '/oauth2/device').filter((r) => r.query.grant_type === 'device_token'),
-  };
-}
-
-/** Stops the clock just after launch, so the test decides when poll and expiry timers fire. */
-async function pauseClock(page: Page): Promise<void> {
-  await page.clock.pauseAt(TEST_START_TIME.getTime() + 1000);
-}
-
-const signInHeading = (page: Page) => page.getByRole('heading', { name: 'Вход в KinoTV' });
 const homeTab = (page: Page) => page.getByRole('tab', { name: 'Главная' });
 
 test('a fresh launch shows the code, address and QR code; approving it leads to Home without key presses', async ({
@@ -146,16 +114,6 @@ test('if no code can be had, the screen says so and OK retries', async ({ app, a
   await expect(page.getByText('CODE1')).toBeVisible();
   await expect(app.focused).toHaveAccessibleName('Получить новый код');
 });
-
-/** Signs in through the device flow: the first poll is approved and returns tokens `access-1` / `refresh-1`. */
-async function signInWithCode(app: App, api: FakeApi, page: Page) {
-  fakeDeviceFlow(api, () => tokens(1));
-  await pauseClock(page);
-  await app.open({ signedIn: false });
-  await expect(page.getByText('CODE1')).toBeVisible();
-  await page.clock.runFor(5_000);
-  await expect(homeTab(page)).toBeVisible();
-}
 
 test('after sign-in the TV registers itself once, as "KinoTV · <model>" with its versions', async ({ app, api, page }) => {
   await signInWithCode(app, api, page);

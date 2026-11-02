@@ -1,4 +1,5 @@
 import type { Http } from './http';
+import type { User } from './types';
 
 /** The device's entry in the account's device list (research 10-kp-api §1.5). */
 export interface DeviceDescription {
@@ -16,12 +17,18 @@ export interface DeviceDescription {
  * network, timeout and 5xx errors) and POST with `form` for writes.
  */
 export interface ApiClient {
+  /** The signed-in account and its subscription. */
+  user(): Promise<User>;
   /** Registers this device in the account's device list, or updates its entry. */
   deviceNotify(device: DeviceDescription): Promise<void>;
 }
 
 export function createApiClient(http: Http): ApiClient {
   return {
+    async user() {
+      const res = await http<{ user: User }>({ method: 'GET', path: '/v1/user' });
+      return res.user;
+    },
     async deviceNotify(device) {
       await http({ method: 'POST', path: '/v1/device/notify', form: { ...device } });
     },

@@ -13,7 +13,7 @@ import { storage } from './platform/storage';
 const http = createHttp({ baseUrl: config.apiBaseUrl });
 
 export const oauth = createOAuth(http, config.client);
-export const session = createSession({ storage });
+export const session = createSession({ storage, oauth });
 /** The kino.watch API, authenticated with the current session. */
 export const api = createApiClient(withAuth(http, session));
 
