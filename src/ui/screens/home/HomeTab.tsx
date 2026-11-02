@@ -17,6 +17,7 @@ import { useRootBackdrop } from '../../root/rootBackdrop';
 import { Hero } from './Hero';
 import { continueWatchingQuery, FEATURED_COUNT, shortcutQuery } from './homeQueries';
 import { useHomeStore } from './homeStore';
+import { CollectionsRow } from '../collection/CollectionsRow';
 import './HomeTab.css';
 
 const ROWS_FOCUS_KEY = 'home:rows';
@@ -120,6 +121,7 @@ export function HomeTab() {
                 onRowFocus={onRowFocus}
               />
             ))}
+            <CollectionsRow onItemFocus={onItemFocus} onRowFocus={onRowFocus} />
           </div>
         </div>
       </FocusContext.Provider>
