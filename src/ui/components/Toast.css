@@ -1,0 +1,29 @@
+/* A live region pinned to the bottom centre of the stage, above screens and overlays. */
+.toast {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--space-6);
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.toast__message {
+  max-width: 1200px;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--color-dialog);
+  box-shadow: var(--shadow-float);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  animation: toast-rise var(--motion-overlay) var(--ease-out);
+}
+
+@keyframes toast-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}

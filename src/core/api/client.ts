@@ -1,5 +1,6 @@
 import type { Http } from './http';
 import type {
+  BookmarkFolder,
   ItemDetails,
   ItemSummary,
   Page,
@@ -57,6 +58,16 @@ export interface ApiClient {
   watchingSerials(subscribed: boolean): Promise<WatchingSerial[]>;
   /** GET /v1/watching?id=: the viewer's saved position in each part or episode of a title. */
   watching(id: number): Promise<WatchingItem>;
+  /** GET /v1/bookmarks: the viewer's bookmark folders. */
+  bookmarkFolders(): Promise<BookmarkFolder[]>;
+  /** GET /v1/bookmarks/{id}: every title in one folder (all pages), newest first. */
+  bookmarkFolderItems(folderId: number): Promise<ItemSummary[]>;
+  /** GET /v1/bookmarks/get-item-folders: the ids of the folders that hold a title. */
+  itemBookmarkFolders(itemId: number): Promise<number[]>;
+  /** POST /v1/bookmarks/add: puts a title in a folder. */
+  addBookmark(itemId: number, folderId: number): Promise<void>;
+  /** POST /v1/bookmarks/remove-item: takes a title out of a folder. */
+  removeBookmark(itemId: number, folderId: number): Promise<void>;
 }
 
 export function createApiClient(http: Http): ApiClient {
@@ -104,8 +115,44 @@ export function createApiClient(http: Http): ApiClient {
         seasons: item.seasons?.map((s) => ({ ...s, number: num(s.number), episodes: (s.episodes ?? []).map(video) })),
       };
     },
+    async bookmarkFolders() {
+      const res = await http<{ items?: Array<Record<keyof BookmarkFolder, unknown>> }>({ method: 'GET', path: '/v1/bookmarks' });
+      return (res.items ?? []).map((f) => ({ id: num(f.id), title: String(f.title ?? ''), count: num(f.count) }));
+    },
+    async bookmarkFolderItems(folderId) {
+      const items: ItemSummary[] = [];
+      // Folders are paged; a viewer's folder is rarely long, so it is fetched whole (up to a cap).
+      for (let page = 1; page <= MAX_BOOKMARK_PAGES; page++) {
+        const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
+          method: 'GET',
+          path: `/v1/bookmarks/${folderId}`,
+          query: { page, perpage: BOOKMARK_PAGE_SIZE },
+        });
+        items.push(...(res.items ?? []));
+        if (page >= num(res.pagination?.total)) break;
+      }
+      return items;
+    },
+    async itemBookmarkFolders(itemId) {
+      const res = await http<{ folders?: Array<{ id: unknown }> }>({
+        method: 'GET',
+        path: '/v1/bookmarks/get-item-folders',
+        query: { item: itemId },
+      });
+      return (res.folders ?? []).map((f) => num(f.id));
+    },
+    // Bookmark writes ignore ids in the query string ("item not found"): they go in the form body.
+    async addBookmark(itemId, folderId) {
+      await http({ method: 'POST', path: '/v1/bookmarks/add', form: { item: itemId, folder: folderId } });
+    },
+    async removeBookmark(itemId, folderId) {
+      await http({ method: 'POST', path: '/v1/bookmarks/remove-item', form: { item: itemId, folder: folderId } });
+    },
   };
 }
+
+const BOOKMARK_PAGE_SIZE = 50;
+const MAX_BOOKMARK_PAGES = 20;
 
 // Numbers sometimes arrive as strings ("128") or are missing.
 function num(value: unknown): number {

@@ -179,3 +179,10 @@ export interface ItemDetails extends ItemSummary {
   videos?: Video[];
   seasons?: Season[];
 }
+
+/** GET /v1/bookmarks: one of the viewer's bookmark folders. `count` (titles in it) is coerced by the client. */
+export interface BookmarkFolder {
+  id: number;
+  title: string;
+  count: number;
+}

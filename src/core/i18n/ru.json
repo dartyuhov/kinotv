@@ -79,5 +79,18 @@
   "lang.jpn": "японский",
   "lang.kor": "корейский",
   "lang.zho": "китайский",
-  "title.failed": "Не удалось загрузить страницу. Нажмите «Назад», чтобы вернуться"
+  "title.failed": "Не удалось загрузить страницу. Нажмите «Назад», чтобы вернуться",
+  "bookmarks.folders": "Папки",
+  "bookmarks.failed": "Не удалось загрузить закладки",
+  "bookmarks.folderFailed": "Не удалось загрузить папку",
+  "bookmarks.folderEmpty": "В этой папке пока ничего нет",
+  "bookmarks.empty": "Закладок пока нет",
+  "bookmarks.emptyHint": "Добавляйте фильмы и сериалы кнопкой «В закладки» на их странице",
+  "bookmarks.suggestions": "Популярное сейчас",
+  "bookmarks.pickerTitle": "Сохранить в папку",
+  "bookmarks.pickerLoading": "Загрузка…",
+  "bookmarks.pickerFailed": "Не удалось загрузить папки",
+  "bookmarks.noFolders": "Папок пока нет. Создайте папку на kino.watch",
+  "bookmarks.addFailed": "Не удалось добавить «{title}» в «{folder}»",
+  "bookmarks.removeFailed": "Не удалось убрать «{title}» из «{folder}»"
 }

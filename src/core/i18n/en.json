@@ -79,5 +79,18 @@
   "lang.jpn": "Japanese",
   "lang.kor": "Korean",
   "lang.zho": "Chinese",
-  "title.failed": "Couldn't load this page. Press Back to return"
+  "title.failed": "Couldn't load this page. Press Back to return",
+  "bookmarks.folders": "Folders",
+  "bookmarks.failed": "Couldn't load your bookmarks",
+  "bookmarks.folderFailed": "Couldn't load this folder",
+  "bookmarks.folderEmpty": "Nothing in this folder yet",
+  "bookmarks.empty": "No bookmarks yet",
+  "bookmarks.emptyHint": "Add films and series with the Bookmark button on their page",
+  "bookmarks.suggestions": "Popular right now",
+  "bookmarks.pickerTitle": "Save to folder",
+  "bookmarks.pickerLoading": "Loading…",
+  "bookmarks.pickerFailed": "Couldn't load your folders",
+  "bookmarks.noFolders": "No folders yet. Create one on kino.watch",
+  "bookmarks.addFailed": "Couldn't add “{title}” to “{folder}”",
+  "bookmarks.removeFailed": "Couldn't remove “{title}” from “{folder}”"
 }

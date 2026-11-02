@@ -70,7 +70,7 @@ test.describe('a film', () => {
     expect(api.requestsTo('GET', '/v1/watching')).toHaveLength(2); // progress is personal: fetched each time
   });
 
-  test('has a Bookmark button that does nothing yet, and no Follow button', async ({ app, api, page, remote }) => {
+  test('has a Bookmark button (see bookmarks.spec), and no Follow button', async ({ app, api, page, remote }) => {
     fakeHome(api, { hot: [RIVER], movies: [], serials: [], progress: {} });
     await app.open();
     await openFromHero(page, remote);
@@ -78,11 +78,8 @@ test.describe('a film', () => {
 
     await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('В закладки');
-    const requests = api.requests.length;
-    await remote.press('ok', 'right');
+    await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('В закладки');
-    await expect(heading(page)).toHaveText('Медленная река');
-    expect(api.requests.length).toBe(requests);
     await expect(page.getByRole('button', { name: 'Буду смотреть' })).toHaveCount(0);
   });
 
@@ -219,7 +216,7 @@ test.describe('a series', () => {
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
   });
 
-  test('has Bookmark and Follow buttons that do nothing yet', async ({ app, api, page, remote }) => {
+  test('has Bookmark and Follow buttons; Follow does nothing yet', async ({ app, api, page, remote }) => {
     fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });
     await app.open();
     await openFromHero(page, remote);
@@ -227,7 +224,7 @@ test.describe('a series', () => {
 
     await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('В закладки');
-    await remote.press('ok', 'right');
+    await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('Буду смотреть');
     await remote.press('ok');
     await expect(app.focused).toHaveAccessibleName('Буду смотреть');

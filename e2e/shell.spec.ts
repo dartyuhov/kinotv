@@ -47,13 +47,15 @@ test('OK or Down on a tab moves into its screen; Up comes back to the active tab
   await app.open();
   await remote.repeat('right', 6); // Закладки, far from the screen's left-aligned content
 
+  // No bookmarks: the screen's first focusable is its first suggestion (Popular, from the default Home).
+  await expect(page.getByRole('region', { name: 'Популярное сейчас' }).getByRole('button').first()).toBeVisible();
   await remote.press('ok');
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 1');
+  await expect(app.focused).toHaveAccessibleName('Город без света');
   await expect(page.getByRole('tab', { name: 'Закладки' })).toHaveAttribute('aria-selected', 'true');
 
   await remote.press('up');
   await expect(app.focused).toHaveAccessibleName('Закладки');
 
   await remote.press('down');
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 1');
+  await expect(app.focused).toHaveAccessibleName('Город без света');
 });

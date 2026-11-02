@@ -1,7 +1,7 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Heart, Play, Plus } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { ItemDetails } from '../../../core/api/types';
 import { formatDuration, is4k, languageName, ratingLabels, trackLanguages, typeLabel } from '../../../core/catalog/facts';
 import { playTarget, type PlayTarget } from '../../../core/catalog/playTarget';
@@ -13,6 +13,7 @@ import { Backdrop } from '../../components/Backdrop';
 import { Button } from '../../components/Button';
 import { screenStack, type ScreenParams } from '../../nav/stack';
 import { useInitialFocus } from '../../nav/useInitialFocus';
+import { FolderPicker } from '../bookmarks/FolderPicker';
 import { Seasons } from './Seasons';
 import './TitleScreen.css';
 
@@ -120,12 +121,15 @@ interface ActionsProps {
 }
 
 /**
- * Play/Resume, then Bookmark and, for series, Follow. Bookmark (ticket 12) and Follow (ticket 13) are
- * focusable placeholders for now: OK on them does nothing.
+ * Play/Resume, then Bookmark and, for series, Follow. Bookmark opens the folder picker. Follow (ticket 13)
+ * is a focusable placeholder for now: OK on it does nothing.
  */
 function Actions({ itemId, keys: k, play, series }: ActionsProps) {
   const { ref } = useFocusable<object, HTMLDivElement>({ focusKey: k.actions, preferredChildFocusKey: k.play });
   const { resume: _resume, ...where } = play;
+  // The Bookmark button's folder picker (ticket 12). The details are cached: the page is showing them.
+  const [picking, setPicking] = useState(false);
+  const item = useQuery(itemQuery(itemId)).data;
   return (
     <FocusContext.Provider value={k.actions}>
       <div ref={ref} className="title-page__actions">
@@ -136,7 +140,8 @@ function Actions({ itemId, keys: k, play, series }: ActionsProps) {
           label={playLabel(play)}
           onPress={() => screenStack.push('player', { itemId, ...where })}
         />
-        <Button focusKey={k.bookmark} icon={Plus} iconOnly label={t('title.bookmark')} onPress={notYet} />
+        <Button focusKey={k.bookmark} icon={Plus} iconOnly label={t('title.bookmark')} onPress={() => setPicking(true)} />
+        {picking && item && <FolderPicker item={item} onClose={() => setPicking(false)} />}
         {series && <Button focusKey={k.follow} icon={Heart} iconOnly label={t('title.follow')} onPress={notYet} />}
       </div>
     </FocusContext.Provider>
