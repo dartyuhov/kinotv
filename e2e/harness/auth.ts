@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { FAKE_CLIENT, type FakeApi, type FakeResponse, type RecordedRequest } from './fakeApi';
-import { expect, TEST_START_TIME, type App } from './test';
+import { expect, type App, type Clock } from './test';
 
 // kino.watch's OAuth endpoints, faked. Most journeys don't need these: `app.open()` starts signed in.
 
@@ -45,18 +45,14 @@ export function fakeDeviceFlow(api: FakeApi, poll: (req: RecordedRequest) => Fak
 }
 
 /** Stops the page clock one second after TEST_START_TIME, so the test decides when timers fire. */
-export async function pauseClock(page: Page): Promise<void> {
-  await page.clock.pauseAt(TEST_START_TIME.getTime() + 1000);
-}
-
 export const signInHeading = (page: Page) => page.getByRole('heading', { name: 'Вход в KinoTV' });
 
 /** Launches signed out and signs in through the device flow, ending on Home with tokens `access-1` / `refresh-1`. */
-export async function signInWithCode(app: App, api: FakeApi, page: Page): Promise<void> {
+export async function signInWithCode(app: App, api: FakeApi, clock: Clock, page: Page): Promise<void> {
   fakeDeviceFlow(api, () => tokens(1));
-  await pauseClock(page);
+  await clock.pause();
   await app.open({ signedIn: false });
   await expect(page.getByText('CODE1')).toBeVisible();
-  await page.clock.runFor(5_000);
+  await clock.runFor(5_000);
   await expect(page.getByRole('tab', { name: 'Главная' })).toBeVisible();
 }

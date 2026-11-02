@@ -49,18 +49,64 @@ export class App {
   }
 }
 
+/**
+ * The page clock, for timing behaviour (polling, expiry, refresh, retries). It runs normally until
+ * `pause()`; then time only moves when the test calls `runFor`.
+ */
+export class Clock {
+  constructor(
+    private readonly page: Page,
+    private readonly api: FakeApi,
+  ) {}
+
+  /** Stops the clock one second after TEST_START_TIME. Call it before `app.open()`. */
+  async pause(): Promise<void> {
+    await this.page.clock.pauseAt(TEST_START_TIME.getTime() + 1000);
+  }
+
+  /**
+   * Moves time forward by `ms`, in steps of at most `stepMs`. After each step the app gets to handle the
+   * fake API's answers, as it would in real time. (One big jump would fire, say, a request's 15 s timeout
+   * before the answer it was waiting for could arrive.)
+   */
+  async runFor(ms: number, { stepMs = 1_000 }: { stepMs?: number } = {}): Promise<void> {
+    await this.settle();
+    for (let left = ms; left > 0; left -= stepMs) {
+      await this.page.clock.runFor(Math.min(stepMs, left));
+      await this.settle();
+    }
+  }
+
+  /** Waits until the fake API has answered every request so far and the page has handled the answers. */
+  async settle(): Promise<void> {
+    await this.api.idle();
+    // A few rounds of page tasks (MessageChannel is not faked by the clock) let fetch callbacks run.
+    for (let i = 0; i < 3; i++) {
+      await this.page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => resolve();
+            channel.port2.postMessage(null);
+          }),
+      );
+    }
+  }
+}
+
 interface Fixtures {
   api: FakeApi;
+  clock: Clock;
   remote: Remote;
   app: App;
 }
 
-export const test = base.extend<Fixtures & { clock: void }>({
+export const test = base.extend<Fixtures>({
   // Auto fixtures: every test gets the fake API and the controllable clock, even if it never names them.
   clock: [
-    async ({ page }, use) => {
+    async ({ page, api }, use) => {
       await page.clock.install({ time: TEST_START_TIME });
-      await use();
+      await use(new Clock(page, api));
     },
     { auto: true },
   ],

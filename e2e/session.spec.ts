@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { CLIENT_QUERY, fakeDeviceFlow, pauseClock, PENDING, signInHeading, tokens } from './harness/auth';
+import { CLIENT_QUERY, fakeDeviceFlow, PENDING, signInHeading, tokens } from './harness/auth';
 import { FAKE_USER, type FakeApi, type FakeResponse, type RecordedRequest } from './harness/fakeApi';
 import type { Remote } from './harness/remote';
 import { expect, SEEDED_SESSION, test, type App } from './harness/test';
@@ -16,14 +16,14 @@ const slowly =
     new Promise((resolve) => setTimeout(() => resolve(response), ms));
 
 test.describe('token refresh', () => {
-  test('the access token is refreshed 5 minutes before it expires, and the new tokens are kept', async ({ app, api, page }) => {
+  test('the access token is refreshed 5 minutes before it expires, and the new tokens are kept', async ({ app, api, clock, page }) => {
     api.on('POST', '/oauth2/token', tokens(2));
-    await pauseClock(page);
+    await clock.pause();
     await app.open({ expiresIn: 3600 }); // the clock is paused 1 s after the token was issued
 
-    await page.clock.runFor(3_298_000); // 1 s before the 55-minute mark
+    await clock.runFor(3_298_000, { stepMs: 60_000 }); // 1 s before the 55-minute mark
     expect(refreshes(api)).toHaveLength(0);
-    await page.clock.runFor(2_000);
+    await clock.runFor(2_000);
     await expect.poll(() => refreshes(api).length).toBe(1);
     expect(refreshes(api)[0]!.query).toEqual({
       grant_type: 'refresh_token',
@@ -78,12 +78,13 @@ test.describe('a 401 from the API', () => {
   test('that refreshing cannot fix shows Sign-in, then returns to the screen the viewer was on', async ({
     app,
     api,
+    clock,
     page,
     remote,
   }) => {
     let approved = false;
     fakeDeviceFlow(api, () => (approved ? tokens(1) : PENDING));
-    await pauseClock(page);
+    await clock.pause();
     await app.open();
     await remote.repeat('right', 8);
     await expect(app.focused).toHaveAccessibleName('Настройки');
@@ -99,7 +100,7 @@ test.describe('a 401 from the API', () => {
     expect(refreshes(api)).toHaveLength(1);
 
     approved = true;
-    await page.clock.runFor(5_000);
+    await clock.runFor(5_000);
 
     await expect(page.getByRole('tab', { name: 'Настройки' })).toHaveAttribute('aria-selected', 'true');
     await expect(app.focused).toHaveAccessibleName('Настройки');
@@ -135,16 +136,16 @@ test.describe('Sign out on Settings', () => {
     await expect(homeTab(page)).toBeHidden();
   });
 
-  test('signing in again starts on Home, not where the previous viewer left off', async ({ app, api, page, remote }) => {
+  test('signing in again starts on Home, not where the previous viewer left off', async ({ app, api, clock, page, remote }) => {
     let approved = false;
     fakeDeviceFlow(api, () => (approved ? tokens(1) : PENDING));
-    await pauseClock(page);
+    await clock.pause();
     await app.open();
     await signOut(app, remote);
     await expect(page.getByText('CODE1')).toBeVisible();
 
     approved = true;
-    await page.clock.runFor(5_000);
+    await clock.runFor(5_000);
 
     await expect(homeTab(page)).toHaveAttribute('aria-selected', 'true');
     await expect(app.focused).toHaveAccessibleName('Главная');

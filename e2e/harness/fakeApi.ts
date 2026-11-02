@@ -20,7 +20,15 @@ export interface FakeResponse {
   status?: number;
   json?: unknown;
   headers?: Record<string, string>;
+  /** Fail the request as if the connection dropped (the app sees a network error, no response). */
+  networkError?: boolean;
+  /** Never answer. The app's own timeout has to give up on it. */
+  hang?: boolean;
 }
+
+/** Shorthand responses for transport failures. */
+export const NETWORK_ERROR: FakeResponse = { networkError: true };
+export const NO_ANSWER: FakeResponse = { hang: true };
 
 export type RouteHandler = FakeResponse | ((req: RecordedRequest) => FakeResponse | Promise<FakeResponse>);
 
@@ -68,8 +76,19 @@ export class FakeApi {
     return this.requests.filter((r) => r.method === method.toUpperCase() && r.path === path);
   }
 
+  /** Resolves once every request so far has been answered (hung requests excepted). */
+  async idle(): Promise<void> {
+    while (this.answering.size) await Promise.all([...this.answering]);
+  }
+
+  private readonly answering = new Set<Promise<void>>();
+
   async attach(page: Page): Promise<void> {
-    await page.route(`${this.baseUrl}/**`, (route) => this.handle(route));
+    await page.route(`${this.baseUrl}/**`, (route) => {
+      const answer = this.handle(route).finally(() => this.answering.delete(answer));
+      this.answering.add(answer);
+      return answer;
+    });
   }
 
   // Responses fulfilled by Playwright are not CORS-checked and trigger no preflight, so no CORS headers.
@@ -84,7 +103,10 @@ export class FakeApi {
       return;
     }
     const res = typeof handler === 'function' ? await handler(recorded) : handler;
-    await route.fulfill({ status: res.status ?? 200, headers: res.headers, json: res.json ?? {} });
+    if (res.hang) return; // the route stays pending until the page aborts the request
+    // The page may have aborted the request meanwhile (its timeout); then there is nothing to answer.
+    if (res.networkError) await route.abort('connectionfailed').catch(() => undefined);
+    else await route.fulfill({ status: res.status ?? 200, headers: res.headers, json: res.json ?? {} }).catch(() => undefined);
   }
 }
 
