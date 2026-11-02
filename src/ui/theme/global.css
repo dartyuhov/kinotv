@@ -18,6 +18,16 @@ body,
   cursor: none;
 }
 
+/* Launch splash in index.html, shown until the app's first render. Tizen has no splash setting for TV web apps. */
+.splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-heavy);
+}
+
 h1,
 h2,
 h3,

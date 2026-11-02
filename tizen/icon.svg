@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- KinoTV launcher icon. Original artwork; render to icon.png with `node tools/tizen/renderIcon.ts`. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c2c2e"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <text x="236" y="318" text-anchor="middle" fill="#fff" font-family="Inter" font-weight="800" font-size="280">K</text>
+  <path d="M352 238 L404 270 L352 302 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+  <text x="256" y="430" text-anchor="middle" fill="rgba(255,255,255,0.72)" font-family="Inter" font-weight="800" font-size="64">KinoTV</text>
+</svg>

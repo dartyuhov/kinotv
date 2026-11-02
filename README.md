@@ -32,3 +32,25 @@ The keyboard stands in for the remote:
 
 The API host defaults to `https://api.service-kp.com`. Set `VITE_API_BASE_URL` in `.env.local` to use another
 one (for example the mirror `https://api.srvkp.com`).
+
+## On the TV
+
+The app is a Tizen web app (`.wgt`). A Samsung TV only installs packages signed with a Samsung certificate
+made for that TV, so the first run needs a one-time setup. Samsung's TV emulator doesn't run on Apple Silicon,
+so test on a real TV.
+
+| Command | What it does |
+|---|---|
+| `npm run tv:setup` (or `tools/setup.sh`) | Interactive wizard. It checks Rosetta, installs or finds the Tizen CLI and `sdb`, walks you through TV Developer Mode, connects to the TV, shows its DUID and guides you through creating the Samsung certificate. Safe to re-run. |
+| `npm run package` | Builds and packages `dist-tizen/KinoTV.wgt`. It is signed when a certificate profile is set up, otherwise unsigned (no Tizen tools needed). |
+| `npm run tv` | Builds, signs, installs and launches the app on the TV. |
+| `npm run tv:debug` | The same, launched in debug mode. Prints the DevTools address to open in Chrome. |
+
+The wizard saves the TV's address and the certificate profile name in `tizen/.signing/settings.json`, which
+is git-ignored. `KINOTV_TV` and `KINOTV_TIZEN_PROFILE` override them. The Tizen tools are found on `PATH` or in
+`$TIZEN_HOME` (default `~/tizen-studio`).
+
+The package manifest (`config.xml`) is generated at build time by `tools/tizen/configXml.ts`, with the version
+taken from `package.json`. The launcher icon is `tizen/icon.png`, rendered from `tizen/icon.svg` with
+`node tools/tizen/renderIcon.ts`. The production build is a single classic script (not an ES module), because
+the TV opens the app from local files and Chromium doesn't load module scripts from `file://`.

@@ -14,6 +14,7 @@ tizen/.signing/
 .beads/proxieddb/
 *.gate.lock*
 dist-e2e/
+dist-tizen/
 test-results/
 playwright-report/
 
