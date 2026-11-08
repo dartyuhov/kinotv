@@ -1,6 +1,8 @@
 // The PlayerAdapter contract (spec §3): the only thing the player screen knows about the playback engine.
 // Implementations: Html5Adapter (desktop, <video>), FakePlayer (e2e tests), AvPlayAdapter (TV, ticket 22).
 // All times are SECONDS here, whatever the engine uses underneath (AVPlay works in ms).
+import type { Audio, Subtitle } from '../api/types';
+import type { ManifestInfo } from './manifestTracks';
 
 /** kino.watch's stream kinds for one file (research 10-kp-api §6.5), from richest to simplest. */
 export type StreamType = 'hls4' | 'hls2' | 'hls' | 'http';
@@ -11,6 +13,12 @@ export interface PlaybackSource {
   type: StreamType;
   /** Seconds, as kino.watch reports it. A hint until the engine knows the real duration. */
   duration?: number;
+  /** Service metadata enriches native track labels; service indexes are NOT AVPlay indexes. */
+  audios?: readonly Audio[];
+  subtitles?: readonly Subtitle[];
+  manifest?: ManifestInfo;
+  /** Exact HLS BANDWIDTH constraint, in bits/s; applied in IDLE before prepareAsync. */
+  fixedBandwidth?: number;
 }
 
 export interface AudioTrack {
@@ -18,12 +26,19 @@ export interface AudioTrack {
   label: string;
   /** ISO 639-2 when known. */
   lang: string;
+  /** Semantic preference key; native `id` is valid only for this loaded source. */
+  preferenceKey?: string;
+  selected?: boolean;
+  pending?: boolean;
 }
 
 export interface SubtitleTrack {
   id: string;
   label: string;
   lang: string;
+  preferenceKey?: string;
+  selected?: boolean;
+  pending?: boolean;
 }
 
 export interface Quality {
@@ -35,6 +50,7 @@ export interface Tracks {
   audio: AudioTrack[];
   subtitles: SubtitleTrack[];
   qualities: Quality[];
+  subtitlesOff?: boolean;
 }
 
 /**
@@ -73,6 +89,10 @@ export interface PlayerCapabilities {
   streams: readonly StreamType[];
   /** Whether it decodes HEVC; otherwise H.264 files are picked. */
   hevc: boolean;
+  /** Unknown on legacy/desktop adapters. Explicit false excludes UHD files. */
+  uhd?: boolean;
+  hdr?: boolean;
+  adaptiveBitrate?: boolean;
 }
 
 export interface PlayerAdapter {
@@ -85,6 +105,8 @@ export interface PlayerAdapter {
   getTracks(): Tracks;
   selectAudio(id: string): void;
   selectSubtitle(id: string | null): void;
+  /** AVPlay requires a downloaded absolute local path, never a remote URL. Times are seconds. */
+  setExternalSubtitle?(localPath: string, shift?: number, release?: () => Promise<void>, signal?: AbortSignal): Promise<void>;
   /** May reload the stream, hence async. */
   selectQuality(id: string): Promise<void>;
   on<E extends PlayerEvent>(event: E, listener: (payload: PlayerEvents[E]) => void): () => void;

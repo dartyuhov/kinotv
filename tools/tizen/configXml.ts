@@ -10,6 +10,9 @@ export const ICON_FILE = 'icon.png';
 
 const PRIVILEGES = [
   'http://tizen.org/privilege/internet',
+  'http://developer.samsung.com/privilege/avplay',
+  'http://tizen.org/privilege/filesystem.read',
+  'http://tizen.org/privilege/filesystem.write',
   'http://tizen.org/privilege/tv.inputdevice', // media and channel key registration
   'http://tizen.org/privilege/application.launch',
   'http://tizen.org/privilege/system', // systeminfo platform version

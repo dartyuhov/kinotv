@@ -1,5 +1,6 @@
 import { fakePlayerFactory, installFakePlayerControl } from './fakePlayer';
 import { html5Factory } from './html5Adapter';
+import { avplayFactory } from './avplayAdapter';
 import type { PlayerAdapter, PlayerFactory } from './types';
 
 // Which engine plays (spec §3: "the player adapter is chosen at startup"). The player screen only ever
@@ -7,13 +8,13 @@ import type { PlayerAdapter, PlayerFactory } from './types';
 //
 // - fake: only in builds made with VITE_PLAYER=fake (the e2e build). The condition is a build-time
 //   constant, so production bundles drop the FakePlayer entirely.
-// - avplay: ticket 22 adds its factory here, before html5. Its `available()` checks for
+// - avplay: before html5. Its `available()` checks for
 //   `webapis.avplay` through core/platform (the only module that touches Tizen globals).
 // - html5: the desktop fallback.
 
 const FAKE = import.meta.env.VITE_PLAYER === 'fake';
 
-const FACTORIES: readonly PlayerFactory[] = [...(FAKE ? [fakePlayerFactory] : []), html5Factory];
+const FACTORIES: readonly PlayerFactory[] = [...(FAKE ? [fakePlayerFactory] : []), avplayFactory, html5Factory];
 
 if (FAKE) installFakePlayerControl();
 

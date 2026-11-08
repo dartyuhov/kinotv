@@ -1,0 +1,10 @@
+# Provision local test credentials before commands start in a new worktree.
+# Preserve an existing worktree environment and never print its contents.
+[pre-start]
+local-env = '''
+source="{{ primary_worktree_path }}/.env.local"
+destination="{{ worktree_path }}/.env.local"
+if [ -f "$source" ] && [ ! -e "$destination" ] && [ ! -L "$destination" ]; then
+  (umask 077; cp -n "$source" "$destination") && chmod 600 "$destination"
+fi
+'''

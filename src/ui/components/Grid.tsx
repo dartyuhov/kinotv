@@ -6,7 +6,7 @@ import {
   type Direction,
   type NextFocusResolver,
 } from '@noriginmedia/norigin-spatial-navigation';
-import { Fragment, useCallback, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { remoteBus } from '../../core/input/remoteBus';
 import { CARD_SIZE, type CardSlot, type CardVariant } from './Card';
 import { useRowMemory } from './rowMemory';
@@ -83,6 +83,8 @@ export function Grid<T>({
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
   const preferred = items[index];
+  const [direction, setDirection] = useState(1);
+  const previous = useRef(index);
 
   const layout = gridLayout(variant, height, items.length, index);
   const { columns, pitchX, pitchY, rows, offset, rowsPerScreen, pageRows, firstRow, lastRow } = layout;
@@ -106,8 +108,9 @@ export function Grid<T>({
     [gridKey],
   );
 
-  const { ref, focusKey } = useFocusable<object, HTMLElement>({
+  const { ref, focusKey, hasFocusedChild } = useFocusable<object, HTMLElement>({
     focusKey: gridKey,
+    trackChildren: true,
     // While the first items load, the grid takes focus itself (see below); with a message it is skipped.
     focusable: !message,
     preferredChildFocusKey: preferred === undefined ? undefined : gridCardKey(gridKey, itemKey(preferred)),
@@ -117,6 +120,8 @@ export function Grid<T>({
 
   const onFocusIndex = useCallback(
     (i: number) => {
+      if (i !== previous.current) setDirection(i - previous.current);
+      previous.current = i;
       remember(gridKey, i);
       const item = latest.current.items[i];
       if (item !== undefined) latest.current.onItemFocus?.(item, i);
@@ -163,6 +168,7 @@ export function Grid<T>({
 
   // One style object per position, so memoised cards that stay in the window don't re-render.
   const styles = useMemo(() => new Map<number, CSSProperties>(), [columns, pitchX, pitchY]);
+  for (const i of styles.keys()) if (i < firstRow * columns || i >= lastRow * columns) styles.delete(i);
   const styleAt = (i: number) => {
     let style = styles.get(i);
     if (!style) {
@@ -173,6 +179,13 @@ export function Grid<T>({
   };
 
   const cards: ReactNode[] = [];
+  const visibleFirst = Math.floor(offset / pitchY) * columns;
+  const visibleEnd = Math.min(items.length, Math.ceil((offset + height - 2 * EDGE) / pitchY) * columns);
+  // For vertical moves, continue in the same column; horizontal moves follow reading order.
+  const stride = Math.abs(direction) >= columns ? columns : 1;
+  const next = direction > 0
+    ? visibleEnd + (stride === columns ? index % columns : 0)
+    : visibleFirst - (stride === columns ? columns - index % columns : 1);
   const end = Math.min(items.length, lastRow * columns);
   for (let i = firstRow * columns; i < end; i++) {
     const item = items[i]!;
@@ -182,6 +195,8 @@ export function Grid<T>({
       index: i,
       variant,
       style: styleAt(i),
+      prefetch: hasFocusedChild && (i === next || i === next + Math.sign(direction) * stride)
+        ? `${gridKey}:${index}:${direction}` : undefined,
       onFocusIndex,
       onPressIndex,
     };

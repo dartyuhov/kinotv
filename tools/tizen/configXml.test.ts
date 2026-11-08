@@ -22,9 +22,12 @@ describe('renderConfigXml', () => {
   it('declares the agreed privileges and nothing else', () => {
     const privileges = [...xml.matchAll(/<tizen:privilege name="([^"]+)"\/>/g)].map((m) => m[1]);
     expect(privileges.sort()).toEqual([
+      'http://developer.samsung.com/privilege/avplay',
       'http://developer.samsung.com/privilege/network.public',
       'http://developer.samsung.com/privilege/productinfo',
       'http://tizen.org/privilege/application.launch',
+      'http://tizen.org/privilege/filesystem.read',
+      'http://tizen.org/privilege/filesystem.write',
       'http://tizen.org/privilege/internet',
       'http://tizen.org/privilege/system',
       'http://tizen.org/privilege/tv.inputdevice',

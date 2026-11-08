@@ -75,14 +75,16 @@ test.describe('starting playback', () => {
     await expect.poll(() => player.loads()).toEqual([{ url: streamUrl(31 * 10_000 + 103, '1080p', 'hls4'), startAt: 600 }]);
   });
 
-  test('a stream that fails to load says so, and Back leaves', async ({ app, api, page, remote, player }) => {
+  test('a stream failure tries the next supplied source', async ({ app, api, page, remote, player }) => {
     river(api);
     await app.open();
     await player.script({ loadError: 'media' });
     await playFromHero(page, remote, { plays: false });
 
-    await expect(page.getByRole('alert')).toContainText('Не удалось воспроизвести видео');
-    await remote.press('back');
+    await expect.poll(() => player.state()).toBe('playing');
+    expect(await player.loads()).toHaveLength(2);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await remote.press('stop');
     await expect(app.focused).toHaveAccessibleName('Смотреть');
     expect(marks(api)).toEqual([]);
   });
@@ -103,7 +105,7 @@ test.describe('controls', () => {
     await remote.press('down');
     await expect(progressBar(page)).toBeVisible();
     await clock.runFor(3_500);
-    await remote.press('up'); // input restarts the 4 s
+    await remote.press('down'); // input restarts the 4 s (Up opens playback settings)
     await clock.runFor(3_500);
     await expect(progressBar(page)).toBeVisible();
     await clock.runFor(1_000);

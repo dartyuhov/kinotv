@@ -9,23 +9,35 @@ export interface PickedStream {
   quality: string;
 }
 
-const isHevc = (file: VideoFile) => /^(h265|hevc)$/i.test(file.codec);
+const isHevc = (file: VideoFile) => /^(h[.-]?265|hevc|hev1|hvc1)$/i.test(file.codec);
+const resolution = (file: VideoFile) => Number.parseInt(file.quality, 10) || file.h || [0, 480, 720, 1080, 2160][file.quality_id] || 0;
 
 /**
  * The "Auto" stream (research 10-kp-api §6.5): the highest-quality file the player can decode, in the
  * first stream kind it prefers that the file has. An hls4 master lists every lower rung too, so the
- * engine can still adapt. HEVC files are skipped for players without HEVC unless nothing else exists.
- * Fixed qualities and the fallback to other stream kinds come with the quality picker (ticket 08).
+ * engine can still adapt. Unsupported HEVC/UHD files are never offered as playable candidates.
  */
 export function pickStream(files: readonly VideoFile[], capabilities: PlayerCapabilities): PickedStream | null {
-  const decodable = capabilities.hevc ? files : files.filter((f) => !isHevc(f));
-  const candidates = [...(decodable.length > 0 ? decodable : files)].sort((a, b) => b.quality_id - a.quality_id);
+  return streamCandidates(files, capabilities)[0] ?? null;
+}
+
+/** Ordered and deduplicated; callers bound startup attempts, without guessing stream URL suffixes. */
+export function streamCandidates(files: readonly VideoFile[], capabilities: PlayerCapabilities): PickedStream[] {
+  const candidates = files.filter((f) => (capabilities.hevc || !isHevc(f)) &&
+    (capabilities.uhd !== false || (resolution(f) <= 1080 && f.w <= 1920)) &&
+    (!f.codec || /^(h[.-]?264|avc|avc1)$/i.test(f.codec) || isHevc(f)))
+    .sort((a, b) => resolution(b) - resolution(a) || b.quality_id - a.quality_id);
+  const result: PickedStream[] = [];
+  const seen = new Set<string>();
   for (const file of candidates) {
-    const urls = file.urls ?? file.url ?? {};
+    const urls = { ...file.url, ...file.urls };
     for (const type of capabilities.streams) {
       const url = urls[type];
-      if (url) return { url, type, quality: file.quality };
+      if (typeof url === 'string' && /^https?:\/\//i.test(url) && !seen.has(url)) {
+        seen.add(url);
+        result.push({ url, type, quality: file.quality });
+      }
     }
   }
-  return null;
+  return result;
 }

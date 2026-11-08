@@ -29,3 +29,24 @@
   gap: var(--space-4);
   margin-top: var(--space-5);
 }
+
+.settings-tab__cache {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.settings-tab__cache h2 {
+  font-size: var(--font-size-row-title);
+}
+
+.settings-tab__cache p {
+  color: var(--color-text-secondary);
+  min-height: 1.2em;
+}
+
+.settings-tab__diagnostics {
+  font-size: var(--font-size-body);
+}

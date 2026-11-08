@@ -14,6 +14,23 @@
   height: 100%;
 }
 
+/* AVPlay's video plane sits behind HTML. Every full-screen ancestor must expose it. */
+.native-playback,
+.native-playback body,
+.native-playback #root,
+.native-playback .stage-viewport,
+.native-playback .stage,
+.native-playback .player {
+  background: transparent;
+}
+
+.player-native-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .player-video {
   object-fit: contain;
   background: var(--color-bg);

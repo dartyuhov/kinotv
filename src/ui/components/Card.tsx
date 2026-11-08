@@ -2,6 +2,8 @@ import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { Check } from 'lucide-react';
 import { memo, useCallback, type CSSProperties } from 'react';
 import './Card.css';
+import { useImage } from './useImage';
+import { useArtworkVisibility, useArtworkRetention, useArtworkPrefetch } from './useArtworkDemand';
 
 /** `landscape` is 16:9 (Continue watching, episodes); `poster` is 2:3 (catalog rows and grids). Spec §6.1. */
 export type CardVariant = 'landscape' | 'poster';
@@ -18,6 +20,10 @@ export interface CardSlot {
   index: number;
   variant: CardVariant;
   style: CSSProperties;
+  /** Only the two nearest offscreen cards in the active navigation direction may speculate. */
+  prefetch?: string;
+  /** Focused row's incoming viewport, known before its scroll transform paints. */
+  visibleHint?: boolean;
   onFocusIndex(index: number): void;
   onPressIndex(index: number): void;
 }
@@ -47,6 +53,8 @@ export const Card = memo(function Card({
   index,
   variant,
   style,
+  prefetch,
+  visibleHint,
   onFocusIndex,
   onPressIndex,
   label,
@@ -61,6 +69,11 @@ export const Card = memo(function Card({
   const onEnterPress = useCallback(() => onPressIndex(index), [index, onPressIndex]);
   const { ref } = useFocusable<object, HTMLDivElement>({ focusKey, onFocus, onEnterPress });
   const percent = progress === null || progress === undefined ? null : Math.round(progress * 100);
+  const visible = useArtworkVisibility(ref) || !!visibleHint;
+  const role = variant === 'poster' ? 'poster' : 'thumbnail';
+  const warm = useArtworkPrefetch(!visible ? prefetch : undefined);
+  const retained = useArtworkRetention(ref, visible || warm);
+  const poster = useImage(image, role, retained, visible ? 'visible' : 'prefetch');
 
   return (
     <div ref={ref} role="button" aria-label={label} className={`card card--${variant}`} style={style}>
@@ -68,7 +81,7 @@ export const Card = memo(function Card({
         <span className="card__fallback" aria-hidden>
           {title}
         </span>
-        <img className="card__image" src={image} alt="" loading="lazy" decoding="async" draggable={false} />
+        <img className="card__image" src={poster} alt="" decoding="async" draggable={false} />
         {variant === 'landscape' && (
           <div className="card__caption" aria-hidden>
             <span className="card__title">{title}</span>

@@ -1,12 +1,11 @@
 /*
- * Artwork card (spec §6.1). Focus: scale 1.1, lift, deeper shadow, diagonal sheen. Only transform and
- * opacity animate (spec §6.3): the deep shadow and the sheen are layers that fade in, not box-shadow changes.
+ * Artwork card. Focus: scale, lift, light outline, and diagonal sheen. Blurred
+ * shadows cause severe paint stalls on Samsung TVs; only transform/opacity animate.
  */
 .card {
   position: absolute;
   top: 0;
   transition: transform var(--motion-focus) var(--ease-out);
-  will-change: transform;
 }
 
 .card--landscape {
@@ -19,13 +18,13 @@
   height: var(--card-poster-height);
 }
 
-/* Resting shadow on the card, the deep focus shadow on a layer that fades in. */
+/* A cheap focus outline on a layer that fades in. */
 .card::before {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card-focus);
+  border: 2px solid rgba(255, 255, 255, 0.7);
   opacity: 0;
   transition: opacity var(--motion-focus) var(--ease-out);
 }
@@ -37,7 +36,6 @@
   overflow: hidden;
   border-radius: var(--radius-card);
   background: var(--color-card-placeholder);
-  box-shadow: var(--shadow-card);
 }
 
 /* Shown under the image, so a card whose artwork is missing or still loading still says what it is. */
@@ -118,7 +116,6 @@
   border-radius: var(--radius-pill);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  box-shadow: var(--shadow-card);
 }
 
 .card__watched svg {
@@ -137,7 +134,6 @@
   border-radius: var(--radius-pill);
   background: var(--color-primary);
   color: var(--color-on-primary);
-  box-shadow: var(--shadow-card);
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-bold);
   line-height: 36px;

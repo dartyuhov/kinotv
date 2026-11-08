@@ -137,6 +137,8 @@ export interface Subtitle {
   shift: number;
   embed: boolean;
   url?: string;
+  file?: string;
+  forced?: boolean;
 }
 
 /**

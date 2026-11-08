@@ -1,5 +1,5 @@
-import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
-import { Fragment, useCallback, useRef, type ReactNode } from 'react';
+import { FocusContext, useFocusable, type NextFocusResolver } from '@noriginmedia/norigin-spatial-navigation';
+import { Fragment, useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CARD_SIZE, type CardSlot, type CardVariant } from './Card';
 import { useRowMemory } from './rowMemory';
 import './Row.css';
@@ -59,21 +59,37 @@ export function Row<T>({
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
   const preferred = items[index];
+  const [direction, setDirection] = useState(1);
+  const previous = useRef(index);
+  const latest = useRef({ items, itemKey, index, onItemFocus, onItemPress });
+  latest.current = { items, itemKey, index, onItemFocus, onItemPress };
+  const nextFocusResolver = useCallback<NextFocusResolver>((direction, currentKey, siblings) => {
+    if (direction !== 'left' && direction !== 'right') return null;
+    const { items: all, itemKey: keyOf, index: at } = latest.current;
+    const matches = (item: T | undefined) => item !== undefined && rowCardKey(rowKey, keyOf(item)) === currentKey;
+    const from = matches(all[at]) ? at : all.findIndex(matches);
+    if (from < 0) return null;
+    const next = all[from + (direction === 'right' ? 1 : -1)];
+    return next === undefined ? null : siblings.find((sibling) => sibling.focusKey === rowCardKey(rowKey, keyOf(next))) ?? null;
+  }, [rowKey]);
 
   const onFocus = useCallback(() => onRowFocus?.(rowKey), [onRowFocus, rowKey]);
-  const { ref, focusKey } = useFocusable<object, HTMLElement>({
+  const { ref, focusKey, hasFocusedChild } = useFocusable<object, HTMLElement>({
     focusKey: rowKey,
+    trackChildren: true,
     // A row with no cards (loading, failed or empty) is skipped by Up/Down.
     focusable: !message && items.length > 0,
     preferredChildFocusKey: preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)),
     onFocus,
+    nextFocusResolver,
+    measureChildrenLayout: false,
   });
 
   // Card callbacks stay stable across renders (cards are memoised); the latest props are read from a ref.
-  const latest = useRef({ items, onItemFocus, onItemPress });
-  latest.current = { items, onItemFocus, onItemPress };
   const onFocusIndex = useCallback(
     (i: number) => {
+      if (i !== previous.current) setDirection(i > previous.current ? 1 : -1);
+      previous.current = i;
       remember(rowKey, i);
       const item = latest.current.items[i];
       if (item !== undefined) latest.current.onItemFocus?.(item, i);
@@ -88,16 +104,25 @@ export function Row<T>({
   const pitch = CARD_SIZE[variant].width + GAP;
   const offset = scrollOffset(index, items.length, pitch);
   const { first, last } = renderWindow(offset, items.length, pitch);
+  const visibleFirst = Math.max(0, Math.floor(offset / pitch));
+  const visibleLast = Math.min(items.length, Math.ceil((offset + STAGE_WIDTH - 2 * GUTTER) / pitch));
 
   const cards: ReactNode[] = [];
+  const styles = useMemo(() => new Map<number, CSSProperties>(), [pitch]);
+  for (const i of styles.keys()) if (i < first || i >= last) styles.delete(i);
   for (let i = first; i < last; i++) {
     const item = items[i]!;
     const key = itemKey(item);
+    let style = styles.get(i);
+    if (!style) { style = { left: i * pitch }; styles.set(i, style); }
     const slot: CardSlot = {
       focusKey: rowCardKey(rowKey, key),
       index: i,
       variant,
-      style: { left: i * pitch },
+      style,
+      visibleHint: hasFocusedChild && i >= visibleFirst && i < visibleLast,
+      prefetch: hasFocusedChild && (direction > 0 ? i >= visibleLast && i < visibleLast + 2 : i < visibleFirst && i >= visibleFirst - 2)
+        ? `${rowKey}:${index}:${direction}` : undefined,
       onFocusIndex,
       onPressIndex,
     };
@@ -125,7 +150,6 @@ function scrollOffset(index: number, count: number, pitch: number): number {
   const max = Math.max(0, count * pitch - GAP - visibleWidth);
   return Math.min(max, Math.max(0, (index - 1) * pitch));
 }
-
 /** The cards to render: those on screen at `offset`, plus one screen either side (spec §6.3). */
 function renderWindow(offset: number, count: number, pitch: number): { first: number; last: number } {
   const perScreen = Math.ceil(STAGE_WIDTH / pitch);

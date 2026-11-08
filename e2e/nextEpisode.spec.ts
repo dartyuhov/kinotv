@@ -224,6 +224,9 @@ test.describe('resume after switching episodes', () => {
 
     await remote.press('ok'); // the card: play the next episode now
     await expect(playerScreen(page).getByRole('heading', { level: 1 })).toHaveText('Причал');
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]).toEqual({
+      url: streamUrl(episodeVideo(1, 2), '1080p', 'hls4'), startAt: 0,
+    });
     await expect.poll(() => player.state()).toBe('playing');
     await clock.runFor(40_000);
 

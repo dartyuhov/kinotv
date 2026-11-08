@@ -69,7 +69,7 @@ test('Continue watching is left out when there is nothing to continue', async ({
 
 test.describe('the hero', () => {
   const heroTitle = (page: Page) => page.getByRole('heading', { level: 1 });
-  const backdrop = (page: Page) => page.getByTestId('backdrop');
+  const backdrop = (page: Page) => page.getByTestId('backdrop').last();
   const NO_WIDE_ART = fakeItem(16, 'Бумажные крылья / Paper Wings', { posters: fakePosters(16, { wide: false }) });
 
   test('shows a featured title; focusing cards switches the backdrop and details to the focused title', async ({
@@ -85,7 +85,7 @@ test.describe('the hero', () => {
     await expect(page.getByText('Сериал · Триллер · 2024')).toBeVisible();
     await expect(page.getByText('4K', { exact: true })).toBeVisible();
     await expect(page.getByText('Пилот берёт последний заказ перед пенсией.')).toBeVisible();
-    await expect(backdrop(page)).toHaveAttribute('src', NORTH_WIND.posters.wide!);
+    await expect(backdrop(page)).toHaveAttribute('data-source', NORTH_WIND.posters.wide!);
 
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('Смотреть');
@@ -97,22 +97,22 @@ test.describe('the hero', () => {
     await expect(heroTitle(page)).toHaveText('Стеклянный сад');
     await expect(page.getByText('Фильм · Драма · 2021')).toBeVisible();
     await expect(page.getByText('Садовник находит в теплице чужие письма.')).toBeVisible();
-    await expect(backdrop(page)).toHaveAttribute('src', GLASS_GARDEN.posters.wide!);
+    await expect(backdrop(page)).toHaveAttribute('data-source', GLASS_GARDEN.posters.wide!);
 
     await remote.press('right');
     await expect(heroTitle(page)).toHaveText('Ночной поезд');
-    await expect(backdrop(page)).toHaveAttribute('src', NIGHT_TRAIN.posters.wide!);
+    await expect(backdrop(page)).toHaveAttribute('data-source', NIGHT_TRAIN.posters.wide!);
 
     // A title without backdrop art gets the largest poster instead.
     await remote.press('right');
     await expect(heroTitle(page)).toHaveText('Бумажные крылья');
-    await expect(backdrop(page)).toHaveAttribute('src', NO_WIDE_ART.posters.big);
+    await expect(backdrop(page)).toHaveAttribute('data-source', NO_WIDE_ART.posters.big);
 
     // Back up in the hero, it shows the featured title again.
     await remote.press('up');
     await expect(app.focused).toHaveAccessibleName('В закладки');
     await expect(heroTitle(page)).toHaveText('Северный ветер');
-    await expect(backdrop(page)).toHaveAttribute('src', NORTH_WIND.posters.wide!);
+    await expect(backdrop(page)).toHaveAttribute('data-source', NORTH_WIND.posters.wide!);
   });
 
   test('cycles the featured titles while the hero or the tab bar has focus, but not while the viewer browses the rows', async ({
@@ -134,7 +134,8 @@ test.describe('the hero', () => {
     await clock.runFor(1_000);
     await expect(heroTitle(page)).toHaveText('Стеклянный сад');
     await expect(page.getByRole('group', { name: '2 из 3' })).toBeVisible();
-    await expect(backdrop(page)).toHaveAttribute('src', GLASS_GARDEN.posters.wide!);
+    await clock.runFor(200);
+    await expect(backdrop(page)).toHaveAttribute('data-source', GLASS_GARDEN.posters.wide!);
 
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('Смотреть');

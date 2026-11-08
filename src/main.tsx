@@ -13,6 +13,7 @@ import './ui/theme/global.css';
 import { config } from './core/config';
 import { remoteBus } from './core/input/remoteBus';
 import { registerRemoteKeys } from './core/platform/keys';
+import { loadWebapis } from './core/platform/tizenGlobals';
 import { startServices } from './core/services';
 import { startUpdateCheck } from './core/updates/updateCheck';
 import { startSpatialNavigation } from './ui/focus/spatialNavigation';
@@ -28,8 +29,9 @@ startServices();
 // At most once a day; Settings shows "Update available" when GitHub has a newer release.
 startUpdateCheck({ releasesUrl: config.releasesUrl, currentVersion: config.appVersion, storage: window.localStorage });
 
-createRoot(document.getElementById('root')!).render(
+// Factory selection must wait for the Samsung script, including with a restored session.
+void loadWebapis().then(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
-);
+));

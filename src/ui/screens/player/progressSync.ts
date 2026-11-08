@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { WatchedVideo } from '../../../core/api/client';
 import type { WatchingItem, WatchingVideo } from '../../../core/api/types';
-import { api } from '../../../core/services';
+import { api, preparePlaybackSettings } from '../../../core/services';
 import { createProgressReporter, WATCHED_AT, type ProgressReporter } from '../../../core/sync/progressReporter';
 import { followingQuery } from '../../app/following';
 import { queryClient, watchingQuery } from '../../app/queries';
@@ -14,7 +14,7 @@ import { continueWatchingQuery } from '../home/homeQueries';
 export const mediaLinksQuery = (mediaId: number) =>
   queryOptions({
     queryKey: ['media-links', mediaId],
-    queryFn: () => api.mediaLinks(mediaId),
+    queryFn: async () => { await preparePlaybackSettings(); return api.mediaLinks(mediaId); },
     staleTime: Infinity, // one fetch per player: a refetch must not reload the stream
     gcTime: 0,
   });

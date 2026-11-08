@@ -1,14 +1,21 @@
 // The only place that reads the `tizen` / `webapis` globals. Everything else in the app goes
 // through the functions exported from core/platform, which fall back to browser behaviour.
 
+import type { ImageFilesystem } from './tizenImageStore';
+import type { AvPlay } from './avplay';
+
 interface TizenApi {
+  filesystem?: ImageFilesystem & { toURI?(path: string): string };
   tvinputdevice?: { registerKey(name: string): void };
   application?: { getCurrentApplication(): { exit(): void } };
   systeminfo?: { getCapability(key: string): unknown };
 }
 
 interface WebApis {
-  productinfo?: { getRealModel(): string; getModel(): string };
+  avplay?: AvPlay;
+  avinfo?: { isHdrTvSupport(): boolean };
+  systeminfo?: { isSupportedVideoCodec(codec: string): boolean };
+  productinfo?: { getRealModel(): string; getModel(): string; isUdPanelSupported?(): boolean };
 }
 
 export function tizen(): TizenApi | undefined {
@@ -31,7 +38,8 @@ export function loadWebapis(): Promise<WebApis | undefined> {
   webapisLoading ??= new Promise((resolve) => {
     const script = document.createElement('script');
     script.src = '$WEBAPIS/webapis/webapis.js';
-    script.onload = script.onerror = () => resolve(webapis());
+    const timer = setTimeout(() => resolve(webapis()), 5_000);
+    script.onload = script.onerror = () => { clearTimeout(timer); resolve(webapis()); };
     document.head.appendChild(script);
   });
   return webapisLoading;

@@ -6,12 +6,11 @@ import { Button } from '../../components/Button';
 import { screenStack } from '../../nav/stack';
 import { HOME_TAB, useTabStore } from '../../root/tabs';
 import { UpdateNotice } from './UpdateNotice';
+import { ImageCacheSettings } from './ImageCacheSettings';
 import './SettingsTab.css';
 
 /**
- * The Settings tab. For now it only shows the account, offers Sign out and, pinned to the top right
- * next to the title, the update notice; the full Settings screen (language, quality, audio, 4K/HDR,
- * region, diagnostics) comes later.
+ * Account, managed artwork storage and the pinned update notice.
  */
 export function SettingsTab() {
   const { data: user } = useQuery(userQuery);
@@ -32,6 +31,7 @@ export function SettingsTab() {
       <p className="settings-tab__account">{user ? t('settings.account', { name: user.username }) : ' '}</p>
       <div className="settings-tab__actions">
         <Button focusKey="settings:sign-out" label={t('settings.signOut')} onPress={onSignOut} />
+        <ImageCacheSettings />
       </div>
     </div>
   );

@@ -10,14 +10,48 @@ export const FAKE_CDN_BASE_URL = 'http://fake-cdn.kinotv.test';
 /** Serves a small solid-colour PNG for any path on the fake CDN, and records which paths were asked for. */
 export class FakeCdn {
   readonly requested: string[] = [];
+  readonly requests: { source: string; headers: Record<string, string> }[] = [];
+  readonly transfers: { source: string; status: number; bytes: number }[] = [];
+  active = 0;
+  peakActive = 0;
+  private readonly responses = new Map<string, { headers?: Record<string, string>; body?: Buffer | string; contentType?: string; status?: number; delay?: number; conditional?: boolean }>();
+
+  respond(source: string, response: { headers?: Record<string, string>; body?: Buffer | string; contentType?: string; status?: number; delay?: number; conditional?: boolean }): void {
+    this.responses.set(source, response);
+  }
 
   async attach(page: Page): Promise<void> {
     await page.route(`${FAKE_CDN_BASE_URL}/**`, async (route) => {
       const path = new URL(route.request().url()).pathname;
+      const source = route.request().url();
+      const requestHeaders = await route.request().allHeaders();
+      this.requests.push({ source, headers: requestHeaders });
       this.requested.push(path);
+      this.active++;
+      this.peakActive = Math.max(this.peakActive, this.active);
+      let completed = false;
+      const finish = () => { if (!completed) { completed = true; this.active--; } };
+      // Aborted fetches free a slot even if this fixture's delayed answer has not been sent yet.
+      const failed = (request: import('@playwright/test').Request) => { if (request === route.request()) finish(); };
+      page.on('requestfailed', failed);
+      const response = this.responses.get(source);
+      if (response?.delay) await new Promise((resolve) => setTimeout(resolve, response.delay));
+      const unchanged = response?.conditional && (response.headers?.etag
+        ? requestHeaders['if-none-match'] === response.headers.etag
+        : response.headers?.['last-modified'] && requestHeaders['if-modified-since'] === response.headers['last-modified']);
+      const status = unchanged ? 304 : response?.status ?? 200;
+      const body = status === 304 ? '' : response?.body ?? solidPng(colourFor(path));
+      this.transfers.push({ source, status, bytes: typeof body === 'string' ? Buffer.byteLength(body) : body.length });
       await route
-        .fulfill({ status: 200, contentType: 'image/png', body: solidPng(colourFor(path)) })
+        .fulfill({ status, contentType: response?.contentType ?? 'image/png',
+          body, headers: {
+            'access-control-allow-origin': '*',
+            'access-control-expose-headers': 'Cache-Control, Age, ETag, Last-Modified, Date, Expires',
+            'cache-control': 'public, max-age=604800', ...response?.headers,
+          } })
         .catch(() => undefined); // the page may have dropped the image meanwhile
+      finish();
+      page.off('requestfailed', failed);
     });
   }
 }
@@ -30,7 +64,7 @@ function colourFor(path: string): [number, number, number] {
 }
 
 /** A 16×9 RGB PNG of one colour. */
-function solidPng([r, g, b]: [number, number, number], width = 16, height = 9): Buffer {
+export function solidPng([r, g, b]: [number, number, number], width = 16, height = 9): Buffer {
   const row = Buffer.alloc(1 + width * 3); // filter byte 0, then RGB pixels
   for (let x = 0; x < width; x++) row.set([r, g, b], 1 + x * 3);
   const raw = Buffer.concat(Array.from({ length: height }, () => row));

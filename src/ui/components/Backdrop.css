@@ -3,6 +3,10 @@
   inset: 0;
   overflow: hidden;
   background: var(--color-bg);
+  /* Isolate full-screen paints from the moving cards above. Samsung's renderer
+     otherwise repeatedly rasterizes the art/scrims during focus animations. */
+  contain: strict;
+  transform: translateZ(0);
 }
 
 .backdrop__image {
@@ -13,16 +17,27 @@
   object-fit: cover;
   opacity: 0;
   transition: opacity var(--motion-backdrop) var(--ease-out);
+  z-index: 1;
+  /* Only the two bounded sharp layers are promoted, not every card. */
+  will-change: opacity;
 }
 
 .backdrop__image--loaded {
   opacity: 1;
 }
 
+/* The preview adds a full-screen blended surface with no visible contribution
+   once sharp art is ready. Keep its DOM/lease for loading and failed art. */
+.backdrop__image--loaded ~ .frosted {
+  display: none;
+}
+
 .backdrop__scrim {
   position: absolute;
   inset: 0;
   background: var(--scrim-top), var(--scrim-left), var(--scrim-bottom);
+  z-index: 2;
+  transform: translateZ(0);
 }
 
 /* Frosted surface: the tiny image upscaled (it blurs on its own) under a translucent fill. No backdrop-filter. */

@@ -8,7 +8,6 @@ import { t } from '../../../core/i18n';
 import { remoteBus } from '../../../core/input/remoteBus';
 import { onVisibilityChange } from '../../../core/platform/lifecycle';
 import { createScrubber } from '../../../core/player/scrubber';
-import { pickStream } from '../../../core/player/streams';
 import type { PlayerAdapter } from '../../../core/player/types';
 import type { ProgressReporter } from '../../../core/sync/progressReporter';
 import { itemQuery } from '../../app/queries';
@@ -20,6 +19,8 @@ import { PlayerControls } from './PlayerControls';
 import { PlayerUiContext, useControlsVisibility, useKeyCaptures, type PlayerUi } from './playerUi';
 import { mediaLinksQuery, showSavedPosition, startProgressSync } from './progressSync';
 import { usePlaybackSnapshot, usePlayerAdapter } from './usePlayback';
+import { usePlaybackChoices } from './usePlaybackChoices';
+import { PlaybackPills, PlaybackSettings } from './PlaybackSettings';
 import './PlayerScreen.css';
 
 /**
@@ -49,29 +50,20 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
   const latest = useRef(playback);
   latest.current = playback;
 
-  const stream = useMemo(() => (links.data && player ? pickStream(links.data.files, player.capabilities) : null), [links.data, player]);
   // Effects below key on the video's numbers, not the object, so a refetch of the details never
   // reloads the stream or restarts progress sync.
   const videoNumber = video?.number;
-  const durationHint = video?.duration;
-  const [loadFailed, setLoadFailed] = useState(false);
-  useEffect(() => {
-    if (!player || !stream) return;
-    let current = true;
-    player.load({ ...stream, duration: durationHint }, { startAt }).then(
-      () => current && player.play(),
-      () => current && setLoadFailed(true),
-    );
-    return () => {
-      current = false;
-    };
-  }, [player, stream, durationHint, startAt]);
+  const choices = usePlaybackChoices(player, video, links.data, season === undefined ? undefined : itemId, startAt);
+  const choicesRef = useRef(choices);
+  choicesRef.current = choices;
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const where = useMemo<WatchedVideo | null>(
     () => (videoNumber === undefined ? null : { id: itemId, season, video: videoNumber }),
     [itemId, season, videoNumber],
   );
-  const progress = useProgressSync(player, where, startAt);
+  const progress = useProgressSync(player, where, startAt, choices.transitioning);
+  useEffect(() => { if (choices.failed) progress.current?.playing(false); }, [choices.failed, progress]);
 
   const [preview, setPreview] = useState<number | null>(null);
   const scrubber = useMemo(
@@ -94,9 +86,17 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
     item.isError ||
     (item.isSuccess && !video) ||
     links.isError ||
-    (links.isSuccess && player !== null && !stream) ||
-    loadFailed ||
-    playback.state === 'error';
+    choices.failed ||
+    (!choices.busy && playback.state === 'error');
+  const retryRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (failed) retryRef.current?.focus(); }, [failed]);
+  const retry = () => {
+    if (item.isError || !video) { void item.refetch(); return; }
+    if (links.isError) { void links.refetch(); return; }
+    choicesRef.current.retry();
+  };
+  const latestRetry = useRef(retry);
+  latestRetry.current = retry;
 
   // Keys other than Back. Layers that captured the remote get them instead (usePlayerKeyCapture).
   const { show: showControls } = controls;
@@ -106,6 +106,9 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
     return remoteBus.subscribe((key) => {
       if (isCaptured()) return;
       showControls();
+      if (failed) { if (key === 'ok' || key === 'play') latestRetry.current(); return; }
+      if (key === 'up') { setSettingsOpen(true); return; }
+      if (choicesRef.current.busy) return;
       const { state } = latest.current;
       if (state !== 'playing' && state !== 'paused') return;
       switch (key) {
@@ -139,7 +142,7 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
         // ▲ settings panel (ticket 08), ▼ info, CH ▲▼ channels (ticket 16): not yet.
       }
     });
-  }, [player, scrubber, showControls, isCaptured, itemId, progress]);
+  }, [player, scrubber, showControls, isCaptured, itemId, progress, failed]);
 
   // Back: layers above take it first; then hide the controls; then leave (the navigator pops).
   useBackHandler(() => {
@@ -185,7 +188,7 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
   );
 
   const labels = item.data && video ? titleLines(item.data, video, season) : null;
-  const waiting = !failed && (playback.state === 'idle' || playback.state === 'loading' || playback.buffering);
+  const waiting = !failed && (choices.busy || playback.state === 'idle' || playback.state === 'loading' || playback.buffering);
 
   return (
     <div className="player">
@@ -195,6 +198,7 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
         <div className="player__message" role="alert">
           <p className="player__message-title">{t('player.cantPlay')}</p>
           <p>{t('player.backToLeave')}</p>
+          <button ref={retryRef} className="player-retry" onClick={retry}>{t('player.retry')}</button>
         </div>
       ) : (
         ui &&
@@ -207,10 +211,12 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
               position={playback.position}
               duration={playback.duration || video!.duration}
               preview={preview}
-              hint={t('player.hint')}
+              hint={t('player.settingsHint')}
+              topRight={<PlaybackPills choices={choices} open={() => setSettingsOpen(true)} />}
             />
             {/* Overlay layers go here: the settings panel (ticket 08), the next-episode card (ticket 09). */}
-            {episodes.next && (
+            {settingsOpen && <PlaybackSettings choices={choices} title={labels.title} onClose={() => { setSettingsOpen(false); showControls(); }} />}
+            {episodes.next && !settingsOpen && !choices.busy && (
               <NextEpisodeCard
                 label={episodes.next.label}
                 onPlay={() => playEpisode(itemId, episodes.next!, progress.current)}
@@ -228,7 +234,7 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
  * Saves progress for as long as the video plays (see ./progressSync.ts). On leaving, the last position
  * is saved and shown on the title page at once. Returns the reporter, for saving on demand.
  */
-function useProgressSync(player: PlayerAdapter | null, where: WatchedVideo | null, startAt: number) {
+function useProgressSync(player: PlayerAdapter | null, where: WatchedVideo | null, startAt: number, transitioning: { current: boolean }) {
   const reporter = useRef<ProgressReporter | null>(null);
   useEffect(() => {
     if (!player || !where) return;
@@ -237,10 +243,11 @@ function useProgressSync(player: PlayerAdapter | null, where: WatchedVideo | nul
     let last = { position: startAt, duration: 0 };
     const offs = [
       player.on('time', ({ position, duration }) => {
+        if (transitioning.current) return;
         last = { position, duration };
         sync.position(position, duration);
       }),
-      player.on('state', (state) => sync.playing(state === 'playing')),
+      player.on('state', (state) => { if (!transitioning.current) sync.playing(state === 'playing'); }),
     ];
     return () => {
       offs.forEach((off) => off());
@@ -249,7 +256,7 @@ function useProgressSync(player: PlayerAdapter | null, where: WatchedVideo | nul
       if (Math.floor(last.position) !== Math.floor(startAt)) showSavedPosition(where, last.position, last.duration);
       void sync.flush();
     };
-  }, [player, where, startAt]);
+  }, [player, where, startAt, transitioning]);
   return reporter;
 }
 

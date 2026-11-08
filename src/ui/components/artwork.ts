@@ -5,9 +5,10 @@ import type { Posters } from '../../core/api/types';
  * only fixed sizes: small 165×250, medium 250×375, big 500×750, and `wide` backdrop art (up to 3840×2160),
  * which can be missing.
  *
- * - `backdrop`: full-bleed hero art. The largest there is, so it stays sharp on 4K panels.
+ * - `backdrop`: full-bleed hero art, bounded to the 1080p UI plane by the image cache.
  * - `landscape`: 16:9 cards. Only `wide` is landscape; a portrait poster is cropped otherwise.
- * - `poster`: 2:3 cards in rows and grids, about 200 px wide on the 1080p UI plane.
+ * - `poster`: medium (250×375) covers 200×300 cards and their focus enlargement,
+ *   with one quarter of big's decoded memory.
  * - `tiny`: the smallest image, upscaled for frosted and blurred surfaces (see FrostedImage).
  */
 export type ArtworkUse = 'backdrop' | 'landscape' | 'poster' | 'tiny';
@@ -18,7 +19,7 @@ export function artwork(posters: Posters, use: ArtworkUse): string {
     case 'landscape':
       return posters.wide || posters.big || posters.medium || posters.small;
     case 'poster':
-      return posters.medium || posters.big || posters.small;
+      return posters.medium || posters.small || posters.big;
     case 'tiny':
       return posters.small || posters.medium || posters.big;
   }

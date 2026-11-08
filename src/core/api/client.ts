@@ -20,7 +20,17 @@ import type {
   Genre,
   Collection,
   CollectionPage,
+  Audio,
+  Subtitle,
+  VideoFile,
+  StreamUrls,
 } from './types';
+
+export interface DevicePlaybackSettings {
+  support4k: boolean;
+  supportHevc: boolean;
+  supportHdr: boolean;
+}
 
 /** The device's entry in the account's device list (research 10-kp-api §1.5). */
 export interface DeviceDescription {
@@ -70,6 +80,8 @@ export interface ApiClient {
   deviceNotify(device: DeviceDescription): Promise<void>;
   /** Removes this device from the account's device list. */
   deviceUnlink(): Promise<void>;
+  /** Current OAuth device only; resolve HLS4's id from the service reference list, never hardcode it. */
+  configurePlayback(settings: DevicePlaybackSettings): Promise<void>;
   /** GET /v1/items/{fresh|hot|popular}: one page of a server-ranked list. */
   shortcut(kind: Shortcut, query: ShortcutQuery): Promise<Page<ItemSummary>>;
   /** GET /v1/items/{id}: one title's details. */
@@ -152,6 +164,21 @@ export function createApiClient(http: Http): ApiClient {
     },
     async deviceUnlink() {
       await http({ method: 'POST', path: '/v1/device/unlink' });
+    },
+    async configurePlayback(settings) {
+      // https://kinoapi.com/api_device.html — /device/settings without an id is not an endpoint.
+      const current = await http<{ device?: { id?: unknown } }>({ method: 'GET', path: '/v1/device/info' });
+      const id = num(current.device?.id);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Current device unavailable');
+      const reference = await http<{ items?: Array<{ id: unknown; code: string }> }>({ method: 'GET', path: '/v1/references/streaming-type' });
+      const hls = reference.items?.find((item) => item.code === 'hls4') ?? reference.items?.find((item) => item.code === 'hls');
+      const streamingType = num(hls?.id);
+      if (!Number.isSafeInteger(streamingType) || streamingType <= 0) throw new Error('HLS streaming type unavailable');
+      const result = await http<{ status?: number }>({
+        method: 'POST', path: `/v1/device/${id}/settings`,
+        form: { support4k: Number(settings.support4k), supportHevc: Number(settings.supportHevc), supportHdr: Number(settings.supportHdr), streamingType },
+      });
+      if (result.status !== undefined && Number(result.status) !== 200) throw new Error('Device settings rejected');
     },
     async shortcut(kind, { types, page = 1, perpage }) {
       const res = await http<{ items?: ItemSummary[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>({
@@ -257,8 +284,8 @@ export function createApiClient(http: Http): ApiClient {
     async mediaLinks(mediaId) {
       const res = await http<Partial<MediaLinks>>({ method: 'GET', path: '/v1/items/media-links', query: { mid: mediaId } });
       return {
-        files: (res.files ?? []).map((f) => ({ ...f, w: num(f.w), h: num(f.h), quality_id: num(f.quality_id) })),
-        subtitles: res.subtitles ?? [],
+        files: (res.files ?? []).map(mediaFile),
+        subtitles: (res.subtitles ?? []).map(subtitle),
       };
     },
     // The watching calls change state but are GETs, as every client sends them (research 10-kp-api §7).
@@ -348,7 +375,32 @@ function detailVideo(v: Video): Video {
     snumber: num(v.snumber),
     title: v.title ?? '',
     duration: num(v.duration),
-    audios: v.audios ?? [],
-    subtitles: v.subtitles ?? [],
+    audios: (v.audios ?? []).map(audio),
+    subtitles: (v.subtitles ?? []).map(subtitle),
   };
+}
+
+function audio(a: Audio): Audio {
+  const ref = (value: Audio['type']): Audio['type'] => value ? {
+    ...value, id: num(value.id), title: String(value.title ?? ''), short_title: value.short_title ?? null,
+  } : null;
+  return { ...a, id: num(a.id), index: num(a.index), channels: num(a.channels), codec: String(a.codec ?? ''),
+    lang: String(a.lang ?? 'unk').toLowerCase(), type: ref(a.type), author: ref(a.author) };
+}
+
+function subtitle(s: Subtitle): Subtitle {
+  return { ...s, lang: String(s.lang ?? 'unk').toLowerCase(), shift: num(s.shift),
+    embed: s.embed === true || num(s.embed) === 1,
+    ...(s.forced === undefined ? {} : { forced: s.forced === true || num(s.forced) === 1 }) };
+}
+
+function mediaFile(f: VideoFile): VideoFile {
+  const urls: StreamUrls = {};
+  // Both spellings occur on the live service; merge rather than let an empty `urls` hide `url`.
+  for (const kind of ['http', 'hls', 'hls2', 'hls4'] as const) {
+    const url = f.urls?.[kind] || f.url?.[kind];
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) urls[kind] = url;
+  }
+  return { ...f, codec: String(f.codec ?? '').trim().toLowerCase(), quality: String(f.quality ?? ''),
+    w: num(f.w), h: num(f.h), quality_id: num(f.quality_id), urls };
 }

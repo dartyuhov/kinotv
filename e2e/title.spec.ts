@@ -49,7 +49,7 @@ test.describe('a film', () => {
     await expect(page.getByText('КП 8.1')).toBeVisible();
     await expect(page.getByText('Озвучка: русский, английский')).toBeVisible();
     await expect(page.getByText('Субтитры: английский')).toBeVisible();
-    await expect(page.getByTestId('backdrop')).toHaveAttribute('src', RIVER.posters.wide!);
+    await expect(page.getByTestId('backdrop').last()).toHaveAttribute('data-source', RIVER.posters.wide!);
 
     await expect(app.focused).toHaveAccessibleName('Смотреть');
   });

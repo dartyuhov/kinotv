@@ -147,7 +147,7 @@ test('opening a collection again from Home starts at its first title', async ({ 
   await expect(app.focused).toHaveAccessibleName('Медленная река');
 });
 
-test('a long collection loads its next page before the viewer reaches the end', async ({ app, api, remote }) => {
+test('a long collection loads its next page before the viewer reaches the end', async ({ app, api, remote, page }) => {
   const pagesRequested = () => api.requestsTo('GET', '/v1/collections/view').map((r) => r.query.page);
   const LONG = fakeCollection(10, 'Большая подборка', fakeItems(1001, 50));
   fakeHome(api, homeWith([LONG]));
@@ -159,6 +159,9 @@ test('a long collection loads its next page before the viewer reaches the end', 
   await remote.press('down', 'down');
   await expect(app.focused).toHaveAccessibleName('Фильм 1015');
   await expect.poll(pagesRequested).toEqual(['1', '2']);
+  // A request is recorded before its response is rendered. Wait for page-two content
+  // before sending keys beyond page one's 42 titles, even under concurrent worker load.
+  await expect(region(page, 'Большая подборка').getByRole('button', { name: 'Фильм 1050', exact: true })).toBeAttached();
 
   // Seven to a row: the 50th title is first in the eighth row.
   await remote.repeat('down', 5);

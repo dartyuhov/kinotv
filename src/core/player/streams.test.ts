@@ -39,9 +39,9 @@ describe('pickStream (Auto quality)', () => {
     });
   });
 
-  it('uses an HEVC file when there is nothing else', () => {
+  it('does not offer an unsupported HEVC file even when there is nothing else', () => {
     const onlyHevc = [file('1080p', 3, 'hevc', { hls4: 'https://cdn.test/hevc.m3u8' })];
-    expect(pickStream(onlyHevc, { streams: ['hls4'], hevc: false })?.url).toBe('https://cdn.test/hevc.m3u8');
+    expect(pickStream(onlyHevc, { streams: ['hls4'], hevc: false })).toBeNull();
   });
 
   it('accepts the details view `url` key as well as media-links `urls`', () => {

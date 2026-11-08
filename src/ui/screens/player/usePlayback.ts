@@ -29,9 +29,14 @@ export function usePlaybackSnapshot(player: PlayerAdapter | null): PlaybackSnaps
   const [snapshot, setSnapshot] = useState(INITIAL);
   useEffect(() => {
     if (!player) return;
-    const update = (patch: Partial<PlaybackSnapshot>) => setSnapshot((s) => ({ ...s, ...patch }));
+    const update = (patch: Partial<PlaybackSnapshot>) => setSnapshot((s) =>
+      (Object.keys(patch) as Array<keyof PlaybackSnapshot>).every((key) => s[key] === patch[key]) ? s : { ...s, ...patch });
     const offs = [
-      player.on('time', ({ position, duration }) => update({ position, duration })),
+      // AVPlay can report subsecond time frequently. Labels/countdowns use whole
+      // seconds; progress sync and source coordination keep their own precise
+      // subscriptions. Don't render the entire player tree on every native tick.
+      player.on('time', ({ position, duration }) => setSnapshot((s) =>
+        Math.floor(s.position) === Math.floor(position) && s.duration === duration ? s : { ...s, position, duration })),
       player.on('state', (state) => update(state === 'error' ? { state } : { state, error: null })),
       player.on('buffering', (buffering) => update({ buffering })),
       player.on('error', (error) => update({ state: 'error', error })),
