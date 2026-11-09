@@ -1,218 +1,366 @@
 # KinoTV
 
-Unofficial kino.watch client for Samsung Tizen TVs, built as a Tizen web app. Design spec:
-[`docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md`](docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md).
+**Фильмы и сериалы с [kino.watch](https://kino.watch) на Samsung Smart TV.**
+Неофициальный клиент для телевизоров на Tizen: интерфейс на русском языке,
+управление пультом и продолжение просмотра с сохранённого места.
 
-## Install KinoTV on your Samsung TV
+![Платформа: Samsung Tizen](https://img.shields.io/badge/Samsung-Tizen-1428A0)
+![Статус: в разработке](https://img.shields.io/badge/статус-в_разработке-orange)
 
-KinoTV isn't in Samsung's app store. You install it from your computer with an install script. Samsung TVs
-only accept apps signed for that particular TV, so the script helps you make a free Samsung certificate for
-your TV and signs KinoTV with it. The first install takes about 30 minutes. Updates take a minute.
+KinoTV устанавливается на телевизор как приложение `.wgt` и воспроизводит видео
+через встроенный плеер Samsung AVPlay. Отдельный сервер для работы не нужен.
+Для просмотра требуется аккаунт с действующей подпиской kino.watch.
 
-**You need:**
+## Возможности
 
-- a kino.watch subscription;
-- a Samsung TV from 2022 or later (tested on a 2023 Q60C with Tizen 7.0);
-- a Mac on the same network as the TV (tested on macOS; Linux may work but is untested);
-- a Samsung account, for the certificate;
-- [Node.js](https://nodejs.org) 22 or later (the LTS version).
+Приложение рассчитано на большой экран и обычный пульт: для навигации достаточно
+стрелок, **OK** и **Назад**.
 
-The script never installs anything on your computer without asking first. It keeps its files in `~/KinoTV`.
+- **Главная:** продолжение просмотра, новые серии, новинки, популярное и подборки.
+- **Каталог фильмов и сериалов:** фильтры по типу, жанру, году и стране;
+  сортировка по новизне, популярности и рейтингу.
+- **Поиск:** экранная клавиатура с русской и английской раскладками.
+- **Карточки фильмов и сериалов:** описание, сезоны, серии и прогресс просмотра.
+- **«Я смотрю»:** отслеживание сериалов и отметки о новых сериях.
+- **Закладки:** добавление и удаление фильмов и сериалов в папках аккаунта.
+- **Плеер:** выбор озвучки, субтитров и качества, перемотка и переход
+  к следующей серии.
+- **Синхронизация:** сохранение позиции просмотра в аккаунте kino.watch
+  и продолжение на другом устройстве.
+- **Вход по коду:** подтверждение на телефоне или компьютере без ввода пароля
+  пультом.
 
-### 1. Get Samsung's TV tools
+## Статус и совместимость
 
-1. Download the Tizen SDK **CLI installer** for macOS from <https://samsungtizenos.com/tools-download/>.
-   It's a file named like `web-cli_Tizen_SDK_<version>_macos-64.bin`. Don't run it yourself: the install
-   script asks for it in step 3 and installs it into `~/tizen-studio`. On an Apple Silicon Mac the script also
-   offers to install Rosetta, which Samsung's tools need.
-2. Install [VS Code](https://code.visualstudio.com) and its Samsung **Tizen TV** extension
-   (`tizensdk.tizentv`). You'll use its Certificate Manager in step 6. Tizen Studio's Certificate Manager
-   works too.
+KinoTV находится в активной разработке. Основные экраны и просмотр фильмов
+и сериалов реализованы, но не все разделы готовы.
 
-### 2. Turn on Developer Mode on the TV
+| Что | Текущее состояние |
+| --- | --- |
+| Проверенный телевизор | Samsung Q60C, 2023 год, Tizen 7.0 |
+| Целевая совместимость | Samsung с Tizen 6.5 и новее, модели с 2022 года; остальные модели не проверены |
+| 4K и HDR | Зависят от телевизора, кодека и доступных потоков конкретного видео |
+| ТВ, Спорт, История | Вкладки пока содержат заглушки |
+| Установка с компьютера | Проверена на macOS; Linux не проверен, готового сценария для Windows нет |
+| Готовые релизы | Публикация ещё не настроена: в `package.json` указан `OWNER/REPO` |
 
-1. On the TV, open **Apps** and press **1 2 3 4 5** on the remote (or on the on-screen keypad).
-2. Set **Developer mode** to **On**. For **Host PC IP**, enter your Mac's IP address. It's in System
-   Settings → Wi-Fi → Details, and the script prints it too when it gets to the TV.
-3. Restart the TV: hold the power button on the remote until it restarts. **Develop Mode** now shows at the
-   top of Apps.
-4. Note the TV's IP address: Settings → General → Network → Network Status → IP Settings.
+Сейчас приложение можно собрать из исходников, указав параметры OAuth-клиента
+kino.watch. Инструкция по установке готовой версии ниже рассчитана на будущие
+релизы с файлами установщика.
 
-> **TODO (screenshot, needs the TV):** the Developer Mode dialog in Apps, with Host PC IP filled in.
+## Установка на телевизор
 
-### 3. Download and run the install script
+KinoTV устанавливается с компьютера через режим разработчика Samsung.
+В магазине приложений Samsung его нет. Первичная настройка обычно занимает
+около 30 минут: потребуется подключить телевизор и создать сертификат.
 
-1. Open the **Releases** page of this repository on GitHub and, under the latest release, download
-   `install.sh`. You only need this one file; the script downloads the rest.
-2. Open Terminal and run:
+### Что понадобится
+
+Перед началом подготовьте:
+
+- телевизор Samsung на Tizen из списка совместимости выше;
+- Mac в одной локальной сети с телевизором;
+- [Node.js](https://nodejs.org/) версии **22.18 или новее**;
+- аккаунт Samsung для создания сертификата;
+- аккаунт kino.watch с действующей подпиской.
+
+### 1. Подготовьте инструменты Samsung
+
+Для установки нужны Tizen CLI, `sdb` и инструменты создания сертификатов.
+
+1. Скачайте **CLI installer** для macOS со страницы
+   [инструментов Tizen SDK](https://samsungtizenos.com/tools-download/).
+   Имя файла выглядит как `web-cli_Tizen_SDK_<version>_macos-64.bin`.
+   Самостоятельно запускать его не обязательно: мастер настройки запросит путь
+   к файлу и предложит установить SDK в `~/tizen-studio`.
+2. Установите [VS Code](https://code.visualstudio.com/) и расширение Samsung
+   **Tizen TV** (`tizensdk.tizentv`) для создания сертификата.
+   Также можно использовать **Certificate Manager** из Tizen Studio.
+
+На Mac с Apple Silicon мастер предложит установить Rosetta, если её ещё нет.
+После установки SDK он покажет команды для добавления TV Extensions
+и Samsung Certificate Extension.
+
+### 2. Включите режим разработчика на телевизоре
+
+Режим разработчика разрешает подключение с вашего компьютера.
+Названия пунктов меню могут отличаться в зависимости от модели и прошивки.
+
+1. Откройте **Apps** на телевизоре и введите **1 2 3 4 5** пультом
+   или экранной цифровой клавиатурой. На некоторых прошивках сначала откройте
+   настройки приложений внутри **Apps**.
+2. Установите **Developer mode → On**.
+3. В поле **Host PC IP** укажите IP-адрес **Mac**, с которого будете
+   устанавливать приложение. На Mac его можно найти в
+   **Системные настройки → Wi-Fi → Подробнее**.
+4. Перезагрузите телевизор: удерживайте кнопку питания на пульте до перезапуска.
+   После перезагрузки в **Apps** появится надпись **Develop Mode**.
+5. Запишите IP-адрес **телевизора**. Обычно он находится в
+   **Настройки → Общие → Сеть → Состояние сети → Настройки IP**.
+
+### 3. Запустите установщик готовой версии
+
+Этот способ станет доступен после публикации релиза с `install.sh`,
+`kinotv-installer.mjs` и `KinoTV.wgt`. До этого используйте раздел
+[«Разработка и сборка»](#разработка-и-сборка).
+
+1. Откройте раздел **Releases** этого репозитория и скачайте `install.sh`
+   из последнего релиза. Остальные файлы скрипт загрузит сам.
+2. Запустите в Терминале:
 
    ```sh
    bash ~/Downloads/install.sh
    ```
 
-The script works through five steps and stops with instructions if one needs you. Fix what it says and run
-it again. It remembers your answers and skips what is already done.
+3. Следуйте подсказкам: укажите путь к скачанному установщику Tizen SDK,
+   если SDK ещё не установлен, затем IP-адрес телевизора.
+4. Сохраните показанный **DUID** — идентификатор телевизора для сертификата.
 
-### 4. Script step 1: Tizen tools
+Установщик хранит свои файлы в `~/KinoTV`. Его можно запустить повторно:
+он запоминает адрес телевизора и профиль сертификата. Если шаг завершился
+ошибкой, исправьте указанную причину и повторите запуск.
 
-If the Tizen CLI isn't installed yet, the script asks for the path of the CLI installer you downloaded in
-step 1. Drag the file into the Terminal window and press Enter. Then it shows the package-manager commands
-that add Samsung's TV extensions. Run them in a second Terminal window and press Enter when they're done.
+### 4. Создайте сертификат Samsung
 
-> **TODO (screenshot):** Terminal at "Step 1/5 · Tizen tools".
+Телевизор принимает пакет, подписанный сертификатом Samsung с его DUID.
+Сертификат создаётся один раз; для обновлений нужен тот же авторский сертификат.
 
-### 5. Script steps 2 and 3: connecting to the TV
+1. Откройте **Certificate Manager**: в VS Code через команду
+   **Tizen: Run Certificate Manager**, либо в Tizen Studio через
+   **Tools → Certificate Manager**. В новых версиях расширения создание профиля
+   также доступно через **Create Certificate**.
+2. Создайте профиль **Samsung → TV** с именем `KinoTV`.
+3. Создайте **Author certificate**, войдя в аккаунт Samsung.
+   Сохраните резервную копию `author.p12`: без него нельзя подписывать
+   обновления уже установленного приложения.
+4. Для **Distributor certificate** выберите уровень **Public**
+   и добавьте DUID своего телевизора.
+5. Завершите создание профиля, вернитесь в Терминал и укажите имя профиля,
+   когда установщик его запросит.
 
-Type the TV's IP address when the script asks. It connects to the TV and shows the TV's **DUID**, a device
-ID that the certificate needs. If it can't reach the TV, check the Developer Mode steps above. The Host PC IP
-must be this Mac's address, and the TV must have been restarted after you set it.
+Установщик подпишет пакет, установит KinoTV и запустит приложение.
+Затем его можно открывать из **Apps** на телевизоре.
 
-> **TODO (screenshot):** Terminal showing "Connected to …" and the DUID.
+## Первый запуск
 
-### 6. Script step 4: your Samsung certificate
+Для входа нужен телефон или компьютер с доступом к аккаунту kino.watch.
 
-This is the one step that has to be done in Samsung's app. In VS Code, open the command palette and run
-**Tizen: Run Certificate Manager** (or in Tizen Studio: Tools → Certificate Manager). Then:
+1. Откройте KinoTV на телевизоре.
+2. Отсканируйте QR-код или откройте адрес, показанный на экране.
+3. Войдите в аккаунт kino.watch и подтвердите код с телевизора.
+4. Дождитесь открытия главной страницы, выберите фильм или серию и нажмите
+   **Смотреть**. Если позиция уже сохранена, выберите **Продолжить**.
 
-1. Click **+**, choose **Samsung** (not Tizen), then **TV**. Name the profile `KinoTV`.
-2. **Author certificate:** create a new one and sign in with your Samsung account. Keep a backup of the
-   `author.p12` file it makes (in `~/SamsungCertificate/KinoTV/`). Updates must be signed with the same
-   author certificate.
-3. **Distributor certificate:** choose privilege **Public** and add the DUID the script showed.
-4. Click **Finish**, go back to Terminal and press Enter.
+## Управление пультом
 
-> **TODO (screenshots):** Certificate Manager: choosing Samsung → TV; the author certificate; the
-> distributor certificate with the DUID.
+Основные действия доступны без цветных и цифровых кнопок.
 
-### 7. Script step 5: signing and installing
+| Кнопка | Действие |
+| --- | --- |
+| ↑ ↓ ← → | Перемещение по интерфейсу |
+| OK | Выбор; в плеере — воспроизведение или пауза |
+| Назад | Закрыть панель или вернуться; на главном экране — подтверждение выхода |
+| ← / → в плеере | Перемотка; при удержании шаг увеличивается |
+| ↑ в плеере | Настройки озвучки, субтитров и качества |
+| ⏯ | Воспроизведение или пауза |
+| ⏪ / ⏩ | Назад на 10 секунд / вперёд на 30 секунд |
+| CH ▲ / CH ▼ в сериале | Следующая / предыдущая серия |
+| Home | Переход в Smart Hub; приложение ставит видео на паузу и сохраняет позицию |
 
-The script signs KinoTV with your certificate, installs it on the TV and starts it. KinoTV is now in
-**Apps** on the TV, and you can sign in with your kino.watch account.
+В плеере **Назад** сначала закрывает открытую панель, затем скрывает элементы
+управления, а следующим нажатием возвращает к карточке фильма или сериала.
 
-> **TODO (screenshot, needs the TV):** KinoTV in Apps.
+## Обновление
 
-### Updating
-
-When a new version is out, KinoTV shows **Доступно обновление (vX.Y.Z)** ("Update available") in Settings.
-Samsung doesn't let sideloaded apps update themselves, so run the script again:
+После настройки релизов приложение проверяет наличие новой версии
+и показывает уведомление **Доступно обновление (vX.Y.Z)** в настройках.
+Обновление устанавливается с компьютера: повторно запустите скачанный скрипт.
 
 ```sh
 bash ~/Downloads/install.sh
 ```
 
-It downloads the latest release and reuses the TV address and certificate from the first install. The TV
-must still be in Developer Mode.
-
-To install a `KinoTV.wgt` you already downloaded, run `bash install.sh --wgt path/to/KinoTV.wgt`.
-
-### If something goes wrong
-
-| What the script says | What to do |
-|---|---|
-| `Can't reach the TV at …` | Developer Mode must be on with this Mac's IP as Host PC IP, and the TV restarted after setting it. Both must be on the same network. |
-| `Author certificate not match` | KinoTV is already on the TV, signed with a different author certificate. Uninstall it from Apps on the TV and run the script again. |
-| `Invalid certificate chain` or error `1010` | The certificate wasn't made for this TV. Recreate the distributor certificate with this TV's DUID. |
-| `Node.js is not installed` / `too old` | Install the LTS version from <https://nodejs.org>. |
-
-The script keeps the TV address and profile name in `~/KinoTV/tizen/.signing/settings.json`. Delete that file
-to start over. Set `KINOTV_DIR` to use another folder.
-
-## Development
-
-Needs Node 22.
+Телевизор должен быть включён, доступен по сети и оставаться в режиме
+разработчика. Установщик использует сохранённый профиль сертификата.
+Чтобы установить заранее скачанный пакет, передайте путь к нему:
 
 ```sh
-npm install
-npx playwright install chromium   # once, for the e2e tests
+bash ~/Downloads/install.sh --wgt ~/Downloads/KinoTV.wgt
 ```
 
-| Command | What it does |
-|---|---|
-| `npm run dev` | Dev server. The 1920×1080 TV frame is scaled to fit the browser window. |
-| `npm test` | Vitest: small tests for pure logic (e.g. key mapping), next to the code as `*.test.ts`. |
-| `npm run e2e` | Playwright: builds the app against a fake API and drives it with remote keys in Chromium at 1920×1080. |
-| `npm run typecheck` | TypeScript, app and tests. |
-| `npm run build` | Production build into `dist/` (Chrome 85 target) and prints the gzipped JS size against the 300 KB budget. |
+Для сборки из исходников обновите локальную копию репозитория, установите
+зависимости через `npm ci` и снова выполните `npm run tv`.
 
-The keyboard stands in for the remote:
+## Если что-то не работает
 
-| Remote | Keyboard |
-|---|---|
-| D-pad, OK | Arrow keys, Enter |
-| Back | Backspace or Escape |
-| Play/Pause | Space |
-| Rewind / Fast-forward | `[` / `]` |
-| CH ▲ / CH ▼ | Page Up / Page Down |
+Начните с подключения телевизора и сертификата: это самые частые причины
+ошибок установки.
 
-### Sign-in credentials
+| Проблема | Что проверить |
+| --- | --- |
+| `Can't reach the TV at …` | Mac и телевизор в одной сети; Developer Mode включён; в Host PC IP указан адрес Mac; телевизор перезагружен после настройки |
+| `Author certificate not match` | Используйте авторский сертификат предыдущей установки. Если он утрачен, удалите приложение с телевизора и установите заново; локальные настройки и вход будут потеряны |
+| `Invalid certificate chain` или ошибка `1010` | Пересоздайте сертификат распространителя с DUID этого телевизора |
+| Установка запрещена после создания сертификата | Выполните **Permit to install applications** в Device Manager Samsung |
+| Не удаётся получить код входа при собственной сборке | Проверьте `VITE_KP_CLIENT_ID` и `VITE_KP_CLIENT_SECRET` в `.env.local`, затем пересоберите приложение |
+| Видео не запускается | Проверьте подписку и интернет; попробуйте другое качество в плеере или другой фильм |
+| После настройки не работает загрузка релизов | Готовый релиз должен содержать все три файла установщика; исходный `tools/install.sh` с `OWNER/REPO` не предназначен для загрузки релиза |
 
-Sign-in uses kino.watch's OAuth device flow, which needs an OAuth client. Copy `.env.example` to `.env.local`
-(git-ignored) and fill in `VITE_KP_CLIENT_ID` and `VITE_KP_CLIENT_SECRET`. Without them the Sign-in screen
-can't get a code. Never commit real credentials. The e2e build overrides both (and the API host) with fake
-values from `playwright.config.ts`, so real credentials never reach a test.
+Адрес телевизора и имя профиля сохраняются в
+`~/KinoTV/tizen/.signing/settings.json` при установке готовой версии
+или в `tizen/.signing/settings.json` при работе из исходников.
+Удаление этого файла сбрасывает настройки установщика.
 
-The API host defaults to `https://api.service-kp.com`. Set `VITE_API_BASE_URL` in `.env.local` to use another
-one (for example the mirror `https://api.srvkp.com`).
+## Разработка и сборка
 
-### Playback in the browser
+Проект использует React 18, TypeScript, Vite, TanStack Query, Zustand
+и Norigin Spatial Navigation. На компьютере интерфейс работает в браузере;
+клавиатура заменяет пульт.
 
-In Chrome the player uses a plain `<video>` element. Current desktop Chrome plays kino.watch's HLS streams
-natively, so there is no hls.js; a browser without native HLS gets the MP4 stream instead. The e2e build sets
-`VITE_PLAYER=fake` to play through the FakePlayer, which tests script from `e2e/harness/player.ts`. You can use
-it in development too (`VITE_PLAYER=fake npm run dev`): playback is simulated, no video is fetched.
+### Локальный запуск
 
-## On the TV
+Откройте Терминал в корне локальной копии репозитория. Нужен Node.js 22.18+.
 
-The app is a Tizen web app (`.wgt`). A Samsung TV only installs packages signed with a Samsung certificate
-made for that TV, so the first run needs a one-time setup. Samsung's TV emulator doesn't run on Apple Silicon,
-so test on a real TV.
+1. Установите зависимости и создайте локальный файл конфигурации:
 
-| Command | What it does |
-|---|---|
-| `npm run tv:setup` (or `tools/setup.sh`) | Interactive wizard. It checks Rosetta, installs or finds the Tizen CLI and `sdb`, walks you through TV Developer Mode, connects to the TV, shows its DUID and guides you through creating the Samsung certificate. Safe to re-run. |
-| `npm run package` | Builds and packages `dist-tizen/KinoTV.wgt`. It is signed when a certificate profile is set up, otherwise unsigned (no Tizen tools needed). |
-| `npm run tv` | Builds, signs, installs and launches the app on the TV. |
-| `npm run tv:debug` | The same, launched in debug mode. Prints the DevTools address to open in Chrome. |
+   ```sh
+   npm ci
+   cp .env.example .env.local
+   ```
 
-The wizard saves the TV's address and the certificate profile name in `tizen/.signing/settings.json`, which
-is git-ignored. `KINOTV_TV` and `KINOTV_TIZEN_PROFILE` override them. The Tizen tools are found on `PATH` or in
-`$TIZEN_HOME` (default `~/tizen-studio`).
+2. Заполните в `.env.local` параметры OAuth-клиента kino.watch:
 
-The package manifest (`config.xml`) is generated at build time by `tools/tizen/configXml.ts`, with the version
-taken from `package.json`. The launcher icon is `tizen/icon.png`, rendered from `tizen/icon.svg` with
-`node tools/tizen/renderIcon.ts`. The production build is a single classic script (not an ES module), because
-the TV opens the app from local files and Chromium doesn't load module scripts from `file://`.
+   ```dotenv
+   VITE_KP_CLIENT_ID=
+   VITE_KP_CLIENT_SECRET=
+   ```
 
-## Releases (maintainers)
+   Без них приложение не сможет запросить код входа. Для публичной сборки
+   используйте собственный OAuth-клиент проекта. Значения `VITE_*` включаются
+   в собранное приложение и доступны его получателям; `.env.local` не попадает
+   в Git.
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, unit tests, e2e tests and the build on every push to a
-branch and on pull requests. Pushing a version tag runs `.github/workflows/release.yml`. It checks the release
-gate, runs the same tests, builds the app with the project's own API credentials and publishes a GitHub
-Release with three files:
+3. Запустите сервер разработки и откройте адрес из Терминала:
 
-| File | What it is |
-|---|---|
-| `KinoTV.wgt` | The app, **unsigned**. Each user signs it with their own Samsung certificate. |
-| `install.sh` | The script users download and run. It fetches the other two files from the latest release. |
-| `kinotv-installer.mjs` | The installer (`tools/tizen/installer.ts` plus the setup wizard), bundled into one file that needs only Node.js. |
+   ```sh
+   npm run dev
+   ```
 
-**One-time setup on GitHub, before the first release:**
+По умолчанию используется API `https://api.service-kp.com`.
+Другой адрес, например `https://api.srvkp.com`, можно задать переменной
+`VITE_API_BASE_URL` в `.env.local`.
 
-1. **The repo.** Set `"kinotv": { "githubRepo": "<owner>/<repo>" }` in `package.json`. This is the only place
-   it is set. The app's update check and `install.sh` use it. Until it is set, it stays the placeholder
-   `OWNER/REPO`, the update check is off and releases are blocked.
-2. **The credentials.** Add the repository secrets `KP_CLIENT_ID` and `KP_CLIENT_SECRET` (GitHub → Settings →
-   Secrets and variables → Actions → New repository secret). They must be KinoTV's **own** kino.watch API
-   client, never the borrowed development one from `.env.local`. The release build passes them to the app as
-   `VITE_KP_CLIENT_ID` and `VITE_KP_CLIENT_SECRET`, the same variables `.env.local` sets during development.
+### Команды проекта
 
-The release gate (`tools/release/gate.ts`) fails the workflow with a clear message if either secret is missing,
-if the tag isn't `v` + the `package.json` version, or if `githubRepo` doesn't name the repository being
-released.
+Все команды выполняются из корня репозитория.
 
-**To release:** set `version` in `package.json`, commit, then `git tag v<version>` and push the tag. To check the
-release files locally, run `npm run build && npm run release:assets`. They go to `dist-release/` (git-ignored).
+| Команда | Назначение |
+| --- | --- |
+| `npm run dev` | Разработка в браузере; интерфейс 1920×1080 масштабируется под окно |
+| `npm run typecheck` | Проверка типов приложения и тестов |
+| `npm test` | Модульные тесты Vitest |
+| `npm run e2e` | Тесты Playwright в Chromium с тестовыми API и плеером |
+| `npm run build` | Сборка в `dist/` и отчёт о размере JavaScript |
+| `npm run tv:setup` | Настройка Tizen SDK, подключения и сертификата Samsung |
+| `npm run package` | Создание `dist-tizen/KinoTV.wgt`; с подписью, если настроен профиль |
+| `npm run tv` | Сборка, подпись, установка и запуск на телевизоре |
+| `npm run tv:debug` | То же, с отладкой и адресом DevTools для Chrome |
 
-The app checks `https://api.github.com/repos/<githubRepo>/releases/latest` at launch, at most once a day. The
-result is kept in `localStorage`. When the latest tag is a newer semver than the app's own version, Settings shows
-"Доступно обновление (vX.Y.Z)". `VITE_RELEASES_URL` overrides the URL; the e2e tests point it at the fake API.
+Перед первым запуском e2e-тестов установите Chromium:
+
+```sh
+npx playwright install chromium
+npm run e2e
+```
+
+Для установки собственной сборки подготовьте телевизор по инструкции выше,
+затем запустите мастер и установку:
+
+```sh
+npm run tv:setup
+npm run tv
+```
+
+Инструменты Tizen ищутся в `PATH` и в `$TIZEN_HOME`
+(по умолчанию `~/tizen-studio`). Переменные `KINOTV_TV`
+и `KINOTV_TIZEN_PROFILE` переопределяют сохранённые адрес телевизора
+и профиль сертификата. `KINOTV_DIR` меняет каталог установщика готовой версии.
+
+### Клавиатура в браузере
+
+Для проверки интерфейса используйте следующие клавиши:
+
+| Клавиатура | Пульт |
+| --- | --- |
+| Стрелки, Enter | Стрелки, OK |
+| Backspace или Escape | Назад |
+| Пробел | Воспроизведение / пауза |
+| `[` / `]` | Перемотка назад / вперёд |
+| Page Up / Page Down | CH ▲ / CH ▼ |
+
+В браузере видео воспроизводится через HTML5 `<video>`, на телевизоре —
+через Samsung AVPlay. Возможности кодеков и звуковых дорожек различаются,
+поэтому воспроизведение нужно дополнительно проверять на реальном телевизоре.
+Для разработки без загрузки видео доступен имитатор плеера:
+
+```sh
+VITE_PLAYER=fake npm run dev
+```
+
+Этот режим заменяет только плеер: для входа и каталога по-прежнему нужен API.
+В e2e-тестах используются тестовые API и параметры входа из
+`playwright.config.ts`.
+
+<details>
+<summary>Публикация релиза — для сопровождающих проекта</summary>
+
+CI проверяет типы, модульные и e2e-тесты и сборку. Workflow релиза запускается
+при отправке тега `v*` и публикует три файла:
+
+| Файл | Назначение |
+| --- | --- |
+| `KinoTV.wgt` | Неподписанное приложение; пользователь подписывает его своим сертификатом |
+| `install.sh` | Загрузка приложения и запуск установщика |
+| `kinotv-installer.mjs` | Установщик и мастер настройки в одном файле для Node.js |
+
+Перед первым релизом выполните настройку:
+
+1. Замените `kinotv.githubRepo` в `package.json` на реальное `owner/repo`.
+   Это значение используют установщик и проверка обновлений.
+2. Добавьте GitHub Actions secrets `KP_CLIENT_ID` и `KP_CLIENT_SECRET`
+   собственного OAuth-клиента KinoTV.
+3. Установите версию в `package.json`, сохраните изменения коммитом
+   и отправьте тег `v<version>`.
+
+Проверка релиза блокирует публикацию, если параметры клиента отсутствуют,
+версия тега не совпадает с `package.json` или указан другой репозиторий.
+Без настроенного `githubRepo` проверка обновлений в приложении отключена.
+
+Чтобы проверить создание файлов локально, выполните:
+
+```sh
+npm run build
+npm run release:assets
+```
+
+Результат появится в `dist-release/`. Конфигурация пакета `config.xml`
+генерируется при упаковке, версия берётся из `package.json`.
+
+</details>
+
+## Обратная связь
+
+Если нашли ошибку или хотите предложить улучшение, создайте обращение
+в **Issues** этого репозитория. Для ошибки укажите:
+
+- модель телевизора, год выпуска и версию Tizen;
+- версию KinoTV и способ установки;
+- шаги воспроизведения, ожидаемый и фактический результат;
+- название фильма или сериала, серию и качество, если проблема связана с видео;
+- текст ошибки или снимок экрана, если они есть.
+
+Не публикуйте токены аккаунта, пароли и приватные ссылки на видеопотоки.
+
+Подробности устройства приложения описаны в
+[проектной спецификации](docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md).
+Она содержит и запланированные возможности; текущая реализация может отличаться.
