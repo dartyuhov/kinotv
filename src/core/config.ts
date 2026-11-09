@@ -8,6 +8,7 @@ export const config = {
 
   /**
    * OAuth client credentials (spec §7.6), from the git-ignored .env.local. See .env.example.
+   * Embedded in the client bundle; they are visible to anyone receiving the app.
    * Never log them: they travel in OAuth query strings, which the diagnostics log scrubs.
    */
   client: {

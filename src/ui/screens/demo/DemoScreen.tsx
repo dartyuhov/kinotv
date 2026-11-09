@@ -3,7 +3,7 @@ import { Button } from '../../components/Button';
 import { screenStack, type ScreenParams } from '../../nav/stack';
 import './DemoScreen.css';
 
-/** A throwaway pushed screen for exercising the navigator. Removed once real screens exist. */
+/** Exercises nested navigation from placeholder tabs and in navigation tests. */
 export function DemoScreen({ params }: { params: ScreenParams['demo'] }) {
   const next = params.n + 1;
   return (

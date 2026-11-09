@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 /**
  * Every screen that can be pushed, with its params. Add an entry here when you add a screen,
- * then register its component in ui/app/screens.tsx.
+ * then register its component in ui/app/screens.ts.
  */
 export interface ScreenParams {
   root: undefined;

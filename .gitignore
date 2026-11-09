@@ -1,24 +1,35 @@
+# Dependencies and generated builds
 node_modules/
 dist/
-.superpowers/
-.env.local
-.env.*.local
+dist-*/
+
+# Local configuration; keep the sanitized example
+.env
+.env.*
+!.env.example
+
+# Packaged widgets and private signing material
 *.wgt
 *.p12
+*.pfx
 tizen/.signing/
+/tizen/**/*.pem
+/tizen/**/*.key
+
+# OS files
 .DS_Store
 
-# Beads / Dolt files (added by bd init)
+# Local Beads / Dolt state
+/.beads/
 .dolt/
 *.db
 .beads-credential-key
-.beads/proxieddb/
 *.gate.lock*
-dist-e2e/
-dist-tizen/
+
+# Browser test output
 test-results/
 playwright-report/
 
-# Claude Code agent worktrees
+# Local agent state and worktrees
+.superpowers/
 .claude/
-dist-release/

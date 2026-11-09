@@ -214,7 +214,6 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
               hint={t('player.settingsHint')}
               topRight={<PlaybackPills choices={choices} open={() => setSettingsOpen(true)} />}
             />
-            {/* Overlay layers go here: the settings panel (ticket 08), the next-episode card (ticket 09). */}
             {settingsOpen && <PlaybackSettings choices={choices} title={labels.title} onClose={() => { setSettingsOpen(false); showControls(); }} />}
             {episodes.next && !settingsOpen && !choices.busy && (
               <NextEpisodeCard
