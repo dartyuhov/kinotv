@@ -53,7 +53,11 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
   // Effects below key on the video's numbers, not the object, so a refetch of the details never
   // reloads the stream or restarts progress sync.
   const videoNumber = video?.number;
-  const choices = usePlaybackChoices(player, video, links.data, season === undefined ? undefined : itemId, startAt);
+  const choices = usePlaybackChoices(player, video, links.data, season === undefined ? undefined : itemId, startAt, async () => {
+    const result = await links.refetch({ throwOnError: true });
+    if (!result.data) throw new Error('Media links unavailable');
+    return result.data;
+  });
   const choicesRef = useRef(choices);
   choicesRef.current = choices;
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -92,7 +96,7 @@ export function PlayerScreen({ params }: { params: ScreenParams['player'] }) {
   useEffect(() => { if (failed) retryRef.current?.focus(); }, [failed]);
   const retry = () => {
     if (item.isError || !video) { void item.refetch(); return; }
-    if (links.isError) { void links.refetch(); return; }
+    if (!links.data) { void links.refetch(); return; }
     choicesRef.current.retry();
   };
   const latestRetry = useRef(retry);

@@ -23,6 +23,7 @@ export type FakePlayerCall =
 
 /** Set by tests before the player opens. Applies to every later load; `loadError` to the next one only. */
 export interface FakePlayerScript {
+  adaptiveBitrate?: boolean;
   duration?: number;
   loadError?: PlayerErrorKind;
   tracks?: Partial<Tracks>;
@@ -53,7 +54,7 @@ let script: FakePlayerScript = {};
 let current: FakePlayer | null = null;
 
 class FakePlayer implements PlayerAdapter {
-  readonly capabilities = { streams: ['hls4', 'hls2', 'hls', 'http'] as const, hevc: true };
+  get capabilities() { return { streams: ['hls4', 'hls2', 'hls', 'http'] as const, hevc: true, adaptiveBitrate: script.adaptiveBitrate }; }
   state: PlaybackState = 'idle';
   position = 0;
   duration = 0;

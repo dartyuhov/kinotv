@@ -24,17 +24,19 @@ export function fallbackChoices(files: readonly VideoFile[], capabilities: Playe
   // before load; a file-row label alone never establishes the master ceiling.
   const tail: SourceChoice[] = streamCandidates(files, capabilities).filter((source) => source.type !== 'http' && !inspected.has(source.url))
     .slice(0, 8).map((source) => ({ ...source, fixed: preference !== 'auto', inspectBeforeLoad: true }));
+  const unverified = preference === 'auto' ? manifests.filter((source) => !source.manifest.variants.length)
+    .slice(0, 2).map((source) => ({ ...source, fixed: false })) : [];
   if (capabilities.adaptiveBitrate && manifests.some((source) => source.manifest.variants.length)) {
     const pinned = hlsFixedChoices(manifests, capabilities).filter((source) => preference === 'auto' || qualityHeight(source.quality) <= qualityHeight(preference));
     if (preference !== 'auto') return [...pinned.slice(0, 12), ...tail];
     const adaptive = manifests.filter((source) => source.manifest.variants.length).slice(0, 2)
       .map((source) => ({ ...source, fixed: false }));
-    return [...[...adaptive, ...pinned].slice(0, 14), ...tail];
+    return [...[...adaptive, ...pinned].slice(0, 14), ...unverified, ...tail];
   }
   if (capabilities.adaptiveBitrate && streamCandidates(files, capabilities).some((source) => source.type !== 'http')) {
     // A blocked metadata fetch cannot turn an unverified master into a fixed quality or force the
     // reproducibly stalled progressive path. Auto can still let AVPlay fetch the HLS stream itself.
-    return tail;
+    return [...unverified, ...tail];
   }
   const all = streamCandidates(files, capabilities);
   const ceiling = preference === 'auto' ? Infinity : qualityHeight(preference);

@@ -22,6 +22,8 @@ export type PlayerState = 'idle' | 'loading' | 'paused' | 'playing' | 'ended' | 
 
 /** What the next `load` finds. Set it before the player screen opens. */
 export interface PlayerScript {
+  /** Exercise native-style adaptive source coordination without simulating decoding. */
+  adaptiveBitrate?: boolean;
   /** Seconds. Default: the duration kino.watch gives for the video. */
   duration?: number;
   /** Make the next load fail with this error kind. */

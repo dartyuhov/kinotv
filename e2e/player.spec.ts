@@ -88,6 +88,100 @@ test.describe('starting playback', () => {
     await expect(app.focused).toHaveAccessibleName('Смотреть');
     expect(marks(api)).toEqual([]);
   });
+
+  for (const kind of ['film', 'episode'] as const) test(`Retry refreshes expired links and resumes the same ${kind} position`, async ({ app, api, clock, page, remote, player }) => {
+    let mid = RIVER_VIDEO;
+    if (kind === 'film') river(api, 120);
+    else {
+      const series = fakeSeries(31, 'Тихая гавань', [['Первая'], ['Вторая'], ['Третья'], ['Четвёртая']]);
+      mid = series.seasons![3]!.episodes[0]!.id;
+      fakeHome(api, { hot: [series], movies: [], serials: [], progress: { [series.id]: seriesProgress(series, [[4, 1, 120]]) } });
+    }
+    let requests = 0;
+    api.on('GET', '/v1/items/media-links', () => ({ json: {
+      files: [{ codec: 'h264', quality: '1080p', quality_id: 3, w: 1920, h: 1080,
+        urls: { http: `https://cdn.test/film-${++requests}.mp4` } }], subtitles: [],
+    } }));
+    await clock.pause();
+    await app.open();
+    await playFromHero(page, remote);
+    await player.time(145);
+    await player.fail('network');
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Повторить' })).toBeFocused();
+    await remote.press('ok');
+    await expect.poll(() => player.state()).toBe('playing');
+    expect(await player.loads()).toEqual([
+      { url: 'https://cdn.test/film-1.mp4', startAt: 120 },
+      { url: 'https://cdn.test/film-2.mp4', startAt: 145 },
+    ]);
+    expect(requests).toBe(2);
+    expect(api.requestsTo('GET', '/v1/items/media-links').map((request) => request.query.mid)).toEqual([String(mid), String(mid)]);
+  });
+
+  test('optional manifest failure still hands a supplied HLS source to the adaptive player', async ({ app, api, page, remote, player }) => {
+    river(api);
+    const url = streamUrl(RIVER_VIDEO, '1080p', 'hls4');
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 1080, urls: { hls4: url } }], subtitles: [] } });
+    await page.route(url, (route) => route.abort('connectionfailed'));
+    await app.open();
+    await player.script({ adaptiveBitrate: true });
+    await playFromHero(page, remote);
+    expect(await player.loads()).toEqual([{ url, startAt: 0 }]);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('failed link refresh keeps Retry usable without replaying cached links or duplicating requests', async ({ app, api, page, remote, player }) => {
+    river(api);
+    await app.open();
+    await playFromHero(page, remote);
+    // Exhaust the supplied fallback chain through runtime failures.
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await player.fail('network');
+      if (attempt < 5) await expect.poll(() => player.state()).toBe('playing');
+    }
+    await expect(page.getByRole('alert')).toBeVisible();
+    const before = await player.loads();
+    let answer!: (value: { status: number; json: unknown }) => void;
+    const pending = new Promise<{ status: number; json: unknown }>((resolve) => { answer = resolve; });
+    api.on('GET', '/v1/items/media-links', () => pending);
+    await remote.press('ok', 'ok', 'ok');
+    await expect.poll(() => api.requestsTo('GET', '/v1/items/media-links').length).toBe(2);
+    expect(await player.loads()).toEqual(before);
+    answer({ status: 400, json: { status: 400, error: 'unavailable' } });
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(await player.loads()).toEqual(before);
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '720p', quality_id: 2,
+      w: 1280, h: 720, urls: { http: 'https://cdn.test/refreshed.mp4' } }], subtitles: [] } });
+    await remote.press('ok');
+    await expect.poll(() => player.state()).toBe('playing');
+    const recovered = await player.loads();
+    expect(recovered[recovered.length - 1]?.url).toBe('https://cdn.test/refreshed.mp4');
+  });
+
+  test('leaving during Retry ignores a late fresh-link response', async ({ app, api, page, remote, player }) => {
+    river(api);
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 1080, urls: { http: 'https://cdn.test/old.mp4' } }], subtitles: [] } });
+    await app.open();
+    await playFromHero(page, remote);
+    await player.fail();
+    await expect(page.getByRole('alert')).toBeVisible();
+    let answer!: (value: { json: unknown }) => void;
+    const pending = new Promise<{ json: unknown }>((resolve) => { answer = resolve; });
+    api.on('GET', '/v1/items/media-links', () => pending);
+    await remote.press('ok');
+    await expect.poll(() => api.requestsTo('GET', '/v1/items/media-links').length).toBe(2);
+    await remote.press('back', 'back'); // loading controls hide first, then leave
+    await expect(page.locator('[data-screen="title"]')).toBeVisible();
+    const before = await player.loads();
+    answer({ json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 1080, urls: { http: 'https://cdn.test/late.mp4' } }], subtitles: [] } });
+    await api.idle();
+    expect(await player.loads()).toEqual(before);
+    expect(await player.state()).toBe('idle');
+  });
 });
 
 test.describe('controls', () => {
