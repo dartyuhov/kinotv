@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { readStartupTab } from './startupPreference';
 
 /** Tab bar order (spec §4). */
 export const TAB_IDS = ['search', 'home', 'movies', 'series', 'iwatch', 'tv', 'sport', 'bookmarks', 'history', 'settings'] as const;
@@ -15,6 +16,6 @@ interface TabState {
 
 /** The active tab outlives the root screen, so it survives pushing and popping screens on top of it. */
 export const useTabStore = create<TabState>((set) => ({
-  activeTab: HOME_TAB,
+  activeTab: readStartupTab(TAB_IDS),
   setActiveTab: (activeTab) => set({ activeTab }),
 }));

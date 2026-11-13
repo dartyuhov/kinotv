@@ -39,6 +39,7 @@
   "signin.retry": "Retry",
   "settings.account": "Account: {name}",
   "settings.signOut": "Sign out",
+  "settings.startupTab": "Startup tab",
   "settings.imageCache": "Image cache: {used} MiB / 50 MiB",
   "settings.imageCacheLoading": "Image cache: loading… / 50 MiB",
   "settings.imageCacheAvailable": "Image persistence available",

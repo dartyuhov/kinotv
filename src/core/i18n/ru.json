@@ -39,6 +39,7 @@
   "signin.retry": "Повторить",
   "settings.account": "Аккаунт: {name}",
   "settings.signOut": "Выйти из аккаунта",
+  "settings.startupTab": "Начальная вкладка",
   "settings.imageCache": "Кэш изображений: {used} МиБ / 50 МиБ",
   "settings.imageCacheLoading": "Кэш изображений: загрузка… / 50 МиБ",
   "settings.imageCacheAvailable": "Сохранение изображений доступно",
