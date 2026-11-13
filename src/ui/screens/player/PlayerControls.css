@@ -35,6 +35,11 @@
   margin-bottom: var(--space-1);
 }
 
+.player-controls__titles {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .player-controls__title {
   font-size: var(--font-size-headline);
   font-weight: var(--font-weight-heavy);
@@ -43,7 +48,7 @@
 
 .player-bar {
   position: relative;
-  height: 8px;
+  height: 12px;
 }
 
 .player-bar__track {
@@ -69,10 +74,10 @@
 
 .player-bar__knob {
   position: absolute;
-  left: -12px;
-  top: -8px;
-  width: 24px;
-  height: 24px;
+  left: -16px;
+  top: -10px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--color-text);
   box-shadow: var(--shadow-card);
@@ -80,9 +85,7 @@
 
 .player-bar__preview {
   position: absolute;
-  left: 0;
-  bottom: 32px;
-  transform: translateX(-50%);
+  bottom: 40px;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-button);
   background: var(--color-dialog);
@@ -90,20 +93,26 @@
   font-weight: var(--font-weight-bold);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  text-align: center;
+  border: 2px solid var(--color-badge-border);
 }
+
+.player-bar__preview-label { display: block; font-size: var(--font-size-body); color: var(--color-text-secondary); }
+.player-bar[data-seeking='true'] .player-bar__played,
+.player-bar[data-seeking='true'] .player-bar__knob { background: var(--color-primary); }
 
 .player-controls__times {
   display: flex;
   justify-content: space-between;
   margin-top: var(--space-2);
-  font-size: var(--font-size-body);
+  font-size: var(--font-size-row-title);
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
 }
 
 .player-controls__hint {
   margin-top: var(--space-3);
   text-align: center;
   font-size: var(--font-size-caption);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
 }

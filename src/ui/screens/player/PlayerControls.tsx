@@ -44,6 +44,7 @@ export function PlayerControls({ visible, eyebrow, title, position, duration, pr
       <div className="player-controls__bottom">
         <div
           className="player-bar"
+          data-seeking={preview !== null}
           role="progressbar"
           aria-label={t('player.progress')}
           aria-valuemin={0}
@@ -56,11 +57,14 @@ export function PlayerControls({ visible, eyebrow, title, position, duration, pr
           </div>
           <div className="player-bar__head" style={{ transform: `translateX(${fraction * 100}%)` }}>
             <div className="player-bar__knob" />
-            {preview !== null && <div className="player-bar__preview">{formatClock(preview)}</div>}
           </div>
+          {preview !== null && <div className="player-bar__preview" style={{ left: `${fraction * 100}%`, transform: `translateX(-${fraction * 100}%)` }}>
+            <span className="player-bar__preview-label">{t('player.seekPreview')}</span><span className="player-bar__preview-time">{formatClock(preview)}</span>
+          </div>}
         </div>
         <div className="player-controls__times">
-          <span>{formatClock(shown)}</span>
+          <span>{preview !== null ? t('player.currentPosition', { time: formatClock(position) }) : formatClock(position)}</span>
+          <span>{formatClock(duration)}</span>
           <span>{t('player.remaining', { time: formatClock(Math.max(0, duration - shown)) })}</span>
         </div>
         <p className="player-controls__hint">{hint}</p>
