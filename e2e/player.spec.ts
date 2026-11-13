@@ -91,6 +91,148 @@ test.describe('starting playback', () => {
 });
 
 test.describe('controls', () => {
+  test('long labels wrap without clipping, missing names stay truthful, and remote focus scrolls into view', async ({ app, api, clock, page, remote, player }) => {
+    river(api);
+    await clock.pause();
+    await app.open();
+    const longName = 'Русский · Студия профессионального многоголосого перевода · Полная версия с дополнительными комментариями и описанием '.repeat(2) + 'ExtendedCommentary'.repeat(8);
+    await player.script({ tracks: { audio: [
+      { id: 'long', lang: 'rus', label: longName, selected: true },
+      { id: 'unnamed', lang: 'rus', label: ' ' },
+      { id: 'unknown', lang: 'unk', label: '' },
+      ...Array.from({ length: 10 }, (_, n) => ({ id: `extra:${n}`, lang: 'eng', label: `eng · Commentary ${n + 1}` })),
+    ] } });
+    await playFromHero(page, remote);
+    const pills = page.locator('.playback-pills');
+    await expect(pills).toContainText(longName);
+    const overlayFits = await pills.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const title = document.querySelector('.player-controls__titles')!.getBoundingClientRect();
+      return box.right <= 1920 && box.left >= title.right && element.scrollWidth <= element.clientWidth;
+    });
+    expect(overlayFits).toBe(true);
+    await remote.press('up', 'down');
+    const dialog = page.getByRole('dialog');
+    const label = dialog.locator('.playback-settings__label').first();
+    await expect(label).toHaveText(longName);
+    expect(await label.evaluate((element) => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true);
+    expect(await label.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const column = element.closest('section')!.getBoundingClientRect();
+      return box.left >= column.left && box.right <= column.right;
+    })).toBe(true);
+    await remote.press('down');
+    await expect(dialog.getByRole('button', { name: 'русский · Дорожка 2', exact: true })).toBeFocused();
+    await remote.press('down');
+    await expect(dialog.getByRole('button', { name: 'Дорожка 3', exact: true })).toBeFocused();
+    await remote.repeat('down', 10);
+    const last = dialog.getByRole('button', { name: 'английский · Commentary 10', exact: true });
+    await expect(last).toBeFocused();
+    expect(await last.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const list = element.parentElement!.getBoundingClientRect();
+      return box.top >= list.top && box.bottom <= list.bottom && element.scrollWidth <= element.clientWidth;
+    })).toBe(true);
+    const box = await dialog.boundingBox();
+    expect(box!.x + box!.width / 2).toBeCloseTo(960, 0);
+    expect(box!.y + box!.height / 2).toBeCloseTo(540, 0);
+  });
+
+  test('full same-language names survive the overlay and picker, with truthful current and pending states', async ({ app, api, clock, page, remote, player }) => {
+    river(api);
+    await clock.pause();
+    await app.open();
+    const original = 'Original English commentary · Director';
+    const dub = 'Русский · Полный дубляж · Студия длинных названий — расширенная театральная редакция с комментариями переводчика';
+    await player.script({ tracks: { audio: [
+      { id: 'original', lang: 'eng', label: original, selected: true },
+      { id: 'dub', lang: 'eng', label: dub, pending: true },
+    ], subtitlesOff: true } });
+    await playFromHero(page, remote);
+    const pills = page.locator('.playback-pills');
+    await expect(pills).toContainText(original);
+    await expect(pills).toContainText(`После продолжения: ${dub}`);
+    await remote.press('up', 'down');
+    const dialog = page.getByRole('dialog');
+    const current = dialog.getByRole('button', { name: `${original} ✓ Выбрано`, exact: true });
+    const pending = dialog.getByRole('button', { name: `${dub} После продолжения`, exact: true });
+    await expect(current).toBeFocused();
+    await expect(current).toHaveAttribute('aria-pressed', 'true');
+    await expect(pending).toHaveAttribute('aria-pressed', 'false');
+    await remote.press('down', 'ok');
+    await expect(pending).toBeFocused();
+    await expect.poll(async () => (await player.calls()).filter((call) => call.op === 'selectAudio')).toEqual([{ op: 'selectAudio', id: 'dub' }]);
+    // A request alone is not confirmation from the adapter.
+    await expect(current).toHaveAttribute('aria-pressed', 'true');
+    await expect(pending).toHaveAttribute('data-pending', 'true');
+    await remote.press('right', 'ok');
+    await expect(dialog.getByRole('button', { name: 'Выкл. ✓ Выбрано', exact: true })).toBeFocused();
+    await expect.poll(async () => (await player.calls()).filter((call) => call.op === 'selectSubtitle')).toEqual([{ op: 'selectSubtitle', id: null }]);
+    expect(await player.seeks()).toEqual([]);
+  });
+
+  test('quality changes keep the paused position and display newly confirmed track choices', async ({ app, api, clock, page, remote, player }) => {
+    river(api, 1200);
+    await clock.pause();
+    await app.open();
+    await player.script({ tracks: { audio: [
+      { id: 'a', lang: 'rus', label: 'rus · Studio A', selected: true },
+      { id: 'b', lang: 'rus', label: 'rus · Studio B', pending: true },
+    ], subtitles: [{ id: 'sub', lang: 'eng', label: 'eng · SDH', pending: true }] } });
+    await playFromHero(page, remote);
+    await remote.press('ok', 'up');
+    const dialog = page.getByRole('dialog');
+    const subtitles = page.locator('.playback-pills').getByRole('button', { name: /^Субтитры:/ });
+    await expect(subtitles).toContainText('Субтитры: —');
+    await expect(subtitles).toContainText('После продолжения: английский · SDH');
+    await remote.press('down', 'right', 'down');
+    await expect(dialog.getByRole('button', { name: 'английский · SDH После продолжения', exact: true })).toBeFocused();
+    await remote.press('up', 'up', 'right');
+    await expect(dialog.getByRole('tab', { name: 'Качество', exact: true })).toBeFocused();
+    await player.script({ tracks: { audio: [
+      { id: 'a', lang: 'rus', label: 'rus · Studio A' },
+      { id: 'b', lang: 'rus', label: 'rus · Studio B', selected: true },
+    ], subtitles: [{ id: 'sub', lang: 'eng', label: 'eng · SDH', selected: true }] } });
+    await remote.press('down', 'down', 'ok');
+    await expect.poll(() => player.loads()).toEqual([
+      { url: streamUrl(RIVER_VIDEO, '1080p', 'hls4'), startAt: 1200 },
+      { url: streamUrl(RIVER_VIDEO, '1080p', 'http'), startAt: 1200 },
+    ]);
+    await expect(dialog.getByRole('button', { name: '1080p ✓ Выбрано', exact: true })).toBeFocused();
+    expect(await player.state()).toBe('paused');
+    await remote.press('up', 'up', 'left', 'down', 'down');
+    await expect(dialog.getByRole('button', { name: 'русский · Studio B ✓ Выбрано', exact: true })).toBeFocused();
+    await expect(dialog.getByRole('button', { name: 'русский · Studio A', exact: true })).toHaveAttribute('aria-pressed', 'false');
+    await remote.press('back');
+    await expect(page.locator('.playback-pills')).toContainText('Аудио: русский · Studio B');
+    await expect(subtitles).toContainText('Субтитры: английский · SDH');
+    await expect(page.locator('.playback-pills')).not.toContainText('После продолжения');
+    expect(await player.seeks()).toEqual([]);
+  });
+
+  test('Up opens Audio/Subtitles directly; tabs and Back preserve playback remote semantics', async ({ app, api, clock, page, remote, player }) => {
+    river(api);
+    await clock.pause();
+    await app.open();
+    await playFromHero(page, remote);
+
+    await remote.press('up');
+    const dialog = page.getByRole('dialog', { name: 'Настройки воспроизведения' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: 'Аудио и субтитры' })).toBeFocused();
+    await remote.press('right');
+    await expect(dialog.getByRole('tab', { name: 'Качество', exact: true })).toBeFocused();
+    await remote.press('left', 'left');
+    await expect(dialog.getByRole('tab', { name: 'Информация' })).toBeFocused();
+    await remote.press('back');
+    await expect(dialog).toHaveCount(0);
+    await expect(progressBar(page)).toBeVisible();
+    expect(await player.state()).toBe('playing');
+    expect(await player.seeks()).toEqual([]);
+    await remote.press('ok');
+    expect(await player.state()).toBe('paused');
+  });
+
   test('hide after 4 s without input and come back on any key', async ({ app, api, clock, page, remote }) => {
     river(api);
     await clock.pause();
@@ -138,6 +280,26 @@ test.describe('controls', () => {
 });
 
 test.describe('seeking', () => {
+  test('preview stays inside the timeline at both ends and distinguishes the playing position', async ({ app, api, clock, page, remote, player }) => {
+    river(api);
+    await clock.pause();
+    await app.open();
+    await playFromHero(page, remote);
+    await remote.press('left');
+    const preview = page.locator('.player-bar__preview');
+    await expect(preview).toContainText('Перемотка');
+    await expect(page.locator('.player-controls__times')).toContainText('Сейчас 0:00');
+    for (const target of [0, DURATION - 1]) {
+      await player.time(target);
+      await clock.runFor(1_000);
+      await remote.press(target === 0 ? 'left' : 'right');
+      const box = await preview.boundingBox();
+      const bar = await progressBar(page).boundingBox();
+      expect(box!.x).toBeGreaterThanOrEqual(bar!.x);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(bar!.x + bar!.width);
+    }
+  });
+
   test('◀▶ step 10 s, then 30 s, then 60 s while held, preview the time, and seek once', async ({ app, api, clock, page, remote, player }) => {
     river(api, 20 * 60);
     await clock.pause();
@@ -147,7 +309,7 @@ test.describe('seeking', () => {
     // Held: three 10 s steps, three 30 s steps, then 60 s steps.
     await remote.repeat('right', 7);
     await expect(progressBar(page)).toHaveAttribute('aria-valuetext', '23:00 из 1:40:00');
-    await expect(page.locator('.player-bar__preview')).toHaveText('23:00');
+    await expect(page.locator('.player-bar__preview-time')).toHaveText('23:00');
     expect(await player.seeks()).toEqual([]);
 
     await clock.runFor(1_000);

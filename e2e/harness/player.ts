@@ -28,8 +28,9 @@ export interface PlayerScript {
   loadError?: 'network' | 'media' | 'unsupported';
   /** Scripted tracks the stream reports once loaded. */
   tracks?: {
-    audio?: Array<{ id: string; label: string; lang: string }>;
-    subtitles?: Array<{ id: string; label: string; lang: string }>;
+    audio?: Array<{ id: string; label: string; lang: string; selected?: boolean; pending?: boolean }>;
+    subtitles?: Array<{ id: string; label: string; lang: string; selected?: boolean; pending?: boolean }>;
+    subtitlesOff?: boolean;
     qualities?: Array<{ id: string; label: string }>;
   };
 }
