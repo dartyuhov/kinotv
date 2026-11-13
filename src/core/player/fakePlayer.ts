@@ -23,6 +23,7 @@ export type FakePlayerCall =
 
 /** Set by tests before the player opens. Applies to every later load; `loadError` to the next one only. */
 export interface FakePlayerScript {
+  loadDelayMs?: number;
   adaptiveBitrate?: boolean;
   duration?: number;
   loadError?: PlayerErrorKind;
@@ -68,7 +69,8 @@ class FakePlayer implements PlayerAdapter {
     calls.push({ op: 'load', url: source.url, startAt });
     this.stopTicking();
     this.setState('loading');
-    await Promise.resolve();
+    if (script.loadDelayMs) await new Promise((resolve) => setTimeout(resolve, script.loadDelayMs));
+    else await Promise.resolve();
     const { loadError } = script;
     if (loadError) {
       script = { ...script, loadError: undefined };

@@ -254,3 +254,11 @@ export interface Collection {
 export interface CollectionPage extends Page<ItemSummary> {
   collection: Collection;
 }
+/** Live identities are independent of catalog item/media ids. URLs stay in memory only. */
+export interface LiveChannel {
+  id: string;
+  title: string;
+  name?: string;
+  logoUrl?: string;
+  playback: { kind: 'hls'; url: string } | { kind: 'unavailable'; reason: 'missing-stream' | 'unsupported-stream' };
+}
