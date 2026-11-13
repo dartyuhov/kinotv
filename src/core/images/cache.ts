@@ -323,6 +323,7 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
       if (signal.aborted) throw new Error('Artwork cancelled');
       const key = await exclusive(() => keyFor(source));
       let cached: Awaited<ReturnType<typeof decodeRecord>> | undefined;
+      let preparedReplacement = false;
       if (available) {
         try {
           cached = await exclusive(async () => signal.aborted ? undefined : readRecord(key));
@@ -334,7 +335,7 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
                 if (prepared !== cached.payload) {
                   cached.payload = prepared;
                   cached.metadata = { ...cached.metadata, mime: prepared.type, size: prepared.size };
-                  await persist(key, cached.metadata, prepared, epoch, signal);
+                  preparedReplacement = true;
                 }
               }
               if (epoch === generation) { entries.set(key, cached.metadata); validated.add(key); }
@@ -352,9 +353,17 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
       else counters.misses++;
       if (cached) remember(key, cached.metadata, cached.payload, epoch);
       const fresh = cached && cached.metadata.freshUntil > now() && !hasDirective(policy, 'no-cache');
-      if (fresh && cached) { image.finish(); return publish(image, cached.payload); }
+      if (fresh && cached) {
+        // Match downloads: show validated bytes before replacement-file I/O,
+        // while ready/settled still wait for bounded persistent admission.
+        const url = publish(image, cached.payload);
+        if (preparedReplacement) await persist(key, cached.metadata, cached.payload, epoch, signal);
+        image.finish();
+        return url;
+      }
       const staleAllowed = cached && !hasDirective(policy, 'no-cache') && !hasDirective(policy, 'must-revalidate');
       if (staleAllowed && cached) publish(image, cached.payload);
+      if (preparedReplacement && cached) await persist(key, cached.metadata, cached.payload, epoch, signal);
       const refresh = async (): Promise<string | undefined> => {
         try { return await scheduled(image, async () => {
           const controller = new AbortController();
