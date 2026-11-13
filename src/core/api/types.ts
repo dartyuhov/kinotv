@@ -46,6 +46,15 @@ export interface Page<T> {
   pagination: Pagination;
 }
 
+/** Latest historical media for a title, after all-page ordering and deduplication. */
+export interface HistoryEntry {
+  item: ItemSummary;
+  mediaId: number | null;
+  duration: number;
+  time: number;
+  lastSeen: number;
+}
+
 /** An item in catalog lists (`/v1/items`, fresh, hot, popular, search, bookmarks). Lists carry no files. */
 export interface ItemSummary {
   id: number;

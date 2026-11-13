@@ -8,6 +8,7 @@ import { IWatchTab } from '../screens/iwatch/IWatchTab';
 import { PlaceholderTab } from '../screens/placeholder/PlaceholderTab';
 import { SearchTab } from '../screens/search/SearchTab';
 import { SettingsTab } from '../screens/settings/SettingsTab';
+import { HistoryTab } from '../screens/history/HistoryTab';
 import type { TabId } from './tabs';
 import './TabContent.css';
 
@@ -23,7 +24,7 @@ const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
   tv: PlaceholderTab,
   sport: PlaceholderTab,
   bookmarks: BookmarksTab,
-  history: PlaceholderTab,
+  history: HistoryTab,
   settings: SettingsTab,
 };
 

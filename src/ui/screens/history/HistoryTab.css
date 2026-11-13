@@ -1,0 +1,4 @@
+.history { padding-top: 40px; }
+.history h1 { margin: 0 var(--screen-gutter); font-size: 40px; }
+.history__status { min-height: 32px; margin: 20px var(--screen-gutter); font-size: 24px; }
+.history > .button { margin-left: var(--screen-gutter); }
