@@ -55,6 +55,8 @@ class AvPlayAdapter implements PlayerAdapter {
   private pendingAudio?: string;
   private pendingSubtitle: string | null = null;
   private externalSubtitleShift = 0;
+  private externalSubtitlePath?: string;
+  private selectedExternalPath?: string;
   private selectedAudio?: string;
   private selectedSubtitle: string | null = null;
   private subtitlePending = false;
@@ -87,6 +89,8 @@ class AvPlayAdapter implements PlayerAdapter {
     this.pendingAudio = undefined;
     this.pendingSubtitle = null;
     this.externalSubtitleShift = 0;
+    this.externalSubtitlePath = undefined;
+    this.selectedExternalPath = undefined;
     this.selectedAudio = undefined;
     this.selectedSubtitle = null;
     this.subtitlePending = false;
@@ -214,6 +218,7 @@ class AvPlayAdapter implements PlayerAdapter {
       audio: this.tracks.audio.map((t) => ({ ...t, selected: t.id === this.selectedAudio, pending: t.id === this.pendingAudio })),
       subtitles: this.tracks.subtitles.map((t) => ({ ...t, selected: t.id === this.selectedSubtitle, pending: this.subtitlePending && t.id === this.pendingSubtitle })),
       subtitlesOff: this.selectedSubtitle === null, qualities: [],
+      externalSubtitle: { selected: this.selectedSubtitle === 'external', pending: this.subtitlePending && this.pendingSubtitle === 'external', path: this.selectedExternalPath },
     };
   }
 
@@ -248,9 +253,11 @@ class AvPlayAdapter implements PlayerAdapter {
         this.releaseSubtitle = release;
         if (!this.current(generation) || signal?.aborted) throw cancelled;
         this.externalSubtitleShift = Math.round(shift * 1000);
+        this.externalSubtitlePath = localPath;
         // setSilentSubtitle is NOT valid in asynchronously prepared READY; apply on play instead.
         this.pendingSubtitle = 'external';
         this.subtitlePending = true;
+        this.notifyTracks();
         this.applySubtitle();
       } catch (error) { throw playerError(error); }
     }).catch(async (error: unknown) => { if (this.releaseSubtitle !== release) await release?.(); throw error; });
@@ -503,6 +510,7 @@ class AvPlayAdapter implements PlayerAdapter {
       this.api.setSilentSubtitle(false);
     }
     this.selectedSubtitle = this.pendingSubtitle;
+    this.selectedExternalPath = this.pendingSubtitle === 'external' ? this.externalSubtitlePath : undefined;
     this.subtitlePending = false;
     this.notifyTracks();
   }

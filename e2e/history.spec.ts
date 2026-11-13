@@ -7,6 +7,27 @@ async function history(remote: Remote) { await remote.press('right', 'right', 'r
 const series = fakeSeries(851, 'Гавань', [['Первая', 'Вторая'], ['Третья']]);
 const film = fakeFilm(852, 'Река');
 
+for (const leave of ['tab', 'back'] as const) test(`late History open cannot navigate after leaving by ${leave}`, async ({ app, api, page, remote, player }) => {
+  fakeHome(api, { hot: [film], movies: [], serials: [], progress: {} });
+  fakeHistory(api, [[historyEntry(film, film.videos![0]!, 300, 200)]]);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  api.on('GET', '/v1/items/852', async () => { await gate; return { json: { item: film } }; });
+  await app.open();
+  await history(remote);
+  await expect(page.getByRole('button', { name: 'Река, Сохранено: 5 мин' })).toBeVisible();
+  await remote.press('down', 'ok');
+  await expect(page.locator('.history').getByRole('status')).toHaveText('Загрузка видео…');
+  await remote.press('back');
+  if (leave === 'tab') await remote.press('left');
+  else await remote.press('back');
+  release();
+  await expect.poll(() => api.requestsTo('GET', '/v1/items/852').length).toBe(1);
+  await page.waitForTimeout(150);
+  await expect(page.locator('[data-screen="player"]')).toHaveCount(0);
+  expect(await player.loads()).toHaveLength(0);
+});
+
 test('all pages determine order and latest title media; exact episode resumes, progress refreshes after playback', async ({ app, api, page, remote, player }) => {
   fakeHome(api, { hot: [film], movies: [], serials: [], progress: {
     [series.id]: seriesProgress(series, [[1, 1, 'watched'], [1, 2, 600]]),

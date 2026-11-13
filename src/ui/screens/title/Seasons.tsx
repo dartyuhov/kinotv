@@ -1,10 +1,7 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from '../../../core/services';
-import { markEpisodesWatched } from '../../../core/catalog/markWatched';
-import { queryClient, watchingQuery } from '../../app/queries';
-import { continueWatchingQuery } from '../home/homeQueries';
-import { followingQuery } from '../../app/following';
+import { watchedActions } from '../../../core/services';
+import { invalidateProgress } from '../../app/progressInvalidation';
 import { Button } from '../../components/Button';
 import type { ItemDetails, Season, Video } from '../../../core/api/types';
 import { formatDuration } from '../../../core/catalog/facts';
@@ -57,7 +54,7 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
   }, [item.id, next, seasons]);
 
   const season = active.number;
-  const [selected, setSelected] = useState<Video | null>(null);
+  const [selected, setSelected] = useState<{ season: number; episode: number } | null>(null);
   const [message, setMessage] = useState('');
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
@@ -67,16 +64,15 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
     setPending(true);
     setMessage('');
     try {
-      const result = await markEpisodesWatched(api, item.id, season, episodes);
+      const result = await watchedActions().episodes(item.id, season, episodes);
       setMessage(t(result.failed ? 'title.markPartial' : 'title.markDone', { confirmed: result.confirmed, failed: result.failed }));
     } finally {
-      await Promise.all([watchingQuery(item.id).queryKey, continueWatchingQuery.queryKey, followingQuery.queryKey, ['history']].map((queryKey) =>
-        queryClient.invalidateQueries({ queryKey })));
+      await invalidateProgress(item.id);
       busy.current = false;
       setPending(false);
     }
   };
-  const selectedEpisode = active.episodes.find((e) => e.number === selected?.number) ?? active.episodes[0]!;
+  const selectedEpisode = active.episodes.find((e) => selected?.season === season && e.number === selected.episode) ?? active.episodes[0]!;
   const onPick = useCallback((n: number) => pickSeason(item.id, n), [item.id, pickSeason]);
   const onEpisodePress = useCallback(
     (episode: Video) => {
@@ -106,7 +102,7 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
         itemKey={episodeNumber}
         renderCard={renderCard}
         onItemPress={onEpisodePress}
-        onItemFocus={setSelected}
+        onItemFocus={(episode) => setSelected({ season, episode: episode.number })}
       />
       <div className="season-watched-actions" aria-busy={pending}>
         <Button focusKey={`title:${item.id}:mark-episode`} label={t('title.markEpisode', { n: selectedEpisode.number })}

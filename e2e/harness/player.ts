@@ -13,6 +13,7 @@ export type PlayerCall =
   | { op: 'seek'; to: number }
   | { op: 'selectAudio'; id: string }
   | { op: 'selectSubtitle'; id: string | null }
+  | { op: 'setExternalSubtitle' }
   | { op: 'selectQuality'; id: string }
   | { op: 'suspend' }
   | { op: 'restore' }
@@ -49,6 +50,7 @@ interface FakePlayerControl {
   buffering(on: boolean): void;
   end(): void;
   fail(kind: string): void;
+  confirmExternal(): void;
 }
 
 type FakeWindow = Window & { __kinotvFakePlayer: FakePlayerControl };
@@ -56,6 +58,10 @@ type FakeWindow = Window & { __kinotvFakePlayer: FakePlayerControl };
 /** Reads what the FakePlayer was asked to do and gives it cues (time, buffering, end, errors). */
 export class FakePlayerRemote {
   constructor(private readonly page: Page) {}
+
+  async confirmExternal(): Promise<void> {
+    await this.page.evaluate(() => (window as unknown as FakeWindow).__kinotvFakePlayer.confirmExternal());
+  }
 
   /** Every call the app made to the player, in order. */
   calls(): Promise<PlayerCall[]> {

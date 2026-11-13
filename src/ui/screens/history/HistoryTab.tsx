@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { HistoryEntry } from '../../../core/api/types';
 import { api } from '../../../core/services';
 import { historyTarget } from '../../../core/catalog/history';
@@ -20,19 +20,23 @@ export function HistoryTab() {
   const [focused, setFocused] = useState<HistoryEntry | null>(null);
   const [message, setMessage] = useState('');
   const busy = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current++; }, []);
   useRootBackdrop((focused ?? query.data?.[0])?.item.posters ?? null);
   const open = async (entry: HistoryEntry) => {
     if (busy.current) return;
     if (!entry.mediaId) { setMessage(t('history.unavailable')); return; }
     busy.current = true;
+    const request = generation.current;
     setMessage(t('history.opening'));
     try {
       const [item, progress] = await Promise.all([api.item(entry.item.id), api.watching(entry.item.id)]);
+      if (request !== generation.current) return;
       const target = historyTarget(item, entry, progress);
       if (!target) { setMessage(t('history.unavailable')); return; }
       setMessage('');
       screenStack.push('player', target);
-    } catch { setMessage(t('history.openFailed')); }
+    } catch { if (request === generation.current) setMessage(t('history.openFailed')); }
     finally { busy.current = false; }
   };
   const state = query.isError ? t('history.failed') : query.isPending ? t('history.loading')

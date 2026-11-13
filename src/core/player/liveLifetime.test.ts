@@ -4,6 +4,36 @@ import type { AvPlay } from '../platform/avplay';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('reports external subtitles pending in async READY until activation commands succeed on play', async () => {
+  let state: ReturnType<AvPlay['getState']> = 'NONE';
+  const calls: string[] = [];
+  const api: AvPlay = {
+    open: () => { state = 'IDLE'; }, close: () => { state = 'NONE'; },
+    prepareAsync: (ok) => { state = 'READY'; ok(); }, getState: () => state,
+    getDuration: () => 600_000, getCurrentTime: () => 0,
+    play: () => { state = 'PLAYING'; }, pause: () => { state = 'PAUSED'; },
+    seekTo: (_to, ok) => ok(), restoreAsync: (_url, _position, _prepare, ok) => ok(), suspend() {},
+    getTotalTrackInfo: () => [], getCurrentStreamInfo: () => [],
+    setListener() {}, setDisplayRect() {}, setDisplayMethod() {}, setStreamingProperty() {}, setTimeoutForBuffering() {}, setSelectTrack() {},
+    setExternalSubtitlePath: () => { calls.push('path'); },
+    setSubtitlePosition: () => { calls.push('shift'); },
+    setSilentSubtitle: (silent) => { if (!silent) { expect(['PLAYING', 'PAUSED']).toContain(state); calls.push('visible'); } },
+  };
+  vi.stubGlobal('webapis', { avplay: api });
+  vi.stubGlobal('document', { createElement: () => ({ remove() {} }), querySelector: () => null,
+    documentElement: { classList: { add() {}, remove() {} } } });
+  const player = avplayFactory.create({ appendChild() {} } as unknown as HTMLElement);
+  await player.load({ url: 'https://stream.test/film', type: 'hls' }, { startAt: 0 });
+  await player.setExternalSubtitle!('/tmp/subtitle.srt', 1);
+  expect(calls).toEqual(['path']);
+  expect(player.getTracks().externalSubtitle).toEqual({ selected: false, pending: true, path: undefined });
+  player.play();
+  await vi.waitFor(() => expect(player.getTracks().externalSubtitle).toEqual({ selected: true, pending: false, path: '/tmp/subtitle.srt' }));
+  expect(calls).toEqual(['path', 'shift', 'visible']);
+  player.destroy();
+  await Promise.resolve();
+});
+
 it('holds the native singleton until deferred prepare completes before a replacement live adapter opens', async () => {
   const calls: string[] = [];
   const prepared: Array<() => void> = [];

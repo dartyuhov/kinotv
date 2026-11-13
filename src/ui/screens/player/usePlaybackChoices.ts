@@ -22,6 +22,7 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
   const [quality, setQuality] = useState('auto');
   const [notice, setNotice] = useState<'none' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'>('none');
   const [external, setExternal] = useState<string | null>(null);
+  const [externalPending, setExternalPending] = useState<string | null>(null);
   const control = useRef<ReturnType<typeof coordinator> | null>(null);
   const transitioning = useRef(false);
   const [qualities, setQualities] = useState<string[]>([]);
@@ -33,7 +34,7 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
     if (!player || !video || !links) return;
     const active = coordinator(player, video, links, seriesId, startAt,
       () => refreshLinksRef.current(),
-      { tracks: setTracks, qualities: setQualities, externalOptions: setExternalOptions, busy: (value) => { transitioning.current = value; setBusy(value); }, failed: setFailed, quality: setQuality, notice: setNotice, external: setExternal });
+      { tracks: setTracks, qualities: setQualities, externalOptions: setExternalOptions, busy: (value) => { transitioning.current = value; setBusy(value); }, failed: setFailed, quality: setQuality, notice: setNotice, external: setExternal, externalPending: setExternalPending });
     control.current = active;
     setQualities(fixedQualities(links.files, player.capabilities));
     setExternalOptions(active.externalOptions);
@@ -43,7 +44,7 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player, video?.id, Boolean(links)]);
 
-  return { tracks, busy, failed, quality, qualities, notice, external, externalOptions, transitioning,
+  return { tracks, busy, failed, quality, qualities, notice, external, externalPending, externalOptions, transitioning,
     chooseAudio: (id: string) => control.current?.audio(id),
     chooseSubtitle: (id: string | null) => control.current?.subtitle(id),
     chooseQuality: (id: string) => control.current?.quality(id),
@@ -56,6 +57,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     externalOptions(value: Array<{ id: string; lang: string; forced: boolean }>): void;
     tracks(value: Tracks): void; qualities(value: string[]): void; busy(value: boolean): void; failed(value: boolean): void; quality(value: string): void;
     notice(value: 'none' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'): void; external(value: string | null): void;
+    externalPending(value: string | null): void;
   }) {
   let disposed = false;
   let version = 0;
@@ -70,6 +72,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   let preference: SeriesPreference = seriesId === undefined ? {} : storage.get<SeriesPreference>(seriesKey(seriesId)) ?? {};
   let subtitleAbort: AbortController | undefined;
   let subtitleVersion = 0;
+  let submittedExternal: { id: string; path: string } | null = null;
   let manifestAbort: AbortController | undefined;
   let transport = { position: startAt, playing: true };
   let backgrounded = document.hidden;
@@ -100,6 +103,8 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   function chooseSubtitle(id: string | null, remember = true) {
     subtitleAbort?.abort();
     const request = ++subtitleVersion;
+    submittedExternal = null;
+    update.externalPending(null);
     update.notice('none');
     if (id?.startsWith('external:')) {
       const index = Number(id.slice('external:'.length));
@@ -115,12 +120,14 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       subtitleAbort = abort;
       const timer = setTimeout(() => abort.abort(), 15_000);
       update.notice('subtitleLoading');
+      update.externalPending(id);
       void files.download(subtitle.url, abort.signal).then(async (lease) => {
         if (disposed || request !== subtitleVersion) { await lease.release(); return; }
         lease.retain(); // AVPlay now owns deletion, after it replaces/closes the native source.
+        submittedExternal = { id, path: lease.path };
         await player.setExternalSubtitle!(lease.path, subtitle.shift, lease.release, abort.signal);
         if (disposed || request !== subtitleVersion) return;
-        update.external(id);
+        refreshTracks();
         update.notice('none');
         if (remember) {
           preference = { ...preference, subtitle: externalKey(index) };
@@ -128,7 +135,11 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
           save();
         }
       }).catch(() => {
-        if (!disposed && request === subtitleVersion) update.notice('subtitleFailed');
+        if (!disposed && request === subtitleVersion) {
+          submittedExternal = null;
+          update.externalPending(null);
+          update.notice('subtitleFailed');
+        }
       }).finally(() => clearTimeout(timer));
       return;
     }
@@ -139,13 +150,17 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       save();
     }
     player.selectSubtitle(id);
-    update.external(null);
   }
 
   function refreshTracks() {
     if (disposed) return;
     const tracks = player.getTracks();
     update.tracks(tracks);
+    if (submittedExternal && tracks.externalSubtitle?.selected && !tracks.externalSubtitle.pending && tracks.externalSubtitle.path === submittedExternal.path) {
+      update.external(submittedExternal.id);
+      update.externalPending(null);
+      submittedExternal = null;
+    } else if (tracks.externalSubtitle?.selected === false) update.external(null);
     if (busy) return;
     // Metadata can arrive after the initial native track list. Apply each semantic preference once
     // when it actually matches, marking BEFORE commands that synchronously emit another event.
@@ -187,6 +202,8 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     update.busy(true);
     update.failed(false);
     update.external(null);
+    update.externalPending(null);
+    submittedExternal = null;
     update.notice('none');
     if (from === 0) chainStarted = Date.now();
     activeQuality = quality;
@@ -230,7 +247,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     update.failed(true);
   }
 
-  async function start(position: number) {
+  async function start(position: number, playing: boolean) {
     // Discover the actual master ladder before offering fixed choices or restoring saved quality.
     // Only supplied URLs, cached in memory for this episode; no synthesized/local playlist.
     busy = true;
@@ -249,12 +266,12 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     const available = availableQualities();
     update.qualities(available);
     if (!['auto', ...available].includes(desiredQuality)) desiredQuality = 'auto';
-    await load(desiredQuality, position, true);
+    await load(desiredQuality, position, playing);
   }
 
   return {
     externalOptions,
-    start() { void start(startAt); },
+    start() { void start(startAt, true); },
     quality(id: string) {
       if (!['auto', ...availableQualities()].includes(id)) return;
       if (busy) return;
@@ -287,8 +304,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
           manifestCache.clear();
           externalOptions = getExternalOptions();
           update.externalOptions(externalOptions);
-          visibilityPauseIntent = backgrounded;
-          await start(transport.position);
+          await start(transport.position, transport.playing);
         } catch {
           if (disposed || request !== version) return;
           busy = false;

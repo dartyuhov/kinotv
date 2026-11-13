@@ -51,6 +51,8 @@ export interface Tracks {
   subtitles: SubtitleTrack[];
   qualities: Quality[];
   subtitlesOff?: boolean;
+  /** External activation commands applied by the adapter; not proof of rendered TV output. */
+  externalSubtitle?: { selected: boolean; pending: boolean; path?: string };
 }
 
 /**
