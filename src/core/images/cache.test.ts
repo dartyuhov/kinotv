@@ -181,6 +181,73 @@ it('migrates an existing oversized representation without a network transfer or 
   restored.release();
 });
 
+it('presents prepared persistent artwork before its replacement write, while settlement still waits for admission', async () => {
+  const inner = createBrowserImageStore();
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const seed = createImageCache({ store: inner, transport, validate });
+  const initial = seed.acquire(source);
+  await initial.ready;
+  initial.release();
+  let finishWrite!: () => void;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    await new Promise<void>((resolve) => { finishWrite = resolve; });
+    await inner.writeTemporary(key, blob);
+  } };
+  const restarted = createImageCache({ store, transport,
+    validate: async () => new Blob([new Uint8Array(20)], { type: 'image/webp' }) });
+  const lease = restarted.acquire(source);
+  const show = vi.fn();
+  lease.subscribe(show);
+  let settled = false;
+  void lease.settled.then(() => { settled = true; });
+  try {
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+    expect(show).toHaveBeenCalledWith(expect.stringMatching(/^blob:/));
+    expect((await (await fetch(show.mock.calls[0]![0])).blob()).size).toBe(20);
+    expect(settled).toBe(false);
+    expect(transport).toHaveBeenCalledTimes(1);
+  } finally {
+    finishWrite();
+    await lease.settled;
+    lease.release();
+  }
+  const restored = createImageCache({ store: inner, transport, validate }).acquire(source);
+  expect((await (await fetch((await restored.ready)!)).blob()).type).toBe('image/webp');
+  expect(transport).toHaveBeenCalledTimes(1);
+  restored.release();
+});
+
+it('releases a prepared persistent display during admission and fences its cancelled replacement', async () => {
+  const inner = createBrowserImageStore();
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const seed = createImageCache({ store: inner, transport, validate });
+  const initial = seed.acquire(source);
+  await initial.ready;
+  initial.release();
+  let finishWrite!: () => void;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    await new Promise<void>((resolve) => { finishWrite = resolve; });
+    await inner.writeTemporary(key, blob);
+  } };
+  const restarted = createImageCache({ store, transport,
+    validate: async () => new Blob([new Uint8Array(20)], { type: 'image/webp' }) });
+  const lease = restarted.acquire(source);
+  const show = vi.fn();
+  lease.subscribe(show);
+  await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+  const url = show.mock.calls[0]![0] as string;
+  lease.release();
+  await expect(fetch(url)).rejects.toThrow();
+  finishWrite();
+  await lease.settled;
+  expect(await lease.ready).toBeUndefined();
+  expect((await inner.list()).some((file) => file.key.startsWith('tmp-'))).toBe(false);
+  const restored = createImageCache({ store: inner, transport, validate }).acquire(source);
+  expect((await (await fetch((await restored.ready)!)).blob()).size).toBe(100);
+  expect(transport).toHaveBeenCalledTimes(1);
+  restored.release();
+});
+
 it('deduplicates full URLs across roles, keeps another lease alive, and releases its last display resource', async () => {
   let answer!: (response: Response) => void;
   const transport = vi.fn<ImageTransport>(() => new Promise((resolve) => { answer = resolve; }));
