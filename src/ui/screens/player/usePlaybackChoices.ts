@@ -15,7 +15,7 @@ const emptyTracks = (): Tracks => ({ audio: [], subtitles: [], qualities: [] });
 
 /** One source coordinator per episode. Background query refetches never become load commands. */
 export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | null, links: MediaLinks | undefined,
-  seriesId: number | undefined, startAt: number) {
+  seriesId: number | undefined, startAt: number, refreshLinks: () => Promise<MediaLinks>) {
   const [tracks, setTracks] = useState<Tracks>(emptyTracks);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -26,11 +26,14 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
   const transitioning = useRef(false);
   const [qualities, setQualities] = useState<string[]>([]);
   const [externalOptions, setExternalOptions] = useState<Array<{ id: string; lang: string; forced: boolean }>>([]);
+  const refreshLinksRef = useRef(refreshLinks);
+  refreshLinksRef.current = refreshLinks;
 
   useEffect(() => {
     if (!player || !video || !links) return;
     const active = coordinator(player, video, links, seriesId, startAt,
-      { tracks: setTracks, qualities: setQualities, busy: (value) => { transitioning.current = value; setBusy(value); }, failed: setFailed, quality: setQuality, notice: setNotice, external: setExternal });
+      () => refreshLinksRef.current(),
+      { tracks: setTracks, qualities: setQualities, externalOptions: setExternalOptions, busy: (value) => { transitioning.current = value; setBusy(value); }, failed: setFailed, quality: setQuality, notice: setNotice, external: setExternal });
     control.current = active;
     setQualities(fixedQualities(links.files, player.capabilities));
     setExternalOptions(active.externalOptions);
@@ -49,7 +52,8 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
 }
 
 function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, seriesId: number | undefined,
-  startAt: number, update: {
+  startAt: number, refreshLinks: () => Promise<MediaLinks>, update: {
+    externalOptions(value: Array<{ id: string; lang: string; forced: boolean }>): void;
     tracks(value: Tracks): void; qualities(value: string[]): void; busy(value: boolean): void; failed(value: boolean): void; quality(value: string): void;
     notice(value: 'none' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'): void; external(value: string | null): void;
   }) {
@@ -80,10 +84,11 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   let activeQuality = desiredQuality;
   let chainStarted = 0;
   const files = createSubtitleFiles();
-  const externalOptions = player.setExternalSubtitle && files.available ? links.subtitles.flatMap((s, index) => {
+  const getExternalOptions = () => player.setExternalSubtitle && files.available ? links.subtitles.flatMap((s, index) => {
     if (!s.url || !/\.(srt|vtt|ttml)(?:\?|$)/i.test(s.url)) return [];
     return [{ id: `external:${index}`, lang: s.lang, forced: s.forced === true }];
   }) : [];
+  let externalOptions = getExternalOptions();
   const save = () => { if (seriesId !== undefined) storage.set(seriesKey(seriesId), preference); };
   const externalKey = (index: number) => {
     const subtitle = links.subtitles[index];
@@ -225,31 +230,31 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     update.failed(true);
   }
 
+  async function start(position: number) {
+    // Discover the actual master ladder before offering fixed choices or restoring saved quality.
+    // Only supplied URLs, cached in memory for this episode; no synthesized/local playlist.
+    busy = true;
+    update.busy(true);
+    const abort = new AbortController();
+    manifestAbort = abort;
+    if (player.capabilities.adaptiveBitrate) {
+      const sources = streamCandidates(links.files, player.capabilities).filter((source) => source.type !== 'http').slice(0, 2);
+      manifests = await Promise.all(sources.map(async (source) => {
+        const manifest = await readManifest(source.url, abort.signal);
+        manifestCache.set(source.url, manifest);
+        return { ...source, manifest };
+      }));
+    }
+    if (disposed || abort.signal.aborted) return;
+    const available = availableQualities();
+    update.qualities(available);
+    if (!['auto', ...available].includes(desiredQuality)) desiredQuality = 'auto';
+    await load(desiredQuality, position, true);
+  }
+
   return {
     externalOptions,
-    start() {
-      // Discover the actual master ladder before offering fixed choices or restoring saved quality.
-      // Only supplied URLs, cached in memory for this episode; no synthesized/local playlist.
-      busy = true;
-      update.busy(true);
-      const abort = new AbortController();
-      manifestAbort = abort;
-      void (async () => {
-        if (player.capabilities.adaptiveBitrate) {
-          const sources = streamCandidates(links.files, player.capabilities).filter((source) => source.type !== 'http').slice(0, 2);
-          manifests = await Promise.all(sources.map(async (source) => {
-            const manifest = await readManifest(source.url, abort.signal);
-            manifestCache.set(source.url, manifest);
-            return { ...source, manifest };
-          }));
-        }
-        if (disposed || abort.signal.aborted) return;
-        const available = availableQualities();
-        update.qualities(available);
-        if (!['auto', ...available].includes(desiredQuality)) desiredQuality = 'auto';
-        await load(desiredQuality, startAt, true);
-      })();
-    },
+    start() { void start(startAt); },
     quality(id: string) {
       if (!['auto', ...availableQualities()].includes(id)) return;
       if (busy) return;
@@ -267,7 +272,31 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       player.selectAudio(id);
     },
     subtitle: chooseSubtitle,
-    retry() { if (!busy) { visibilityPauseIntent = backgrounded; void load(desiredQuality, transport.position, true); } },
+    retry() {
+      if (busy || disposed) return;
+      busy = true;
+      update.busy(true);
+      update.failed(false);
+      const request = ++version;
+      void (async () => {
+        try {
+          const fresh = await refreshLinks();
+          if (disposed || request !== version) return;
+          links = fresh;
+          manifests = [];
+          manifestCache.clear();
+          externalOptions = getExternalOptions();
+          update.externalOptions(externalOptions);
+          visibilityPauseIntent = backgrounded;
+          await start(transport.position);
+        } catch {
+          if (disposed || request !== version) return;
+          busy = false;
+          update.busy(false);
+          update.failed(true);
+        }
+      })();
+    },
     dispose() { disposed = true; ++version; ++subtitleVersion; subtitleAbort?.abort(); manifestAbort?.abort(); offVisibility(); offTracks(); offTime(); offState(); offError(); void files.dispose(); },
   };
 }
