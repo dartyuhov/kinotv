@@ -1,4 +1,9 @@
 {
+  "title.markEpisode": "Mark episode {n} watched",
+  "title.markSeason": "Mark season {n} watched",
+  "title.markPending": "Saving…",
+  "title.markDone": "Watched: {confirmed}",
+  "title.markPartial": "Confirmed: {confirmed}. Unconfirmed: {failed}. Try again.",
   "tabs.search": "Search",
   "tabs.home": "Home",
   "tabs.movies": "Movies",

@@ -6,6 +6,15 @@
   bottom: 8px;
 }
 
+.season-watched-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 0 var(--screen-gutter) 16px;
+  min-height: 64px;
+}
+.season-watched-actions [role='status'] { font-size: 22px; max-width: 560px; }
+
 /* Shifted left by a tab's inner space, so the first tab's text lines up with the details above. */
 .season-tabs {
   position: relative;
