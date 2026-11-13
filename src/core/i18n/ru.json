@@ -1,4 +1,12 @@
 {
+  "history.loading": "Загрузка истории…",
+  "history.failed": "Не удалось загрузить историю",
+  "history.empty": "История просмотров пуста",
+  "history.retry": "Повторить загрузку истории",
+  "history.unavailable": "Историческое видео недоступно",
+  "history.opening": "Загрузка видео…",
+  "history.openFailed": "Не удалось открыть видео. Повторите попытку.",
+  "history.position": "Сохранено: {time}",
   "title.markEpisode": "Отметить серию {n} просмотренной",
   "title.markSeason": "Отметить сезон {n} просмотренным",
   "title.markPending": "Сохранение…",

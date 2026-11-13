@@ -1,4 +1,12 @@
 {
+  "history.loading": "Loading history…",
+  "history.failed": "Could not load history",
+  "history.empty": "Your viewing history is empty",
+  "history.retry": "Retry loading history",
+  "history.unavailable": "Historical video unavailable",
+  "history.opening": "Loading video…",
+  "history.openFailed": "Could not open video. Try again.",
+  "history.position": "Saved: {time}",
   "title.markEpisode": "Mark episode {n} watched",
   "title.markSeason": "Mark season {n} watched",
   "title.markPending": "Saving…",

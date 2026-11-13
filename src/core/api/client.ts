@@ -24,6 +24,7 @@ import type {
   Subtitle,
   VideoFile,
   StreamUrls,
+  HistoryEntry,
 } from './types';
 
 export interface DevicePlaybackSettings {
@@ -74,6 +75,8 @@ export interface ItemsQuery {
  * network, timeout and 5xx errors) and POST with `form` for writes.
  */
 export interface ApiClient {
+  /** All history pages, ordered locally by documented last_seen, latest media per title. */
+  history(): Promise<HistoryEntry[]>;
   /** The signed-in account and its subscription. */
   user(): Promise<User>;
   /** Registers this device in the account's device list, or updates its entry. */
@@ -155,6 +158,36 @@ export interface WatchedVideo {
 
 export function createApiClient(http: Http): ApiClient {
   return {
+    async history() {
+      const latest = new Map<number, HistoryEntry>();
+      // No documented server ordering: never present a sorted prefix as global newest-first.
+      for (let page = 1; ; page++) {
+        const res = await http<{ history?: Array<{ item?: Partial<ItemSummary> | null; media?: { id?: unknown; duration?: unknown } | null; time?: unknown; last_seen?: unknown }>;
+          pagination?: Partial<Record<keyof Pagination, unknown>> }>({ method: 'GET', path: '/v1/history', query: { page, perpage: 50 } });
+        if (!Array.isArray(res.history)) throw new Error('History response unavailable');
+        const paging = pagination(res.pagination);
+        if (res.pagination?.total === undefined || !Number.isSafeInteger(paging.total) || paging.total < 0 || paging.total > 200
+          || (paging.total > 0 && paging.current !== page)) {
+          throw new Error('History pagination unsupported');
+        }
+        for (const raw of res.history) {
+          const id = num(raw.item?.id);
+          const lastSeen = Number(raw.last_seen);
+          if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(lastSeen) || lastSeen < 0) continue;
+          const mediaId = num(raw.media?.id);
+          const entry: HistoryEntry = {
+            item: { ...raw.item, id, type: raw.item?.type ?? '', subtype: raw.item?.subtype ?? '',
+              title: raw.item?.title || `#${id}`, posters: raw.item?.posters ?? NO_POSTERS },
+            mediaId: Number.isSafeInteger(mediaId) && mediaId > 0 ? mediaId : null,
+            duration: Math.max(0, num(raw.media?.duration)),
+            time: Math.max(0, num(raw.time)), lastSeen,
+          };
+          if (!latest.has(id) || latest.get(id)!.lastSeen < lastSeen) latest.set(id, entry);
+        }
+        if (page >= paging.total) break;
+      }
+      return [...latest.values()].sort((a, b) => b.lastSeen - a.lastSeen || a.item.id - b.item.id);
+    },
     async user() {
       const res = await http<{ user: User }>({ method: 'GET', path: '/v1/user' });
       return res.user;

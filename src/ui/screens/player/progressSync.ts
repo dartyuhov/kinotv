@@ -22,10 +22,10 @@ export const mediaLinksQuery = (mediaId: number) =>
 /**
  * Queries that show the viewer's progress. They are refreshed after every progress write, so Home's
  * Continue watching, I Watch's new-episode counts and the title page match what was just watched.
- * (History, ticket 14, adds its key.)
+ * History also refreshes ordering and the exact saved historical position.
  */
 function progressQueryKeys(itemId: number) {
-  return [watchingQuery(itemId).queryKey, continueWatchingQuery.queryKey, followingQuery.queryKey];
+  return [watchingQuery(itemId).queryKey, continueWatchingQuery.queryKey, followingQuery.queryKey, ['history']];
 }
 
 /**
