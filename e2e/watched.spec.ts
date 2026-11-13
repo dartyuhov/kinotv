@@ -4,6 +4,22 @@ import { expect, test } from './harness/test';
 
 const series = fakeSeries(831, 'Гавань', [['Первая', 'Вторая', 'Третья'], ['Другая']]);
 
+test('switching seasons does not reinterpret the previous focused episode number', async ({ app, api, page, remote }) => {
+  const overlapping = fakeSeries(832, 'Сезоны', [['Один', 'Два'], ['Новый один', 'Новый два']]);
+  fakeHome(api, { hot: [overlapping], movies: [], serials: [], progress: {} });
+  fakeWatched(api, overlapping);
+  await app.open();
+  await remote.press('down', 'ok');
+  await expect(app.focused).toHaveAccessibleName('Смотреть S1 · E1');
+  await remote.press('down', 'down', 'right');
+  await expect(app.focused).toHaveAccessibleName('2. Два');
+  await remote.press('up', 'right');
+  await expect(page.getByRole('tab', { name: 'Сезон 2', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: 'Отметить серию 1 просмотренной', exact: true })).toBeVisible();
+  await remote.press('down', 'down', 'ok');
+  await expect.poll(() => api.requestsTo('GET', '/v1/watching/toggle').map((r) => [r.query.season, r.query.video])).toEqual([['2', '1']]);
+});
+
 test('remote episode action preserves play, skips fresh watched and persists across reload', async ({ app, api, page, remote, player }) => {
   fakeHome(api, { hot: [series], movies: [], serials: [], progress: {} });
   const service = fakeWatched(api, series);
@@ -55,4 +71,31 @@ test('season action guards repeated OK, reconciles lost response, shows partial 
   await remote.press('ok');
   await expect(page.locator('[data-screen="title"]').getByRole('status')).toHaveText('Просмотрено: 3');
   expect(api.requestsTo('GET', '/v1/watching/toggle').map((r) => r.query.video)).toEqual(['2', '3', '3']);
+});
+
+test('leaving and reopening while a manual toggle is pending shares the playback watched owner', async ({ app, api, page, remote, player, clock }) => {
+  fakeHome(api, { hot: [series], movies: [], serials: [], progress: {} });
+  const service = fakeWatched(api, series);
+  let release!: () => void;
+  service.hold(new Promise<void>((resolve) => { release = resolve; }));
+  await clock.pause();
+  await app.open();
+  await remote.press('down', 'ok');
+  await expect(app.focused).toHaveAccessibleName('Смотреть S1 · E1');
+  await remote.press('down', 'down', 'down', 'ok');
+  await expect.poll(() => api.requestsTo('GET', '/v1/watching/toggle').length).toBe(1);
+  await remote.press('back');
+  await expect(page.locator('[data-screen="title"]')).toHaveCount(0);
+  await remote.press('ok');
+  await expect(app.focused).toHaveAccessibleName('Смотреть S1 · E1');
+  await remote.press('down', 'down', 'down', 'ok');
+  await remote.press('up', 'ok');
+  await expect.poll(() => player.state()).toBe('playing');
+  await player.time(2500); // exceeds 90% of a 45-minute episode
+  release();
+  await expect.poll(() => service.state.seasons![0]!.episodes[0]!.status).toBe(1);
+  await remote.press('stop');
+  await expect(page.getByRole('button', { name: '1. Первая, просмотрено', exact: true })).toBeVisible();
+  await api.idle();
+  expect(api.requestsTo('GET', '/v1/watching/toggle').map((r) => [r.query.season, r.query.video])).toEqual([['1', '1']]);
 });

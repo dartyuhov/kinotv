@@ -16,6 +16,7 @@ export type FakePlayerCall =
   | { op: 'seek'; to: number }
   | { op: 'selectAudio'; id: string }
   | { op: 'selectSubtitle'; id: string | null }
+  | { op: 'setExternalSubtitle' }
   | { op: 'selectQuality'; id: string }
   | { op: 'suspend' }
   | { op: 'restore' }
@@ -44,6 +45,7 @@ export interface FakePlayerControl {
   end(): void;
   /** The stream fails. */
   fail(kind: PlayerErrorKind): void;
+  confirmExternal(): void;
 }
 
 const TICK_MS = 250;
@@ -61,6 +63,7 @@ class FakePlayer implements PlayerAdapter {
   duration = 0;
   private buffering = false;
   private tracks: Tracks = NO_TRACKS;
+  private externalPath?: string;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private readonly events = createEmitter();
   readonly on = this.events.on;
@@ -119,6 +122,16 @@ class FakePlayer implements PlayerAdapter {
 
   selectSubtitle(id: string | null): void {
     calls.push({ op: 'selectSubtitle', id });
+  }
+
+  async setExternalSubtitle(path: string): Promise<void> {
+    this.externalPath = path;
+    calls.push({ op: 'setExternalSubtitle' });
+  }
+
+  confirmExternal(): void {
+    this.tracks = { ...this.tracks, externalSubtitle: { selected: true, pending: false, path: this.externalPath }, subtitlesOff: false };
+    this.events.emit('tracks', undefined);
   }
 
   async selectQuality(id: string): Promise<void> {
@@ -220,6 +233,7 @@ export function installFakePlayerControl(): void {
     buffering: (on) => current?.cueBuffering(on),
     end: () => current?.finish(),
     fail: (kind) => current?.fail(kind),
+    confirmExternal: () => current?.confirmExternal(),
   };
   (window as unknown as { __kinotvFakePlayer: FakePlayerControl }).__kinotvFakePlayer = control;
 }

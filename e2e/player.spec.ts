@@ -132,6 +132,29 @@ test.describe('starting playback', () => {
     await expect(page.getByRole('alert')).toHaveCount(0);
   });
 
+  test('Retry refreshes links while preserving a paused transport intent', async ({ app, api, page, remote, player, clock }) => {
+    river(api, 120);
+    let requests = 0;
+    api.on('GET', '/v1/items/media-links', () => ({ json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 1080, urls: { http: `https://cdn.test/paused-${++requests}.mp4` } }], subtitles: [] } }));
+    await clock.pause();
+    await app.open();
+    await playFromHero(page, remote);
+    await player.time(145);
+    await remote.press('pause');
+    await expect.poll(() => player.state()).toBe('paused');
+    await player.fail();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await remote.press('ok');
+    await expect.poll(() => player.loads()).toEqual([
+      { url: 'https://cdn.test/paused-1.mp4', startAt: 120 }, { url: 'https://cdn.test/paused-2.mp4', startAt: 145 },
+    ]);
+    await expect.poll(() => player.state()).toBe('paused');
+    expect((await player.calls()).filter((call) => call.op === 'play')).toHaveLength(1);
+    await remote.press('play');
+    await expect.poll(() => player.state()).toBe('playing');
+  });
+
   test('failed link refresh keeps Retry usable without replaying cached links or duplicating requests', async ({ app, api, page, remote, player }) => {
     river(api);
     await app.open();
@@ -263,6 +286,36 @@ test.describe('controls', () => {
     await expect(dialog.getByRole('button', { name: 'Выкл. ✓ Выбрано', exact: true })).toBeFocused();
     await expect.poll(async () => (await player.calls()).filter((call) => call.op === 'selectSubtitle')).toEqual([{ op: 'selectSubtitle', id: null }]);
     expect(await player.seeks()).toEqual([]);
+  });
+
+  test('external subtitle remains pending in dialog and overlay until adapter confirmation', async ({ app, api, clock, page, remote, player }) => {
+    const film = fakeFilm(29, 'Субтитры', { subtitles: ['eng'] });
+    fakeHome(api, { hot: [film], movies: [], serials: [], progress: {} });
+    await page.addInitScript(() => {
+      (window as unknown as { tizen: unknown }).tizen = { filesystem: {
+        listDirectory: (_path: string, ok: (names: string[]) => void) => ok([]),
+        toURI: () => 'file:///tmp/subtitle.srt',
+        openFile: () => ({ writeBlobNonBlocking: (_blob: Blob, ok: () => void) => ok(), closeNonBlocking: (ok: () => void) => ok() }),
+        deleteFile: (_path: string, ok: () => void) => ok(),
+      } };
+    });
+    await page.route('**/sub/290-0.srt', (route) => route.fulfill({ body: '1\n00:00:00,000 --> 00:00:01,000\nHello' }));
+    await clock.pause();
+    await app.open();
+    await player.script({ tracks: { audio: [{ id: 'a', lang: 'eng', label: 'English', selected: true }], subtitlesOff: true } });
+    await playFromHero(page, remote);
+    await remote.press('pause', 'up', 'down', 'right', 'down', 'ok');
+    const choice = page.getByRole('dialog').getByRole('button', { name: /английский · Внешние/ });
+    await expect.poll(async () => (await player.calls()).filter((c) => c.op === 'setExternalSubtitle').length).toBe(1);
+    await expect(choice).toHaveAttribute('aria-pressed', 'false');
+    await expect(choice).toHaveAttribute('data-pending', 'true');
+    await expect(page.locator('.playback-pills')).toContainText('Субтитры: Выкл.');
+    await expect(page.locator('.playback-pills')).toContainText('После продолжения: английский');
+    await player.confirmExternal();
+    await expect(choice).toHaveAttribute('aria-pressed', 'true');
+    await expect(choice).toHaveAttribute('data-pending', 'false');
+    await expect(page.locator('.playback-pills')).toContainText('Субтитры: английский');
+    await expect(page.locator('.playback-pills')).not.toContainText('После продолжения');
   });
 
   test('quality changes keep the paused position and display newly confirmed track choices', async ({ app, api, clock, page, remote, player }) => {

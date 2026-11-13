@@ -1,11 +1,10 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { WatchedVideo } from '../../../core/api/client';
 import type { WatchingItem, WatchingVideo } from '../../../core/api/types';
-import { api, preparePlaybackSettings } from '../../../core/services';
+import { api, preparePlaybackSettings, watchedActions } from '../../../core/services';
 import { createProgressReporter, WATCHED_AT, type ProgressReporter } from '../../../core/sync/progressReporter';
-import { followingQuery } from '../../app/following';
 import { queryClient, watchingQuery } from '../../app/queries';
-import { continueWatchingQuery } from '../home/homeQueries';
+import { invalidateProgress } from '../../app/progressInvalidation';
 
 /**
  * A video's stream links. They are signed and expire, so they are fetched each time the player opens
@@ -20,29 +19,18 @@ export const mediaLinksQuery = (mediaId: number) =>
   });
 
 /**
- * Queries that show the viewer's progress. They are refreshed after every progress write, so Home's
- * Continue watching, I Watch's new-episode counts and the title page match what was just watched.
- * History also refreshes ordering and the exact saved historical position.
- */
-function progressQueryKeys(itemId: number) {
-  return [watchingQuery(itemId).queryKey, continueWatchingQuery.queryKey, followingQuery.queryKey, ['history']];
-}
-
-/**
  * The progress reporter for one video, wired to kino.watch (spec §7.5): marktime saves, the watched
  * mark at 90% (only if the server doesn't already have it, because the API toggles), and cache
  * refreshes after each write.
  */
 export function startProgressSync(where: WatchedVideo, startAt: number): ProgressReporter {
+  const watched = watchedActions();
   return createProgressReporter({
     startAt,
     save: (seconds) => api.markTime(where, seconds),
-    async markWatched() {
-      const now = findWatching(await api.watching(where.id), where);
-      if (now?.status !== 1) await api.toggleWatched(where);
-    },
+    markWatched: () => watched.mark(where),
     onWritten() {
-      for (const queryKey of progressQueryKeys(where.id)) void queryClient.invalidateQueries({ queryKey });
+      void invalidateProgress(where.id);
     },
   });
 }
@@ -61,9 +49,4 @@ export function showSavedPosition(where: WatchedVideo, seconds: number, duration
     if (where.season === undefined) return { ...old, videos: old.videos?.map(update) };
     return { ...old, seasons: old.seasons?.map((s) => (s.number === where.season ? { ...s, episodes: s.episodes.map(update) } : s)) };
   });
-}
-
-function findWatching(item: WatchingItem, where: WatchedVideo): WatchingVideo | undefined {
-  if (where.season === undefined) return item.videos?.find((v) => v.number === where.video);
-  return item.seasons?.find((s) => s.number === where.season)?.episodes.find((e) => e.number === where.video);
 }
