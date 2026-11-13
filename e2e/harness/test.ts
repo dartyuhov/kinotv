@@ -133,6 +133,10 @@ export const test = base.extend<Fixtures>({
       fakeCatalog(api);
       // The Bookmarks tab and the title page's folder picker: no folders unless a test routes its own.
       fakeBookmarks(api);
+      // History loads on tab focus too, including while navigating through it to Settings.
+      api.on('GET', '/v1/history', { json: {
+        history: [], pagination: { current: 1, total: 1, perpage: 50 },
+      } });
       await api.attach(page);
       await use(api);
       expect(api.unhandled, 'the app called endpoints that have no fake route').toEqual([]);
