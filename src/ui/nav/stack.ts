@@ -15,6 +15,8 @@ export interface ScreenParams {
    * multi-part film; neither means the film's only video. `startAt` is seconds into the video.
    */
   player: { itemId: number; season?: number; episode?: number; startAt: number };
+  /** Live route contains identities only, never signed URLs or catalog ids. */
+  livePlayer: { channelId: string; lineupIds: readonly string[]; originTab: 'tv' | 'sport' };
   /** A curated collection's titles, by kino.watch collection id. */
   collection: { id: number };
 }

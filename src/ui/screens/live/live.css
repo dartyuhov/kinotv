@@ -1,0 +1,9 @@
+.live-tab { padding-top: 40px; }
+.live-tab h1 { margin: 0 var(--screen-gutter); font-size: 40px; }
+.live-tab > p { min-height: 32px; margin: 20px var(--screen-gutter); font-size: 24px; max-width: 1200px; line-height: 1.5; }
+.live-tab > .button { margin-left: var(--screen-gutter); }
+.live-tab .card__image { object-fit: contain; }
+.live-controls { position: absolute; bottom: 0; left: 0; right: 0; padding: 100px var(--screen-gutter) var(--space-6); background: var(--scrim-bottom); }
+.live-controls h1 { font-size: 48px; margin: 16px 0; }
+.live-controls p { font-size: 24px; }
+.live-controls__label { color: var(--color-text); font-size: var(--font-size-label); font-weight: var(--font-weight-bold); }

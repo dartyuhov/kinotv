@@ -133,6 +133,8 @@ export const test = base.extend<Fixtures>({
       fakeCatalog(api);
       // The Bookmarks tab and the title page's folder picker: no folders unless a test routes its own.
       fakeBookmarks(api);
+      // TV fetches its documented snapshot on tab focus, including while passing through it.
+      api.on('GET', '/v1/tv', { json: { channels: [] } });
       // History loads on tab focus too, including while navigating through it to Settings.
       api.on('GET', '/v1/history', { json: {
         history: [], pagination: { current: 1, total: 1, perpage: 50 },
