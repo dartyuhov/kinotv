@@ -62,11 +62,13 @@ test('OK on a series opens its title page; Back returns to the same series', asy
   await expect(page.getByRole('tab', { name: 'Я смотрю' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('the list is fetched again whenever the tab is shown, so changes made elsewhere appear', async ({ app, api, page, remote }) => {
+test('the list is fetched again whenever the tab is shown, so changes made elsewhere appear', async ({ app, api, page, remote, clock }) => {
   const home = fakeHome(api, { followed: [fakeSerialProgress(NORTH_WIND, 2, 8)] });
   await app.open();
   await openIWatch(page, remote);
   await expect(list(page).getByRole('button')).toHaveAccessibleName('Северный ветер');
+  // The card can come from Home's cache while this mount's refresh is still in flight.
+  await clock.settle();
 
   // Followed on the phone meanwhile, with a new episode out.
   home.followed = [fakeSerialProgress(NORTH_WIND, 2, 8), fakeSerialProgress(NIGHT_TRAIN, 3, 12, 1)];
