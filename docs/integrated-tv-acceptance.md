@@ -8,6 +8,63 @@ Record active progress and results in `kinotv-91o.26.12` and
 
 ## Tested source and build
 
+The integration owner merges review tip `aadc9ed` (including product fix
+`8736327`) without conflicts as
+`c357cf85e511b3af93cb144abf373f977779ae1a` on
+`integration/kinotv-135`. Local acceptance on November 13, 2026, uses Node
+`v22.23.3` and npm `10.9.9`.
+
+| Integration-owner command | Result |
+| --- | --- |
+| `npm run typecheck` | Pass |
+| `npm test` | 243 tests pass across 25 files |
+| `npm run build` | Pass; 132.3 KiB gzip JS / 300 KiB budget |
+| `E2E_PORT=5220 npm run e2e -- --workers=1` | 222 pass, 1 fail, 3 skipped; 1.9 minutes |
+| Watched, History, player, next-episode, and session E2E, port 5220 / one worker | 53 pass; 25.0 seconds |
+| Unchanged I Watch quick-revisit case, 10 isolated repetitions | 8 pass, 2 fail |
+| Synchronized I Watch quick-revisit case, 10 isolated repetitions | 10 pass |
+| Complete I Watch spec after synchronization | 10 pass |
+| `git diff --check` | Pass |
+
+The sole full-suite failure is `e2e/iwatch.spec.ts:65`, already tracked in
+`kinotv-91o.23`. The failure trace shows TV and I Watch both mount, but only two
+subscribed-list requests occur: Home's initial request and the first I Watch
+mount's refresh, both with the old fixture list. The immediate return does not
+start a third request. A cached visible card does not establish that the initial
+refresh has settled; the quick remount can share existing query work. The
+following query ignores the query cancellation signal. The review merge changes
+neither this query nor the tab, navigation, or failing test.
+
+Test-only commit `a161cdd` waits with the existing `clock.settle()` helper before
+simulating a subsequent phone-side change. The original symptom reproduces in
+2/10 isolated runs; the synchronized sequence passes 10/10 and the complete
+I Watch spec passes 10/10. This establishes a test sequencing repair, not a
+guarantee that every rapid revisit with an overlapping real request refreshes
+again. Keep that overlap behavior and the remaining artwork/unit timing work
+under `.23`. No further full-suite run is performed, so the final tree has a
+green affected suite and targeted repair verification, **not a green full-suite
+result**. Both formerly failing artwork journeys pass in the integrated full run.
+The three skips remain opt-in artwork/performance benchmarks.
+
+Integration review confirms one captured watched owner shared by manual actions
+and playback, sequential fresh reads and reconciliation without transport
+mutation retries, and session-generation guards around reads and token renewal.
+Normal sign-out/expiry and subsequent sign-in replace that owner; token refresh
+does not. History cancellation, season-scoped selection, Retry transport intent,
+and shared progress invalidation remain wired together. External subtitle
+confirmation requires adapter activation for the matching local path;
+asynchronous READY remains pending. Samsung API documentation confirms the
+activation calls require PLAYING/PAUSED. These checks do not prove TV rendering.
+
+The production hashes below match the integration-owner build exactly. The later
+test synchronization and this evidence update change no production source.
+Integration `.12` is accepted locally with the disclosed `.23` follow-up; device
+acceptance `.13` remains open, and every device checkbox below remains pending.
+
+### Review-branch evidence before integration
+
+The following results are the review implementer's handoff, before the merge.
+
 The latest review-fix source is
 `87363278dc542ebc9307bef71e59377fa513a8e9`, on `improve/review-fixes`,
 tested on November 13, 2026, with Node `v22.23.3` and npm `10.9.9`.
@@ -210,8 +267,9 @@ observations separate from JS heap and browser-only resource estimates.
 
 ## Next steps
 
-Keep integration `.12` in progress for integration-owner acceptance of the review
-branch and the recorded browser flakes. Keep device
-acceptance `.13` open. Playback `.1`, artwork `.3` and `.25.2`, and crash `.9`
-retain their unresolved native acceptance; the crash cause and memory hypothesis
+Close integration `.12` after recording the local merge, review, and verification
+evidence above. Keep browser timing follow-up `.23` and device acceptance `.13`
+open. Playback `.1`, artwork `.3` and `.25.2`, audio labels `.7`, player UI `.8`,
+and crash `.9` retain their unresolved native acceptance; the crash cause and
+memory hypothesis
 remain unestablished. Local regression success does not close these reports.
