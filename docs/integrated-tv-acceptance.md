@@ -1,12 +1,61 @@
 # Integrated TV acceptance checklist
 
-Use this checklist for the coordinated KinoTV device session. Local regression
-checks pass for the source revision below. Every device item is **pending**;
+Use this checklist for the coordinated KinoTV device session. Review-fix checks
+and remaining browser flakes are recorded below. Every device item is **pending**;
 no TV deployment or native acceptance occurs during this integration session.
 Record active progress and results in `kinotv-91o.26.12` and
 `kinotv-91o.26.13`.
 
 ## Tested source and build
+
+The latest review-fix source is
+`87363278dc542ebc9307bef71e59377fa513a8e9`, on `improve/review-fixes`,
+tested on November 13, 2026, with Node `v22.23.3` and npm `10.9.9`.
+Merging the current `integration/kinotv-135` tip (`827969a`) into this branch
+reports **Already up to date**. This branch has not been merged into integration.
+
+All six review findings are confirmed and addressed: account-scoped serialized
+watched actions shared with playback, canceled late History navigation,
+season-scoped episode selection, paused/playing Retry intent, confirmed external
+subtitle state, and shared progress invalidation. External subtitle **selected**
+means the adapter's activation commands succeeded for the matching local path.
+Path submission in asynchronously prepared READY remains pending until activation;
+neither simulated confirmation nor successful commands prove TV rendering.
+
+| Review-fix command | Result |
+| --- | --- |
+| `npm run typecheck` | Pass |
+| `npm test` | 243 tests pass across 25 files |
+| `npm run build` | Pass; size report 132.3 KiB gzip JS / 300 KiB budget |
+| Affected watched, History, player, and next-episode E2E | 47 pass |
+| `E2E_PORT=5224 npm run e2e -- --workers=1`, first full run | 221 pass, 2 fail, 3 skipped |
+| Same command, sequential full rerun | 222 pass, 1 fail, 3 skipped |
+| Targeted reruns of each failed journey | All 3 pass |
+| `git diff --check` | Pass |
+
+The first full run fails artwork reload timing and I Watch tab refresh. Both
+pass on targeted rerun. The sequential full rerun passes those cases but fails
+the existing stale idle-prefetch validation journey, which passes in isolation.
+The full suite is not unconditionally green. Track timing-sensitive browser
+follow-up in `kinotv-91o.23`; all review-specific journeys pass. The three skips
+remain opt-in artwork/performance benchmarks.
+
+The latest production output is `dist/assets/index-DNfS_Zxg.js` and
+`dist/assets/style-B-rhUmgg.css`. SHA-256 identities are:
+
+```text
+14a10c91e4e4a28aa9c6aacd216f8a167c13e7ff63a621a82d678ade323af4e8  dist/assets/index-DNfS_Zxg.js
+2d0155920a9a2c8579294376640818dcf7cb336a147e682dd1d9b38eb86282e1  dist/assets/style-B-rhUmgg.css
+b59a227855cc3360f3059be2d8d498f01a9ccdd3e6e69d6a3d668ee778b85e44  dist/index.html
+```
+
+This evidence update follows the tested product commit and changes documentation
+only. Browser tests use fake HTTP/FakePlayer; no package is installed or tested
+on the TV. Record the eventual installed package identity separately.
+
+### Earlier combined integration baseline
+
+The following results describe the earlier build, before the review fixes.
 
 The combined local checks run on November 13, 2026, from clean source revision
 `a298c8009610c67f0ffe80e2afd4d57ee311e9d1`, on branch
@@ -73,11 +122,14 @@ item/media identities without copying signed URLs or account response bodies.
 - [ ] Verify an unaffected film and series episode, next-episode progression,
   and Back focus restoration.
 - [ ] Verify refreshed Retry after stale links, recoverable errors, and leaving
-  while a fresh-link request or native prepare is pending.
+  while a fresh-link request or native prepare is pending. Verify paused Retry
+  stays paused and playing Retry resumes with fresh links at the same position.
 - [ ] Compare full audio names, language, and selected/pending state with the
   actual audible track; verify same-language tracks remain distinguishable.
 - [ ] Verify subtitle identity, disable/enable, fixed quality, Auto quality,
-  paused position, and native picture/sound after changes.
+  paused position, and native picture/sound after changes. External subtitles in
+  asynchronously prepared READY must remain pending until activation; compare
+  the confirmed state with actual visible subtitles after Play.
 - [ ] Verify unchanged seek steps, held acceleration, preview bounds, seek
   confirmation, pause/play, and Back semantics with the physical remote.
 - [ ] Confirm centered settings dialog, long-label wrapping, focus visibility,
@@ -92,11 +144,17 @@ do not establish the authorized account's response shape or stored results.
   confirm readability, pending focus, and play behavior.
 - [ ] Mark an episode and the selected season; verify already-watched no-op,
   repeated OK protection, partial failure recovery, and other-season isolation.
+- [ ] Leave and reopen during a pending watched action, overlap manual marking
+  with playback's automatic watched mark, and verify no episode becomes unwatched.
+- [ ] Switch between seasons with overlapping episode numbers; verify the action
+  targets the current season's selected episode.
 - [ ] Confirm watched state persists after restart and refreshes related tabs.
 - [ ] Confirm actual history media compatibility, newest ordering, pagination,
   refresh after playback, and exact episode and film-part resume.
 - [ ] Verify watched replay starts at zero, unavailable entries and Retry remain
   usable, and Back returns to the original history entry.
+- [ ] Leave History by another tab or Back during a delayed open; verify its late
+  response never launches the player.
 
 ### Live TV and Sport
 
@@ -152,7 +210,8 @@ observations separate from JS heap and browser-only resource estimates.
 
 ## Next steps
 
-Keep integration `.12` in progress pending independent review. Keep device
+Keep integration `.12` in progress for integration-owner acceptance of the review
+branch and the recorded browser flakes. Keep device
 acceptance `.13` open. Playback `.1`, artwork `.3` and `.25.2`, and crash `.9`
 retain their unresolved native acceptance; the crash cause and memory hypothesis
 remain unestablished. Local regression success does not close these reports.
