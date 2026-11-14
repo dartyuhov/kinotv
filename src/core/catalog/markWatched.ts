@@ -7,7 +7,7 @@ const owners = new WeakMap<ProgressApi, ReturnType<typeof createWatchedActions>>
 export function createWatchedActions(api: ProgressApi, current: () => boolean = () => true) {
   let lane: Promise<unknown> = Promise.resolve();
   const check = () => { if (!current()) throw new Error('Watched account changed'); };
-  const mark = (where: WatchedVideo): Promise<void> => {
+  const mark = (where: WatchedVideo, watched = true): Promise<void> => {
     const task = lane.catch(() => undefined).then(async () => {
       const read = async () => {
         check();
@@ -18,10 +18,10 @@ export function createWatchedActions(api: ProgressApi, current: () => boolean = 
         if (!video) throw new Error('Video progress unavailable');
         return video.status === 1;
       };
-      if (await read()) return;
+      if (await read() === watched) return;
       check();
       try { await api.toggleWatched(where); } catch { /* Reconcile applied-but-response-lost, never retry. */ }
-      if (!await read()) throw new Error('Watched state not confirmed');
+      if (await read() !== watched) throw new Error('Watched state not confirmed');
     });
     lane = task;
     return task;
@@ -29,20 +29,20 @@ export function createWatchedActions(api: ProgressApi, current: () => boolean = 
   return { mark };
 }
 
-export function markVideoWatched(api: ProgressApi, where: WatchedVideo): Promise<void> {
+export function markVideoWatched(api: ProgressApi, where: WatchedVideo, watched = true): Promise<void> {
   let owner = owners.get(api);
   if (!owner) { owner = createWatchedActions(api); owners.set(api, owner); }
-  return owner.mark(where);
+  return owner.mark(where, watched);
 }
 
 /** Sequential toggles only; every decision uses fresh service state, including after a lost response. */
-export async function markEpisodesWatched(api: ProgressApi, id: number, season: number, episodes: number[], mark = (where: WatchedVideo) => markVideoWatched(api, where)) {
+export async function markEpisodesWatched(api: ProgressApi, id: number, season: number, episodes: number[], mark = (where: WatchedVideo, watched = true) => markVideoWatched(api, where, watched), watched = true) {
   let confirmed = 0;
   let failed = 0;
   for (const video of [...new Set(episodes)]) {
     const where = { id, season, video };
     try {
-      await mark(where);
+      await mark(where, watched);
       confirmed++;
     } catch { failed++; }
   }

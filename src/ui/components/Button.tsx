@@ -14,14 +14,16 @@ interface ButtonProps {
   iconOnly?: boolean;
   /** Makes it a toggle button, on (`true`) or off: announced as pressed, and an icon is drawn filled. */
   pressed?: boolean;
+  /** Keeps remote focus while preventing activation during an async action. */
+  disabled?: boolean;
   onPress(): void;
 }
 
 /** A remote-focusable pill button: primary is white, secondary is translucent grey (spec §6.1). */
-export function Button({ focusKey, label, variant = 'secondary', icon: Icon, iconOnly = false, pressed, onPress }: ButtonProps) {
+export function Button({ focusKey, label, variant = 'secondary', icon: Icon, iconOnly = false, pressed, disabled, onPress }: ButtonProps) {
   const { ref } = useFocusable({
     focusKey,
-    onEnterPress: onPress,
+    onEnterPress: () => { if (!disabled) onPress(); },
     onFocus: ({ node }) => revealInScroller(node),
   });
   return (
@@ -30,6 +32,7 @@ export function Button({ focusKey, label, variant = 'secondary', icon: Icon, ico
       role="button"
       aria-label={Icon ? label : undefined}
       aria-pressed={pressed}
+      aria-disabled={disabled}
       className={`button button--${variant}${Icon && iconOnly ? ' button--icon-only' : ''}${pressed ? ' button--pressed' : ''}`}
     >
       {Icon && <Icon className="button__icon" aria-hidden strokeWidth={2.5} />}

@@ -40,7 +40,7 @@ export const watchedActions = () => {
   const owner = watched;
   return {
     mark: (where: WatchedVideo) => owner.mark(where),
-    episodes: (id: number, season: number, episodes: number[]) => markEpisodesWatched(api, id, season, episodes, owner.mark),
+    episodes: (id: number, season: number, episodes: number[], watched = true) => markEpisodesWatched(api, id, season, episodes, owner.mark, watched),
   };
 };
 

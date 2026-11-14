@@ -216,6 +216,83 @@ test.describe('a series', () => {
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
   });
 
+  test('toggles the selected episode watched and unwatched, keeping remote focus', async ({ app, api, page, remote }) => {
+    const marks: Parameters<typeof seriesProgress>[1] = [];
+    const home = fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: seriesProgress(HARBOUR, marks) } });
+    let release!: () => void;
+    const saved = new Promise<void>((resolve) => { release = resolve; });
+    api.on('GET', '/v1/watching/toggle', async (req) => {
+      await saved;
+      const season = Number(req.query.season);
+      const episode = Number(req.query.video);
+      const index = marks.findIndex(([s, e]) => s === season && e === episode);
+      if (index < 0) marks.push([season, episode, 'watched']);
+      else marks.splice(index, 1);
+      home.progress[HARBOUR.id] = seriesProgress(HARBOUR, marks);
+      return { json: { status: 200, watched: index < 0 ? 1 : 0 } };
+    });
+    await app.open();
+    await openFromHero(page, remote);
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('1. Возвращение');
+    await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName('2. Причал');
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+    await remote.press('ok');
+    await expect(app.focused).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('.season-watched-actions').getByRole('status')).toHaveText('Сохранение…');
+    await remote.press('ok');
+    await expect.poll(() => api.requestsTo('GET', '/v1/watching/toggle').length).toBe(1);
+    release();
+    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 непросмотренной');
+    await expect(app.focused).toHaveAttribute('aria-pressed', 'true');
+    await expect(app.focused).toHaveAttribute('aria-disabled', 'false');
+    await expect(episodes(page, 1).getByRole('button', { name: '2. Причал, просмотрено', exact: true })).toBeVisible();
+    await remote.press('ok');
+    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+    await expect(app.focused).toHaveAttribute('aria-pressed', 'false');
+    await expect(episodes(page, 1).getByRole('button', { name: '2. Причал', exact: true })).toBeVisible();
+    expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '2']);
+  });
+
+  test('marks a partial season fully watched, then toggles the whole season unwatched', async ({ app, api, page, remote }, testInfo) => {
+    const marks: Parameters<typeof seriesProgress>[1] = [[1, 1, 'watched']];
+    const home = fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: seriesProgress(HARBOUR, marks) } });
+    api.on('GET', '/v1/watching/toggle', (req) => {
+      const season = Number(req.query.season);
+      const episode = Number(req.query.video);
+      const index = marks.findIndex(([s, e]) => s === season && e === episode);
+      if (index < 0) marks.push([season, episode, 'watched']);
+      else marks.splice(index, 1);
+      home.progress[HARBOUR.id] = seriesProgress(HARBOUR, marks);
+      return { json: { status: 200, watched: index < 0 ? 1 : 0 } };
+    });
+    await app.open();
+    await openFromHero(page, remote);
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('2. Причал');
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+    await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName('Отметить сезон 1 просмотренным');
+    await remote.press('ok');
+    await expect(app.focused).toHaveAccessibleName('Отметить сезон 1 непросмотренным');
+    await expect(app.focused).toHaveAttribute('aria-disabled', 'false');
+    await expect(episodes(page, 1).getByRole('button', { name: /просмотрено/ })).toHaveCount(4);
+    expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '3', '4']);
+    await testInfo.attach('season-watched-actions', { body: await page.screenshot(), contentType: 'image/png' });
+    await remote.press('ok');
+    await expect(app.focused).toHaveAccessibleName('Отметить сезон 1 просмотренным');
+    await expect(episodes(page, 1).getByRole('button', { name: /просмотрено/ })).toHaveCount(0);
+    expect(marks).toEqual([]);
+    expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '3', '4', '1', '2', '3', '4']);
+  });
+
   // Bookmark itself is covered in bookmarks.spec.ts, Follow in iwatch.spec.ts.
   test('has a Bookmark button, then Follow', async ({ app, api, page, remote }) => {
     fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });

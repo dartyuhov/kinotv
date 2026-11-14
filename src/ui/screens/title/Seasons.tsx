@@ -1,4 +1,5 @@
 import { FocusContext, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import { CircleCheck, CircleMinus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { watchedActions } from '../../../core/services';
 import { invalidateProgress } from '../../app/progressInvalidation';
@@ -58,14 +59,14 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
   const [message, setMessage] = useState('');
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
-  const mark = async (episodes: number[]) => {
+  const mark = async (episodes: number[], watched: boolean) => {
     if (busy.current) return;
     busy.current = true;
     setPending(true);
     setMessage('');
     try {
-      const result = await watchedActions().episodes(item.id, season, episodes);
-      setMessage(t(result.failed ? 'title.markPartial' : 'title.markDone', { confirmed: result.confirmed, failed: result.failed }));
+      const result = await watchedActions().episodes(item.id, season, episodes, watched);
+      setMessage(t(result.failed ? 'title.markPartial' : watched ? 'title.markDone' : 'title.unmarkDone', { confirmed: result.confirmed, failed: result.failed }));
     } finally {
       await invalidateProgress(item.id);
       busy.current = false;
@@ -73,6 +74,8 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
     }
   };
   const selectedEpisode = active.episodes.find((e) => selected?.season === season && e.number === selected.episode) ?? active.episodes[0]!;
+  const episodeWatched = progress(season, selectedEpisode.number)?.watched ?? false;
+  const seasonWatched = active.episodes.every((episode) => progress(season, episode.number)?.watched);
   const onPick = useCallback((n: number) => pickSeason(item.id, n), [item.id, pickSeason]);
   const onEpisodePress = useCallback(
     (episode: Video) => {
@@ -105,10 +108,14 @@ export function Seasons({ item, seasons, progress, next }: SeasonsProps) {
         onItemFocus={(episode) => setSelected({ season, episode: episode.number })}
       />
       <div className="season-watched-actions" aria-busy={pending}>
-        <Button focusKey={`title:${item.id}:mark-episode`} label={t('title.markEpisode', { n: selectedEpisode.number })}
-          onPress={() => void mark([selectedEpisode.number])} />
-        <Button focusKey={`title:${item.id}:mark-season`} label={t('title.markSeason', { n: season })}
-          onPress={() => void mark(active.episodes.map((e) => e.number))} />
+        <Button focusKey={`title:${item.id}:mark-episode`}
+          label={t(episodeWatched ? 'title.unmarkEpisode' : 'title.markEpisode', { n: selectedEpisode.number })}
+          icon={episodeWatched ? CircleMinus : CircleCheck} pressed={episodeWatched} disabled={pending}
+          onPress={() => void mark([selectedEpisode.number], !episodeWatched)} />
+        <Button focusKey={`title:${item.id}:mark-season`}
+          label={t(seasonWatched ? 'title.unmarkSeason' : 'title.markSeason', { n: season })}
+          icon={seasonWatched ? CircleMinus : CircleCheck} pressed={seasonWatched} disabled={pending}
+          onPress={() => void mark(active.episodes.map((e) => e.number), !seasonWatched)} />
         <span role="status">{pending ? t('title.markPending') : message}</span>
       </div>
     </div>
