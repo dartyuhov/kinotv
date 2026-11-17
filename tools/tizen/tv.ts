@@ -101,9 +101,10 @@ export function signWidget(tizen: string, profile: string, appDir: string, outDi
   const stage = join(outDir, 'widget');
   rmSync(stage, { recursive: true, force: true });
   copyWidget(appDir, stage); // tizen package writes its signature files into the folder it signs
+  const file = join(outDir, WGT_NAME);
+  rmSync(file, { force: true }); // a successful CLI exit is not proof it produced a new package
   const result = run(tizen, ['package', '-t', 'wgt', '-s', profile, '-o', outDir, '--', stage]);
   rmSync(stage, { recursive: true, force: true });
-  const file = join(outDir, WGT_NAME);
   const signed = existsSync(file) && 'author-signature.xml' in unzipSync(readFileSync(file));
   if (result.code !== 0 || !signed) {
     throw new UserError(`tizen package could not sign the app with profile "${profile}".`, [
