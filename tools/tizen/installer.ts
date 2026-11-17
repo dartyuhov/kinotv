@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
-import { APP_ID, APP_NAME, PACKAGE_ID } from './configXml.ts';
+import { APP_ID, APP_NAME, PACKAGE_ID, tizenVersion } from './configXml.ts';
 import { heading, ok, print, runMain, setSetupCommand, style, UserError } from './host.ts';
 import { readDuid, setUpCertificate, setUpTools, setUpTv } from './setup.ts';
 import { install, launch, signWidget } from './tv.ts';
@@ -34,15 +34,44 @@ function checkPackage(file: string): string {
   } catch {
     throw notKinoTv;
   }
-  const version = /<widget\b[^>]*\sversion="([^"]+)"/.exec(configXml)?.[1];
-  if (!configXml.includes(`id="${APP_ID}"`) || !configXml.includes(`package="${PACKAGE_ID}"`) || !version) throw notKinoTv;
+  // Read attributes on the actual elements, not identity-looking text in comments or other tags.
+  configXml = configXml.replace(/<!--[\s\S]*?-->/g, '');
+  const widgets = [...configXml.matchAll(/<widget\b[^>]*>/g)];
+  const applications = [...configXml.matchAll(/<tizen:application\b[^>]*>/g)];
+  const attribute = (element: string, name: string) => {
+    const values = [...element.matchAll(new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, 'g'))];
+    return values.length === 1 ? values[0]![2] : undefined;
+  };
+  const version = attribute(widgets[0]?.[0] ?? '', 'version');
+  const application = applications[0]?.[0] ?? '';
+  if (widgets.length !== 1 || applications.length !== 1 ||
+      attribute(application, 'id') !== APP_ID || attribute(application, 'package') !== PACKAGE_ID ||
+      !version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw notKinoTv;
+  try {
+    if (tizenVersion(version) !== version) throw notKinoTv;
+  } catch {
+    throw notKinoTv;
+  }
   return version;
 }
 
 async function main(argv: string[]): Promise<void> {
-  const index = argv.indexOf('--wgt');
-  const wgt = resolve(index >= 0 && argv[index + 1] ? argv[index + 1]! : `${APP_NAME}.wgt`);
+  let file = `${APP_NAME}.wgt`;
+  let release: string | undefined;
+  for (let i = 0; i < argv.length; i += 2) {
+    const option = argv[i];
+    const value = argv[i + 1];
+    if (!value || value.startsWith('--') || (option !== '--wgt' && option !== '--release')) {
+      throw new UserError('Usage: node kinotv-installer.mjs [--wgt FILE] [--release vX.Y.Z]');
+    }
+    if (option === '--wgt') file = value;
+    else release = value;
+  }
+  const wgt = resolve(file);
   const version = checkPackage(wgt);
+  if (release !== undefined && release !== `v${version}`) {
+    throw new UserError(`Widget version ${version} does not match selected release ${release}.`, ['Run `bash install.sh` again.']);
+  }
 
   print(style.bold(`KinoTV ${version} · installer`));
   print('Installs KinoTV on your Samsung TV, signed with your own Samsung certificate. Safe to run again.');
@@ -66,6 +95,9 @@ async function main(argv: string[]): Promise<void> {
   extractWgt(wgt, unpacked);
   const signed = signWidget(tools.tizen, profile, unpacked, outDir);
   rmSync(unpacked, { recursive: true, force: true });
+  if (checkPackage(signed) !== version) {
+    throw new UserError(`Signed widget version does not match intended unsigned version ${version}.`, ['Run `bash install.sh` again.']);
+  }
   ok(`Signed with profile "${profile}"`);
   install(tools.tizen, tv, signed);
   launch(tools.tizen, tv);

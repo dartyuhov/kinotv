@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { renderConfigXml } from './configXml.ts';
-import { INSTALL_OK, NO_TV, TV, TV_CONNECTED, useSandbox } from './sandbox.ts';
+import { FFLATE, INSTALL_OK, NO_TV, TV, TV_CONNECTED, useSandbox } from './sandbox.ts';
 import { createUnsignedWgt } from './wgt.ts';
 
 // The end-user installer (spec §11, tools/install.sh runs it): the setup wizard's TV and certificate
@@ -72,6 +72,63 @@ describe('the installer', () => {
     expect(out).toContain('KinoTV 1.5.0 is installed');
   });
 
+  it('rejects a downloaded widget that does not match the selected release before touching the TV', () => {
+    const wgt = releaseWgt('1.4.0');
+    const { code, out } = installer(['--wgt', wgt, '--release', 'v1.5.0']);
+    expect(code).toBe(1);
+    expect(out).toContain('does not match selected release v1.5.0');
+    expect(calls()).toEqual([]);
+  });
+
+  it('removes stale signed output and refuses success without a newly signed widget', () => {
+    const wgt = releaseWgt('1.5.0');
+    mkdirSync(join(project, 'signed'));
+    writeFileSync(join(project, 'signed/KinoTV.wgt'), zipSync({
+      'config.xml': strToU8(renderConfigXml({ version: '1.4.0' })),
+      'author-signature.xml': strToU8('<old-signature/>'),
+    }));
+    // A CLI that exits successfully but produces no output must not reuse the previous run's file.
+    stub('tizen', `
+if (args[0] === 'version') console.log('Tizen CLI 2.5.25');
+if (args[0] === 'security-profiles') console.log('KinoTV O');
+`);
+    stub('sdb', TV_CONNECTED);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+
+    const { code, out } = installer(['--wgt', wgt]);
+
+    expect(code).toBe(1);
+    expect(out).toContain('could not sign the app');
+    expect(existsSync(join(project, 'signed/KinoTV.wgt'))).toBe(false);
+    expect(calls().some((c) => /^tizen (install|run) /.test(c))).toBe(false);
+  });
+
+  it.each([
+    ['version', 'version="1.5.0"', 'version="1.4.0"'],
+    ['application', 'id="KinoTV0001.KinoTV"', 'id="OtherApp01.Other"'],
+    ['package', 'package="KinoTV0001"', 'package="OtherApp01"'],
+  ])('refuses newly signed output with the wrong %s', (_field, from, to) => {
+    const wgt = releaseWgt('1.5.0');
+    tizenStub(`
+if (args[0] === 'package') {
+  const fs = require('node:fs'), path = require('node:path');
+  const { unzipSync, zipSync } = require(${JSON.stringify(FFLATE)});
+  const file = path.join(args[args.indexOf('-o') + 1], 'KinoTV.wgt');
+  const files = unzipSync(fs.readFileSync(file));
+  files['config.xml'] = Buffer.from(Buffer.from(files['config.xml']).toString('utf8').replace(${JSON.stringify(from)}, ${JSON.stringify(to)}));
+  fs.writeFileSync(file, zipSync(files));
+}
+`);
+    stub('sdb', TV_CONNECTED);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+
+    const { code } = installer(['--wgt', wgt]);
+
+    expect(code).toBe(1);
+    expect(calls().some((c) => /^tizen (install|run) /.test(c))).toBe(false);
+    expect(savedSettings()).toEqual({ tv: TV, profile: 'KinoTV' });
+  });
+
   it("stops with the Developer Mode checklist when the TV can't be reached, and says to run the installer again", () => {
     const wgt = releaseWgt();
     tizenStub();
@@ -114,6 +171,19 @@ describe('the installer', () => {
 
     const { code, out } = installer(['--wgt', other]);
 
+    expect(code).toBe(1);
+    expect(out).toContain('is not a KinoTV package');
+    expect(calls()).toEqual([]);
+  });
+
+  it.each([
+    ['comment-only identity', '<!-- <tizen:application id="KinoTV0001.KinoTV" package="KinoTV0001"/> -->'],
+    ['identity on an unrelated element', '<other id="KinoTV0001.KinoTV" package="KinoTV0001"/>'],
+    ['invalid version', renderConfigXml({ version: '256.0.0' })],
+  ])('inspects external widgets before TV setup: %s', (_case, manifest) => {
+    const file = join(project, 'External.wgt');
+    writeFileSync(file, zipSync({ 'config.xml': strToU8(manifest) }));
+    const { code, out } = installer(['--wgt', file]);
     expect(code).toBe(1);
     expect(out).toContain('is not a KinoTV package');
     expect(calls()).toEqual([]);
