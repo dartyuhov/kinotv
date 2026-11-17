@@ -21,7 +21,8 @@ const ROOT = resolve(TOOLS, '..');
 export const INSTALLER_FILE = 'kinotv-installer.mjs';
 
 async function bundleInstaller(outDir: string): Promise<void> {
-  const license = readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8');
+  const license = ['fflate-mit.txt', 'saxes-isc.txt', 'xmlchars-mit.txt']
+    .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8')).join('\n');
   await build({
     configFile: false,
     root: TOOLS,
