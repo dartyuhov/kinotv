@@ -109,7 +109,7 @@ describe('the release workflow', () => {
   const jobs = Object.entries(release.jobs);
   const gateJob = jobs.find(([, job]) => job.steps?.some((step) => step.run?.includes('node tools/release/gate.ts')));
   const testJob = jobs.find(([, job]) => job.uses === './.github/workflows/ci.yml');
-  const publishJob = jobs.find(([, job]) => job.steps?.some((step) => step.run?.includes('gh release create')));
+  const draftJob = jobs.find(([, job]) => job.steps?.some((step) => step.run === 'node tools/release/draft.ts'));
 
   it('runs only for version tags', () => {
     expect(release.on).toEqual({ push: { tags: ['v*'] } });
@@ -121,15 +121,15 @@ describe('the release workflow', () => {
     expect(step.env).toMatchObject({ KP_CLIENT_ID: '${{ secrets.KP_CLIENT_ID }}', KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}' });
   });
 
-  it('publishes only after the gate passed and the full test run is green', () => {
+  it('stages a draft only after the gate passed and the full test run is green', () => {
     expect(testJob).toBeDefined();
-    expect(publishJob).toBeDefined();
-    const needs = [publishJob![1].needs].flat();
+    expect(draftJob).toBeDefined();
+    const needs = [draftJob![1].needs].flat();
     expect(needs).toEqual(expect.arrayContaining([gateJob![0], testJob![0]]));
   });
 
-  it('builds with the credentials and attaches the unsigned app and the installer to the release', () => {
-    const steps = publishJob![1].steps!;
+  it('builds with the configured client and calls the validated draft helper after assembly', () => {
+    const steps = draftJob![1].steps!;
     const buildStep = steps.find((s) => s.run?.includes('npm run build'))!;
     // The secrets are KP_*, but the app reads them as the Vite env vars VITE_KP_* (src/core/config.ts).
     expect(buildStep.env).toEqual({
@@ -137,15 +137,29 @@ describe('the release workflow', () => {
       VITE_KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}',
     });
     expect(steps.some((s) => s.run?.includes('npm run release:assets'))).toBe(true);
-    const create = steps.find((s) => s.run?.includes('gh release create'))!.run!;
-    for (const asset of ['dist-release/KinoTV.wgt', 'dist-release/install.sh', 'dist-release/kinotv-installer.mjs', 'dist-release/SHA256SUMS']) {
-      expect(create).toContain(asset);
-    }
+    expect(steps.findIndex((s) => s.run === 'node tools/release/draft.ts')).toBeGreaterThan(steps.findIndex((s) => s.run === 'npm run release:assets'));
+    expect(steps.find((s) => s.run === 'node tools/release/draft.ts')!.env).toEqual({ GH_TOKEN: '${{ github.token }}' });
+    expect(runLines(release).some((line) => /gh release (create|edit|upload)/.test(line))).toBe(false);
   });
 
-  it('can write releases only in the publishing job', () => {
+  it('can write releases only in the draft job and limits OAuth secrets to gate/build steps', () => {
     expect(release.permissions).toEqual({ contents: 'read' });
-    expect(publishJob![1].permissions).toEqual({ contents: 'write' });
+    for (const [name, job] of jobs) {
+      expect(job.permissions ?? release.permissions).toEqual({ contents: name === draftJob![0] ? 'write' : 'read' });
+      expect(JSON.stringify(job.env ?? {})).not.toContain('secrets.');
+      for (const step of job.steps ?? []) {
+        if (JSON.stringify(step.env ?? {}).includes('secrets.')) expect(['node tools/release/gate.ts', 'npm run build']).toContain(step.run);
+      }
+    }
+    expect(JSON.stringify(release.env ?? {})).not.toContain('secrets.');
+  });
+
+  it('pins the reviewed CI action revisions and removes checkout credentials', () => {
+    const steps = jobs.flatMap(([, job]) => job.steps ?? []);
+    for (const step of steps.filter((s) => s.uses)) {
+      expect(['actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09', 'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444']).toContain(step.uses);
+      if (step.uses?.startsWith('actions/checkout@')) expect(step.with?.['persist-credentials']).toBe(false);
+    }
   });
 
   it('only calls scripts that exist', () => expectEverythingItCallsToExist(release));
