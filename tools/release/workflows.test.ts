@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
-// The GitHub Actions workflows can't run here (there is no GitHub remote), so this checks what can be
+// Hosted GitHub Actions runs are separate verification, so this checks what can be
 // checked locally: they parse, they trigger on the right events, they run the gate before publishing,
 // and every script and file they call exists. The scripts themselves have their own tests.
 
@@ -21,11 +21,13 @@ interface Job {
   needs?: string | string[];
   uses?: string;
   permissions?: Record<string, string>;
+  env?: Record<string, string>;
   steps?: Step[];
 }
 interface Workflow {
   on: Record<string, unknown>;
   permissions?: Record<string, string>;
+  env?: Record<string, string>;
   jobs: Record<string, Job>;
 }
 
@@ -66,6 +68,40 @@ describe('the CI workflow', () => {
   });
 
   it('only calls scripts that exist', () => expectEverythingItCallsToExist(ci));
+
+  it('pins every external action to an immutable upstream revision and removes checkout credentials', () => {
+    const steps = Object.values(ci.jobs).flatMap((job) => job.steps ?? []);
+    const actions = steps.filter((step) => step.uses && !step.uses.startsWith('./'));
+    expect(actions.length).toBeGreaterThan(0);
+    for (const step of actions) expect(step.uses).toMatch(/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/);
+    const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
+    expect(checkouts.length).toBeGreaterThan(0);
+    for (const step of checkouts) expect(step.with?.['persist-credentials']).toBe(false);
+  });
+
+  it('builds the production app with fake OAuth configuration and assembles that build in the same job', () => {
+    const buildJobs = Object.values(ci.jobs).filter((job) => job.steps?.some((step) => step.run?.includes('npm run build')));
+    expect(buildJobs).toHaveLength(1);
+    const job = buildJobs[0]!;
+    const steps = job.steps!;
+    const buildIndex = steps.findIndex((step) => step.run?.includes('npm run build'));
+    const build = steps[buildIndex]!;
+    expect({ ...ci.env, ...job.env, ...build.env }).toMatchObject({
+      VITE_KP_CLIENT_ID: 'fixture-release-client-id',
+      VITE_KP_CLIENT_SECRET: 'fixture-release-client-secret',
+    });
+    const commands = steps.slice(buildIndex).flatMap((step) => (step.run ?? '').split('\n')).map((line) => line.trim());
+    expect(commands.indexOf('npm run release:assets')).toBeGreaterThan(commands.indexOf('npm run build'));
+  });
+
+  it('keeps fork checks read-only without requesting or referencing release secrets', () => {
+    expect(ci.permissions).toEqual({ contents: 'read' });
+    for (const job of Object.values(ci.jobs)) {
+      expect(job.permissions ?? ci.permissions).toEqual({ contents: 'read' });
+    }
+    expect(ci.on.workflow_call ?? {}).not.toHaveProperty('secrets');
+    expect(JSON.stringify(ci)).not.toMatch(/\bsecrets\s*[.\[]|"secrets"\s*:/);
+  });
 });
 
 describe('the release workflow', () => {
