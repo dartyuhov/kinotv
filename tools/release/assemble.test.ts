@@ -1,6 +1,7 @@
 import { accessSync, constants, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
+import { build } from 'vite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { renderConfigXml } from '../tizen/configXml.ts';
 import { INSTALL_OK, TV, TV_CONNECTED, useSandbox } from '../tizen/sandbox.ts';
@@ -9,6 +10,7 @@ import { INSTALL_OK, TV, TV_CONNECTED, useSandbox } from '../tizen/sandbox.ts';
 // release workflow attaches to a GitHub release. Run here in a sandbox project, as CI runs it.
 
 const ASSEMBLE = resolve(import.meta.dirname, 'assemble.ts');
+const ROOT = resolve(import.meta.dirname, '../..');
 
 const sandbox = useSandbox();
 const { stub, calls, tizenStub } = sandbox;
@@ -18,6 +20,7 @@ beforeEach(() => ({ project, home } = sandbox.paths));
 
 function writeProject({ version = '1.4.0', githubRepo = 'someone/kinotv' } = {}): void {
   writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'kinotv', version, kinotv: { githubRepo } }));
+  writeFileSync(join(project, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
 }
 
 /** A minimal production build in dist/ (the real build is covered by tools/tizen/package.test.ts). */
@@ -34,6 +37,44 @@ const assemble = () => sandbox.node(ASSEMBLE, []);
 const released = (name: string) => join(project, 'dist-release', name);
 
 describe('the release assets', () => {
+  it('assemble the actual configured project with matching source, lockfile, app and unsigned widget identity', async () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string; kinotv: { githubRepo: string } };
+    const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8')) as { version: string; packages: Record<string, { version: string }> };
+    expect(pkg.kinotv.githubRepo).toBe('dartyuhov/kinotv');
+    expect(lock.version).toBe(pkg.version);
+    expect(lock.packages['']?.version).toBe(pkg.version);
+    for (const name of ['package.json', 'package-lock.json']) {
+      writeFileSync(join(project, name), readFileSync(join(ROOT, name)));
+    }
+    // Ignore local env files and replace client configuration explicitly. These fixtures never make
+    // a network request and cannot pick up a maintainer's app client or per-user session.
+    await build({
+      root: ROOT,
+      envDir: false,
+      logLevel: 'silent',
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+        'import.meta.env.VITE_KP_CLIENT_ID': JSON.stringify('fixture-release-client-id'),
+        'import.meta.env.VITE_KP_CLIENT_SECRET': JSON.stringify('fixture-release-client-secret'),
+        'import.meta.env.VITE_RELEASES_URL': JSON.stringify(''),
+      },
+      build: { outDir: join(project, 'dist'), emptyOutDir: true },
+    });
+    const { code, out } = assemble();
+    expect(code, out).toBe(0);
+    const files = unzipSync(readFileSync(released('KinoTV.wgt')));
+    const manifest = Buffer.from(files['config.xml']!).toString('utf8');
+    expect(manifest).toContain(`version="${pkg.version}"`);
+    expect(manifest).toContain('id="KinoTV0001.KinoTV" package="KinoTV0001"');
+    expect(Object.keys(files)).toEqual(expect.arrayContaining(['index.html', 'icon.png', 'config.xml']));
+    expect(Object.keys(files).some((name) => /signature|\.map$|(^|\/)\./.test(name))).toBe(false);
+    const script = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([, bytes]) => Buffer.from(bytes).toString('utf8')).join('\n');
+    expect(script.includes('fixture-release-client-id') && script.includes('fixture-release-client-secret')).toBe(true);
+    expect(script.match(/appVersion:["'`]([^"'`]+)["'`]/)?.[1]).toBe(pkg.version);
+    expect(script).toContain('dartyuhov/kinotv');
+    expect(readFileSync(released('install.sh'), 'utf8')).toContain('KINOTV_GITHUB_REPO:-dartyuhov/kinotv');
+  }, 60_000);
+
   it('are the unsigned app, install.sh with the GitHub repo filled in, and the installer as one file', () => {
     writeProject();
     fakeBuild();
@@ -105,5 +146,32 @@ fs.copyFileSync(path.join(${JSON.stringify(join(project, 'dist-release'))}, path
 
     expect(code).toBe(1);
     expect(out).toContain('npm run build');
+  });
+
+  it.each(['1.4.0-beta.1', '1.4.0+build.2', '01.4.0', '256.0.0'])('refuses release version %s rather than silently normalizing it', (version) => {
+    writeProject({ version });
+    fakeBuild('1.4.0');
+    const { code, out } = assemble();
+    expect(code).toBe(1);
+    expect(out).toContain('stable numeric Tizen version');
+  });
+
+  it('refuses a stale lockfile even when the widget matches package.json', () => {
+    writeProject();
+    fakeBuild();
+    writeFileSync(join(project, 'package-lock.json'), JSON.stringify({ version: '1.3.0', packages: { '': { version: '1.3.0' } } }));
+    const { code, out } = assemble();
+    expect(code).toBe(1);
+    expect(out).toContain('package-lock.json');
+  });
+
+  it('refuses a matching version with a different application identity', () => {
+    writeProject();
+    fakeBuild();
+    const manifest = join(project, 'dist/config.xml');
+    writeFileSync(manifest, readFileSync(manifest, 'utf8').replace('id="KinoTV0001.KinoTV"', 'id="OtherApp01.Other"'));
+    const { code, out } = assemble();
+    expect(code).toBe(1);
+    expect(out).toContain('KinoTV0001.KinoTV');
   });
 });

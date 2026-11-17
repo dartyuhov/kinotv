@@ -7,7 +7,7 @@
     "node": ">=22.18"
   },
   "kinotv": {
-    "githubRepo": "OWNER/REPO"
+    "githubRepo": "dartyuhov/kinotv"
   },
   "scripts": {
     "dev": "vite",

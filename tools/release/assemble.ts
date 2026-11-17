@@ -9,10 +9,10 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { build } from 'vite';
-import { APP_NAME } from '../tizen/configXml.ts';
+import { APP_ID, APP_NAME, PACKAGE_ID } from '../tizen/configXml.ts';
 import { ok, runMain, UserError } from '../tizen/host.ts';
 import { createUnsignedWgt } from '../tizen/wgt.ts';
-import { readProject } from './project.ts';
+import { readProject, releaseProjectProblems } from './project.ts';
 
 const TOOLS = resolve(import.meta.dirname, '..');
 export const INSTALLER_FILE = 'kinotv-installer.mjs';
@@ -45,7 +45,10 @@ function stampInstallSh(githubRepo: string, outFile: string): void {
 async function main(): Promise<void> {
   const appDir = resolve('dist');
   const outDir = resolve('dist-release');
-  const { version, githubRepo } = readProject();
+  const project = readProject();
+  const { version, githubRepo } = project;
+  const problems = releaseProjectProblems(project);
+  if (problems.length) throw new UserError('Release source versions are invalid.', problems);
 
   if (!githubRepo) {
     throw new UserError('The GitHub repo for updates and the installer is not set.', [
@@ -53,9 +56,14 @@ async function main(): Promise<void> {
     ]);
   }
   if (!existsSync(join(appDir, 'config.xml'))) throw new UserError('No build in dist/.', ['Run `npm run build` first.']);
-  const built = /<widget\b[^>]*\sversion="([^"]+)"/.exec(readFileSync(join(appDir, 'config.xml'), 'utf8'))?.[1];
-  if (built !== version.replace(/[-+].*$/, '')) {
+  const manifest = readFileSync(join(appDir, 'config.xml'), 'utf8');
+  const built = /<widget\b[^>]*\sversion="([^"]+)"/.exec(manifest)?.[1];
+  if (built !== version) {
     throw new UserError(`dist/ is version ${built} but package.json says ${version}.`, ['Run `npm run build` again.']);
+  }
+  const application = /<tizen:application\b[^>]*>/.exec(manifest)?.[0] ?? '';
+  if (!application.includes(` id="${APP_ID}"`) || !application.includes(` package="${PACKAGE_ID}"`)) {
+    throw new UserError(`dist/ must identify ${APP_ID} in package ${PACKAGE_ID}.`, ['Run `npm run build` again.']);
   }
 
   rmSync(outDir, { recursive: true, force: true });
