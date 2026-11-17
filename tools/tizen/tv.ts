@@ -109,7 +109,7 @@ export function signWidget(tizen: string, profile: string, appDir: string, outDi
   if (result.code !== 0 || !signed) {
     throw new UserError(`tizen package could not sign the app with profile "${profile}".`, [
       ...result.output.trim().split('\n').map((line) => `| ${line}`),
-      `Check the certificate passwords with \`tizen security-profiles list\`, or recreate the profile with ${setupCommand()}.`,
+      `Check the profile with \`tizen security-profiles list\` and the certificate passwords in Certificate Manager. Run ${setupCommand()} to select or restore it; updates must keep the original author certificate.`,
     ]);
   }
   return file;
@@ -141,7 +141,7 @@ export function packageWidget(appDir: string, outDir: string, signing: { require
   if (signing.required) {
     throw new UserError(`Can't make a signed package: ${whyUnsigned}.`, [
       'A TV only installs packages signed with a Samsung certificate for that TV.',
-      `Run ${setupCommand()} to create or select the certificate profile.`,
+      `Run ${setupCommand()} to select or restore the original author certificate/profile for an update, or create one for a first installation.`,
     ]);
   }
   const file = join(outDir, WGT_NAME);
@@ -171,12 +171,13 @@ function requireProfile(tizen: string): string {
   if (!profile) {
     throw new UserError('No security profile saved.', [
       'The TV only installs apps signed with a Samsung certificate made for it.',
-      `Run ${setupCommand()} to create one, or set KINOTV_TIZEN_PROFILE=<profile name>.`,
+      `Run ${setupCommand()} to select or restore the original author certificate/profile for an update, or create one for a first installation. You can also set KINOTV_TIZEN_PROFILE=<profile name>.`,
     ]);
   }
   if (!listProfiles(tizen).includes(profile)) {
     throw new UserError(`Security profile "${profile}" was not found in the Tizen CLI.`, [
       `See the profiles you have with \`tizen security-profiles list\`, then run ${setupCommand()} again.`,
+      'For an update, recover or import the original author certificate; a new certificate with the same profile name cannot update the installed copy.',
     ]);
   }
   return profile;
@@ -186,19 +187,23 @@ function requireProfile(tizen: string): string {
 function installFailureSteps(output: string): string[] {
   if (/118,\s*-11|author certificate not match/i.test(output)) {
     return [
-      'KinoTV is already on the TV, signed with a different author certificate. Remove it first:',
-      `  tizen uninstall -p ${APP_ID} -s <tv-ip>:26101   (or delete it from Apps on the TV), then run this again.`,
+      'KinoTV is already on the TV, signed with a different author certificate.',
+      'Recover or import the original author.p12 and its password in Certificate Manager, then select that profile and sign again.',
+      'A new certificate under the same Samsung account or profile name does not preserve the author identity.',
+      `Check \`tizen security-profiles list\`, then run ${setupCommand()} or set KINOTV_TIZEN_PROFILE=<original profile name>.`,
+      'Uninstalling removes local session/settings and requires sign-in again. Consider it only as a deliberate last resort if the original author certificate cannot be recovered.',
     ];
   }
   if (/118,\s*-12|invalid certificate chain|1010/i.test(output)) {
     return [
       "The certificate doesn't allow this TV. Its distributor certificate must list this TV's DUID.",
-      `Run ${setupCommand()} to read the DUID and recreate the Samsung certificate.`,
+      `Run ${setupCommand()} to read the DUID. Renew or replace the distributor certificate in Certificate Manager while keeping the original author certificate.`,
     ];
   }
   return [
-    'Read the log above for the reason. Removing the old app first can help:',
-    `  tizen uninstall -p ${APP_ID} -s <tv-ip>:26101`,
+    'Read the log above for the reason. Check the TV connection, installation permission, certificate validity and distributor DUID before retrying.',
+    'For an update, recover or import the original author certificate/profile and sign again; do not create a new author identity.',
+    'Uninstalling removes local session/settings and requires sign-in again. Consider it only as a deliberate last resort after diagnosis and certificate recovery attempts.',
   ];
 }
 
