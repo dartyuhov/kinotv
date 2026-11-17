@@ -194,12 +194,9 @@ that an installable release has been published or tested on your TV.
 ## Publishing a release
 
 The launch release process is manual tag → validated draft → manual publication
-→ anonymous download verification. The draft implementation was reviewed
-read-only at `3683bad`; it is separate integration work and isn't present in
-this guide's `0c70c46` base, whose older workflow publishes directly on a tag
-push. Confirm that the selected candidate includes the draft workflow before
-creating a release tag. Public release assets and public-download TV acceptance
-are still pending.
+→ anonymous download verification. The integrated workflow stages or repairs a
+draft and validates its assets; publication remains manual. Public release assets
+and public-download TV acceptance are still pending.
 
 Use this sequence when the launch coordinator authorizes remote release work:
 

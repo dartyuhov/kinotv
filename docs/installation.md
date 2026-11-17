@@ -8,7 +8,7 @@ KinoTV is unofficial and isn't installed through the Samsung app store.
 [Русское краткое руководство](../README.md#установка-на-телевизор) ·
 [English overview](../README.en.md) · [Source builds](../CONTRIBUTING.md)
 
-This is a pre-release guide, checked against integrated source `0c70c46` and
+This is a pre-release guide, checked against the integrated launch tooling and
 Samsung documentation on November 17, 2026. **Public release assets are not
 available yet.** The commands below describe the current tools and the intended
 downloaded-file journey; they aren't evidence of a completed public-download
@@ -130,9 +130,10 @@ When releases are published, open
 [KinoTV Releases](https://github.com/dartyuhov/kinotv/releases) and select one
 version explicitly. The asset contract is `KinoTV.wgt`, `install.sh`,
 `kinotv-installer.mjs`, and `SHA256SUMS`. The WGT contains third-party notices and
-license files; the bundled installer includes its dependency license. Download
-all four files from that same release to a new folder, including its `install.sh`
-bootstrap. Don't combine a bootstrap from `latest` with a historical release.
+license files; the bundled installer embeds the complete fflate, Saxes, and
+xmlchars dependency notices. Download all four files from that same release to a
+new folder, including its `install.sh` bootstrap. Don't combine a bootstrap from
+`latest` with a historical release.
 Don't use the automatically generated source archive as an installable widget.
 
 Require the selected release's `SHA256SUMS`; if it is missing, stop and report
