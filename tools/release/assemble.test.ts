@@ -76,7 +76,8 @@ describe('the release assets', () => {
     expect(inventory).not.toContain('](public/licenses/');
     const licenseNames = [
       'fflate-mit.txt', 'inter-ofl-1.1.txt', 'lodash-mit.txt', 'lucide-isc-feather-mit.txt',
-      'norigin-mit.txt', 'react-mit.txt', 'tanstack-mit.txt', 'uqr-mit.txt', 'zustand-mit.txt',
+      'norigin-mit.txt', 'react-mit.txt', 'saxes-isc.txt', 'tanstack-mit.txt', 'uqr-mit.txt',
+      'xmlchars-mit.txt', 'zustand-mit.txt',
     ];
     expect(Object.keys(files).filter((name) => name.startsWith('licenses/')).sort()).toEqual(licenseNames.map((name) => `licenses/${name}`));
     for (const name of licenseNames) {
@@ -107,11 +108,17 @@ describe('the release assets', () => {
     expect(script.match(/appVersion:["'`]([^"'`]+)["'`]/)?.[1]).toBe(pkg.version);
     expect(script).toContain('dartyuhov/kinotv');
     expect(readFileSync(released('install.sh'), 'utf8')).toContain('KINOTV_GITHUB_REPO:-dartyuhov/kinotv');
-    const fflateLicense = readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8');
-    expect(fflateLicense.trimEnd()).toBe(readFileSync(join(ROOT, 'node_modules/fflate/LICENSE'), 'utf8').trimEnd());
+    expect(readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8').trimEnd())
+      .toBe(readFileSync(join(ROOT, 'node_modules/fflate/LICENSE'), 'utf8').trimEnd());
     const installer = readFileSync(released('kinotv-installer.mjs'), 'utf8');
     expect(installer.startsWith('/*!\n')).toBe(true);
-    expect(installer.slice(installer.indexOf('/*!') + 4, installer.indexOf('*/'))).toBe(fflateLicense);
+    const installerLicenses = ['fflate-mit.txt', 'saxes-isc.txt', 'xmlchars-mit.txt']
+      .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8')).join('\n');
+    // Rolldown removes indentation inside banner comments; license wording must stay complete.
+    const unindent = (text: string) => text.replace(/^ +/gm, '');
+    expect(unindent(installer.slice(installer.indexOf('/*!') + 4, installer.indexOf('*/')))).toBe(unindent(installerLicenses));
+    expect(readFileSync(join(ROOT, 'public/licenses/xmlchars-mit.txt'), 'utf8').trimEnd())
+      .toBe(readFileSync(join(ROOT, 'node_modules/xmlchars/LICENSE'), 'utf8').trimEnd());
     expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']);
     const sums = readFileSync(released('SHA256SUMS'), 'utf8');
     expect(sums).toMatch(/^[a-f0-9]{64}  KinoTV\.wgt\n[a-f0-9]{64}  install\.sh\n[a-f0-9]{64}  kinotv-installer\.mjs\n$/);

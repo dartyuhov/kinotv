@@ -42,15 +42,23 @@ Project Nayuki and Anthony Fu attributions.
 
 ## Installer inventory
 
-The generated `kinotv-installer.mjs` bundles the following additional component,
-even though it is classified as a development dependency in `package.json`.
+The generated `kinotv-installer.mjs` bundles these additional components,
+classified as development dependencies in `package.json` or their dependencies.
 
 | Component | Version | License text | Provenance |
 | --- | --- | --- | --- |
 | fflate (`fflate`) | 0.8.3 | [MIT](public/licenses/fflate-mit.txt) | Package `LICENSE` |
+| Saxes (`saxes`) | 6.0.0 | [ISC and upstream notices](public/licenses/saxes-isc.txt) | Upstream `v6.0.0` root `LICENSE` |
+| xmlchars (`xmlchars`) | 2.2.0 | [MIT](public/licenses/xmlchars-mit.txt) | Package `LICENSE` |
 
-The installer bundle's only third-party JavaScript package is fflate. Node.js
-built-ins are external runtime imports; KinoTV does not redistribute Node.js,
+Saxes parses manifests with namespace and well-formedness checks; xmlchars
+supplies its XML character tables. Its npm package omits the license file; the
+complete text comes from the
+[Saxes v6.0.0 license](https://github.com/lddubeau/saxes/blob/v6.0.0/LICENSE),
+including inherited SAX notices. These packages are installer tooling and do
+not contribute JavaScript to the TV application.
+
+Node.js built-ins are external runtime imports; KinoTV does not redistribute Node.js,
 Samsung's SDK, or their executables in that bundle. The `install.sh` bootstrap
 contains project shell code and invokes separately installed host tools.
 
@@ -124,15 +132,16 @@ without requiring a fifth download:
    links from `public/licenses/` to `licenses/` in that distribution copy.
    `createUnsignedWgt` includes these ordinary files, and `copyWidget` retains
    them during local signing.
-2. Embed the complete text of `public/licenses/fflate-mit.txt` in a leading
-   comment in `kinotv-installer.mjs`. The assembler can supply the text through
+2. Embed the complete texts of `public/licenses/fflate-mit.txt`,
+   `public/licenses/saxes-isc.txt`, and `public/licenses/xmlchars-mit.txt` in a
+   leading comment in `kinotv-installer.mjs`. The assembler supplies them through
    `build.rolldownOptions.output.banner`, wrapped in `/*! ... */`. Preserve the
    complete copyright, permission, and disclaimer, not only an SPDX identifier
-   or a link. An embedded notice remains alongside the fflate code when the
+   or a link. Embedded notices remain alongside the bundled code when the
    generated installer is downloaded or copied alone.
 3. Generate checksums after notice embedding and all other asset changes.
-   Inspect the actual WGT archive for the inventory and all nine license texts,
-   and compare the installer comment with the complete fflate license. Verify
+   Inspect the actual WGT archive for the inventory and all license texts,
+   and compare the installer comment with all three complete licenses. Verify
    that local signing preserves the WGT notice entries. Keep these checks in
    the release assembler's existing integration seam.
 

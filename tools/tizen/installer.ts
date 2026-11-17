@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
-import { APP_ID, APP_NAME, PACKAGE_ID, tizenVersion } from './configXml.ts';
+import { APP_NAME, kinoTvManifestVersion } from './configXml.ts';
 import { heading, ok, print, runMain, setSetupCommand, style, UserError } from './host.ts';
 import { readDuid, setUpCertificate, setUpTools, setUpTv } from './setup.ts';
 import { install, launch, signWidget } from './tv.ts';
@@ -26,33 +26,14 @@ function checkPackage(file: string): string {
     throw new UserError(`No KinoTV package at ${file}.`, ['Run `bash install.sh` again to download it.']);
   }
   const notKinoTv = new UserError(`${file} is not a KinoTV package.`, ['Run `bash install.sh` again to download the release package.']);
-  let configXml: string;
   try {
     const entries = unzipSync(readFileSync(file));
     if (Object.keys(entries).some((path) => path.split('/').includes('..') || path.startsWith('/'))) throw notKinoTv;
-    configXml = Buffer.from(entries['config.xml'] ?? []).toString('utf8');
+    const configXml = new TextDecoder('utf-8', { fatal: true }).decode(entries['config.xml'] ?? new Uint8Array());
+    return kinoTvManifestVersion(configXml);
   } catch {
     throw notKinoTv;
   }
-  // Read attributes on the actual elements, not identity-looking text in comments or other tags.
-  configXml = configXml.replace(/<!--[\s\S]*?-->/g, '');
-  const widgets = [...configXml.matchAll(/<widget\b[^>]*>/g)];
-  const applications = [...configXml.matchAll(/<tizen:application\b[^>]*>/g)];
-  const attribute = (element: string, name: string) => {
-    const values = [...element.matchAll(new RegExp(`\\s${name}\\s*=\\s*(["'])(.*?)\\1`, 'g'))];
-    return values.length === 1 ? values[0]![2] : undefined;
-  };
-  const version = attribute(widgets[0]?.[0] ?? '', 'version');
-  const application = applications[0]?.[0] ?? '';
-  if (widgets.length !== 1 || applications.length !== 1 ||
-      attribute(application, 'id') !== APP_ID || attribute(application, 'package') !== PACKAGE_ID ||
-      !version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) throw notKinoTv;
-  try {
-    if (tizenVersion(version) !== version) throw notKinoTv;
-  } catch {
-    throw notKinoTv;
-  }
-  return version;
 }
 
 async function main(argv: string[]): Promise<void> {
