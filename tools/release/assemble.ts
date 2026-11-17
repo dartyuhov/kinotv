@@ -1,11 +1,13 @@
 // Makes the files a GitHub release carries, from a production build (`npm run build`):
 //
-//   npm run release:assets      dist/ → dist-release/{KinoTV.wgt, install.sh, kinotv-installer.mjs}
+//   npm run release:assets      dist/ → dist-release/{KinoTV.wgt, install.sh, kinotv-installer.mjs, SHA256SUMS}
 //
 // - KinoTV.wgt: the app, unsigned. Each user signs it with their own Samsung certificate.
 // - install.sh: tools/install.sh with the GitHub repo from package.json filled in.
 // - kinotv-installer.mjs: tools/tizen/installer.ts and everything it uses (fflate included) bundled into one
 //   plain JavaScript file, so users need only Node.js, not this repository or npm.
+// - SHA256SUMS: standard sha256sum records for the three completed payloads (not itself).
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { build } from 'vite';
@@ -15,9 +17,11 @@ import { createUnsignedWgt } from '../tizen/wgt.ts';
 import { readProject, releaseProjectProblems } from './project.ts';
 
 const TOOLS = resolve(import.meta.dirname, '..');
+const ROOT = resolve(TOOLS, '..');
 export const INSTALLER_FILE = 'kinotv-installer.mjs';
 
 async function bundleInstaller(outDir: string): Promise<void> {
+  const license = readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8');
   await build({
     configFile: false,
     root: TOOLS,
@@ -29,7 +33,9 @@ async function bundleInstaller(outDir: string): Promise<void> {
       emptyOutDir: false,
       target: 'node22',
       minify: false, // readable, so anyone can check what they are about to run
-      rolldownOptions: { output: { format: 'es', entryFileNames: INSTALLER_FILE, codeSplitting: false } },
+      rolldownOptions: {
+        output: { format: 'es', entryFileNames: INSTALLER_FILE, codeSplitting: false, banner: `/*!\n${license}*/` },
+      },
     },
   });
 }
@@ -68,10 +74,15 @@ async function main(): Promise<void> {
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
+  const notices = readFileSync(resolve('THIRD_PARTY_NOTICES.md'), 'utf8');
+  writeFileSync(join(appDir, 'THIRD_PARTY_NOTICES.md'), notices.replace(/\]\(public\/licenses\//g, '](licenses/'));
   createUnsignedWgt(appDir, join(outDir, `${APP_NAME}.wgt`));
   stampInstallSh(githubRepo, join(outDir, 'install.sh'));
   await bundleInstaller(outDir);
-  ok(`Release ${version} assets for ${githubRepo} are in dist-release/: ${APP_NAME}.wgt, install.sh, ${INSTALLER_FILE}`);
+  const payloads = [`${APP_NAME}.wgt`, 'install.sh', INSTALLER_FILE];
+  const checksums = payloads.map((name) => `${createHash('sha256').update(readFileSync(join(outDir, name))).digest('hex')}  ${name}\n`).join('');
+  writeFileSync(join(outDir, 'SHA256SUMS'), checksums);
+  ok(`Release ${version} assets for ${githubRepo} are in dist-release/: ${payloads.join(', ')}, SHA256SUMS`);
 }
 
 await runMain(main);
