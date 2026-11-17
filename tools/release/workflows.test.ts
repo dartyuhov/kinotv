@@ -138,7 +138,7 @@ describe('the release workflow', () => {
     });
     expect(steps.some((s) => s.run?.includes('npm run release:assets'))).toBe(true);
     const create = steps.find((s) => s.run?.includes('gh release create'))!.run!;
-    for (const asset of ['dist-release/KinoTV.wgt', 'dist-release/install.sh', 'dist-release/kinotv-installer.mjs']) {
+    for (const asset of ['dist-release/KinoTV.wgt', 'dist-release/install.sh', 'dist-release/kinotv-installer.mjs', 'dist-release/SHA256SUMS']) {
       expect(create).toContain(asset);
     }
   });

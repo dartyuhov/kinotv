@@ -146,12 +146,16 @@ describe('the release assets', () => {
     writeProject();
     fakeBuild('1.4.0');
     expect(assemble().code).toBe(0);
-    // GitHub, serving this release's files as "latest".
+    // GitHub resolves latest once, then serves only this tag's actual generated assets.
     stub(
       'curl',
       `const fs = require('node:fs'), path = require('node:path');
 const url = args[args.length - 1], out = args[args.indexOf('-o') + 1];
-if (!url.startsWith('https://github.com/someone/kinotv/releases/latest/download/')) process.exit(22);
+if (url === 'https://api.github.com/repos/someone/kinotv/releases/latest') {
+  console.log(JSON.stringify({ tag_name: 'v1.4.0' }));
+  process.exit(0);
+}
+if (!url.startsWith('https://github.com/someone/kinotv/releases/download/v1.4.0/')) process.exit(22);
 fs.copyFileSync(path.join(${JSON.stringify(join(project, 'dist-release'))}, path.basename(url)), out);`,
     );
     symlinkSync('/bin/mkdir', join(sandbox.paths.bin, 'mkdir'));
@@ -162,6 +166,14 @@ fs.copyFileSync(path.join(${JSON.stringify(join(project, 'dist-release'))}, path
     const { code, out } = sandbox.run('/bin/bash', [released('install.sh')], `${TV}\n\n`);
 
     expect(code, out).toBe(0);
+    const dir = join(home, 'KinoTV');
+    expect(calls().filter((call) => call.startsWith('curl '))).toEqual([
+      'curl -fLsS https://api.github.com/repos/someone/kinotv/releases/latest',
+      ...['SHA256SUMS', 'kinotv-installer.mjs', 'KinoTV.wgt'].map((name) =>
+        `curl -fL --progress-bar -o ${dir}/${name} https://github.com/someone/kinotv/releases/download/v1.4.0/${name}`),
+    ]);
+    expect(out).toContain('Verified kinotv-installer.mjs');
+    expect(out).toContain('Verified KinoTV.wgt');
     expect(out).toContain('KinoTV 1.4.0 is installed on QE55Q60CAU');
     expect(calls()).toContain(`tizen run -p KinoTV0001.KinoTV -s ${TV}:26101`);
     const signed = Object.keys(unzipSync(readFileSync(join(home, 'KinoTV/signed/KinoTV.wgt'))));

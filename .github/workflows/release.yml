@@ -77,4 +77,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "KinoTV $GITHUB_REF_NAME" --generate-notes dist-release/KinoTV.wgt dist-release/install.sh dist-release/kinotv-installer.mjs
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "KinoTV $GITHUB_REF_NAME" --generate-notes dist-release/KinoTV.wgt dist-release/install.sh dist-release/kinotv-installer.mjs dist-release/SHA256SUMS
