@@ -39,7 +39,7 @@ source includes these features:
 
 These descriptions incorporate source inspected on November 17, 2026, including
 pending application changes. That source removes the Sport tab; the documentation
-branch at `652b04e` still contains its earlier unavailable-sport screen. The final
+branch at `0c70c46` still contains its earlier unavailable-sport screen. The final
 release candidate must reconcile this difference. Source inspection and browser
 fixtures do not establish native TV playback or launch readiness.
 
@@ -49,6 +49,35 @@ Follow the [installation guide](docs/installation.md) for SDK setup, Developer
 Mode, your TV's DUID, Samsung author/distributor certificates, local signing,
 installation, and same-certificate updates. Until a release is published, use the
 [source-build instructions](CONTRIBUTING.md#build-and-install-on-a-tv).
+
+Once releases exist, download `KinoTV.wgt`, `install.sh`,
+`kinotv-installer.mjs`, and `SHA256SUMS` from **one selected release**. Check all
+three payloads against `SHA256SUMS` before executing the bootstrap or installer.
+These checks establish integrity, not independent publisher authenticity.
+The bootstrap itself must also come from that selected release. From its
+download folder, run each command separately and stop on failure. Replace
+`v1.2.3` with the selected tag:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+bash ./install.sh --help
+bash ./install.sh --release v1.2.3
+```
+
+Stop if any check fails. The bootstrap checks the downloaded installer and WGT;
+without `--release`, it resolves `latest` once for all downloads. With
+`--wgt ./KinoTV.wgt`, it downloads only the selected release's installer and
+checksum manifest: your local widget isn't release-checksummed or required to
+match that tag. Its KinoTV identity and version are inspected before signing,
+and the fresh signed output is checked against the input before installation.
+See the guide for
+[direct installer and manual signing routes](docs/installation.md#sign-and-install-the-downloaded-widget).
+
+Keep `~/KinoTV` (or your chosen `KINOTV_DIR`) to reuse saved TV/profile choices.
+Updates require the **same author certificate**, not just the same profile name.
+Back up `author.p12` and its password; a saved profile name isn't that backup.
+The source `tools/install.sh` has a repository placeholder; use the assembled
+release asset. These instructions don't imply that a public release exists yet.
 
 On first launch, scan the QR code or open the address displayed on the TV on your
 phone/computer. Sign in to kino.watch there and approve the TV's code. Each

@@ -8,10 +8,11 @@ KinoTV is unofficial and isn't installed through the Samsung app store.
 [Русское краткое руководство](../README.md#установка-на-телевизор) ·
 [English overview](../README.en.md) · [Source builds](../CONTRIBUTING.md)
 
-This is a pre-release guide, checked against source and Samsung documentation on
-November 17, 2026. **Public release assets are not available yet.** The commands
-below describe the current tools and the intended downloaded-file journey;
-they aren't evidence of a completed public-download installation.
+This is a pre-release guide, checked against integrated source `0c70c46` and
+Samsung documentation on November 17, 2026. **Public release assets are not
+available yet.** The commands below describe the current tools and the intended
+downloaded-file journey; they aren't evidence of a completed public-download
+installation.
 
 ## Prerequisites and scope
 
@@ -127,33 +128,34 @@ appropriate certificate while preserving author identity for updates.
 
 When releases are published, open
 [KinoTV Releases](https://github.com/dartyuhov/kinotv/releases) and select one
-version explicitly. The planned asset set is `KinoTV.wgt`, `install.sh`,
-`kinotv-installer.mjs`, and `SHA256SUMS`, with applicable notices supplied by the
-release. Download all files from that same release to a new folder. Don't use
-the automatically generated source archive as an installable widget.
+version explicitly. The asset contract is `KinoTV.wgt`, `install.sh`,
+`kinotv-installer.mjs`, and `SHA256SUMS`. The WGT contains third-party notices and
+license files; the bundled installer includes its dependency license. Download
+all four files from that same release to a new folder, including its `install.sh`
+bootstrap. Don't combine a bootstrap from `latest` with a historical release.
+Don't use the automatically generated source archive as an installable widget.
 
 Require the selected release's `SHA256SUMS`; if it is missing, stop and report
 the incomplete asset set. Open a terminal in that folder and verify it before
 running a downloaded installer or signing the widget:
 
 ```sh
+# Example only: replace this with the tag you selected on Releases.
+RELEASE=v1.2.3
 shasum -a 256 -c SHA256SUMS
 unzip -p KinoTV.wgt config.xml
 ```
 
-Every listed file must be present and report `OK`. Stop on missing files or
-mismatches. Check that the manifest is the requested version, the application ID
-is `KinoTV0001.KinoTV`, and the package ID is `KinoTV0001`. The expected widget
+Require exactly one checksum entry for each of the three payloads: `KinoTV.wgt`,
+`install.sh`, and `kinotv-installer.mjs`. Each must report `OK`; `SHA256SUMS`
+doesn't checksum itself. Stop on missing files or mismatches. Check that the
+widget manifest is the requested version, the application ID is
+`KinoTV0001.KinoTV`, and the package ID is `KinoTV0001`. The expected widget
 version is the release's numeric version without the leading `v`. The manifest
 contains no account credentials. Checksums check integrity against that release's
-manifest; they don't independently authenticate its publisher.
-
-The current bootstrap at documentation base `652b04e` has **no checksum check or
-release-selection flag**. Even `--wgt` downloads the installer from `latest`.
-Don't assume it implements the planned single-release contract. The direct
-bundled-installer route below avoids that bootstrap download. Final bootstrap
-flags and explicit-widget checksum behavior must be reconciled with the release
-tooling before this guide is marked launch-ready.
+checksum manifest; they don't independently authenticate its publisher. Files
+and checksums fetched from the same compromised source could agree. Review the
+release source and downloaded scripts before execution.
 
 ## Sign and install the downloaded widget
 
@@ -164,34 +166,70 @@ routes, after the certificate and download checks above.
 
 ### Use the bundled installer
 
-The existing bundled installer accepts `--wgt`, performs SDK/TV/profile setup,
-unpacks the unsigned archive, signs it with your selected profile, installs it,
-and launches KinoTV. From the folder containing the selected release files, run:
+The bundled installer accepts `--wgt` and `--release`, performs SDK/TV/profile
+setup, unpacks the unsigned archive, signs it with your selected profile,
+installs it, and launches KinoTV. From the folder containing the selected
+release files, run:
 
 ```sh
-node kinotv-installer.mjs --wgt ./KinoTV.wgt
+node kinotv-installer.mjs --wgt ./KinoTV.wgt --release "$RELEASE"
 ```
 
-Enter the TV's address and the profile name when prompted. It saves choices in
-`tizen/.signing/settings.json` under the current directory and writes the signed
-package under `signed/`. Before rerunning the current installer, ensure an old
-`signed/KinoTV.wgt` cannot be reused: move the previous `signed/` directory to a
-backup location or use a new working folder. Its stale-output hardening remains
-separate implementation work. Check the version inside the signed WGT and the
-installed app before treating an update as successful.
+This command uses the files you already checked; it doesn't download them or
+verify `SHA256SUMS` itself. `--release` requires the widget's version to match
+the numeric portion of the selected tag. For a trusted local/source-built widget,
+omit `--release` if it isn't tied to that release; its KinoTV identity and version
+are still inspected.
 
-The shell bootstrap's currently verified syntax is:
+Enter the TV's address and the profile name when prompted. The installer saves
+choices in `tizen/.signing/settings.json` under the **current directory** and
+writes `signed/KinoTV.wgt` there. It removes old signed output before packaging,
+requires a newly produced archive with an author signature, and checks its
+application/package identity and version against the input before installation.
+Check the installed app version as well before treating an update as successful.
+
+For updates, keep the same working directory to reuse your saved TV/profile
+choices. If you use a new download folder, select the existing Samsung profile
+with the original author certificate. The settings file remembers a profile
+name; it isn't a certificate backup. `KINOTV_TV` and `KINOTV_TIZEN_PROFILE`
+override saved choices.
+
+### Use the shell bootstrap
+
+After checking the selected release's `install.sh` above, you can instead let
+it download and check the payloads. Run this from the download folder:
 
 ```sh
 bash ./install.sh --help
-bash ./install.sh
-bash ./install.sh --wgt ./KinoTV.wgt
+bash ./install.sh --release "$RELEASE"
 ```
 
-Its help reports only `[--wgt FILE]`. It stores downloads under `~/KinoTV`, or
-`$KINOTV_DIR`. These are current syntax examples, not the final verified release
-download procedure. The unassembled `tools/install.sh` in source still has a
-repository placeholder at this base; don't use it as a published download.
+Without `--release`, the bootstrap resolves GitHub's latest release **once** and
+uses that tag for every download. Explicit tags must have stable `vX.Y.Z` form.
+It fetches `SHA256SUMS`, verifies `kinotv-installer.mjs` before running it, and
+verifies `KinoTV.wgt` before passing it and the selected tag to the installer.
+It doesn't verify its own running `install.sh`; that's why you check it first.
+
+To supply a local widget, run:
+
+```sh
+bash ./install.sh --release "$RELEASE" --wgt ./KinoTV.wgt
+```
+
+With `--wgt`, the selected release supplies **only the installer and checksum
+manifest**. The bootstrap checks the installer, but it doesn't download or
+release-checksum your widget, and it doesn't require the widget version to match
+that tag. Verify a downloaded release widget yourself as above. The installer
+still inspects its KinoTV application/package identity and numeric version, then
+checks the freshly signed output against that input. A relative `--wgt` path is
+relative to the directory where you invoke the bootstrap.
+
+Downloads, saved choices, and signed output live under `~/KinoTV`, or
+`$KINOTV_DIR` if set. Keep that directory across updates for profile continuity;
+download a new release's bootstrap into its own download folder and run it with
+the same `KINOTV_DIR`. The source `tools/install.sh` still has a repository
+placeholder; use the assembled release asset. Only the shell bootstrap offers
+`--help`; the bundled Node installer reports usage for unsupported options.
 
 ### Sign and install manually with the Samsung CLI
 
@@ -258,8 +296,10 @@ profile name alone isn't sufficient if the underlying author certificate changed
 1. Keep your existing author-certificate backup and note the current app version,
    signed-in state, and preferences.
 2. Download one newer release's complete asset set and verify it.
-3. Sign in a fresh staging directory with the original author certificate and a
-   valid distributor certificate containing the TV's DUID.
+3. Reuse the installer's working directory and original Samsung profile, or use
+   a fresh manual signing directory with the original author certificate and a
+   valid distributor certificate containing the TV's DUID. Don't create a new
+   author certificate when the wizard asks you to select a profile.
 4. Confirm the newly signed manifest version and IDs, then install over the
    existing application using the commands above.
 5. Launch KinoTV and verify the new installed version, retained sign-in, startup
