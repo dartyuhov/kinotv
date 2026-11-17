@@ -108,7 +108,8 @@ describe('npm run tv', () => {
 
     expect(code).toBe(1);
     expect(out).toContain('The TV refused to install KinoTV');
-    expect(out).toContain('tizen uninstall -p KinoTV0001.KinoTV');
+    expect(out).toContain('Recover or import the original author.p12');
+    expect(out).not.toContain('tizen uninstall');
     expect(calls().filter((c) => c.startsWith('tizen run'))).toEqual([]);
   });
 });
@@ -200,6 +201,8 @@ for (const [rel, body] of [['tools/ide/bin/tizen', "console.log('Tizen CLI 2.5.2
     expect(out).toContain('✓ Connected to QE55Q60CAU');
     expect(out).toContain('FAKE-DUID-0001');
     expect(out).toContain('Certificate Manager');
+    expect(out).toContain('First installation only: create a new author certificate');
+    expect(out).toContain('For an update: import the original author.p12');
     expect(out).toContain('Setup complete');
     expect(out).toContain('npm run tv');
     expect(savedSettings()).toEqual({ tv: TV, profile: 'KinoTV' });
@@ -215,6 +218,23 @@ for (const [rel, body] of [['tools/ide/bin/tizen', "console.log('Tizen CLI 2.5.2
 
     expect(code).toBe(0);
     expect(out).toContain('✓ Using security profile "KinoTV"');
+  });
+
+  it('guides recovery of a missing saved profile and accepts an explicitly selected original-author profile', () => {
+    tizenStub();
+    stub('sdb', TV_CONNECTED);
+    saveSettings({ tv: TV, profile: 'OriginalProfile' });
+
+    const { code, out } = cli(['setup'], '\nKinoTV\n');
+
+    expect(code, out).toBe(0);
+    expect(out).toContain('Saved security profile "OriginalProfile" was not found');
+    expect(out).toContain('Recover or import the original author.p12');
+    expect(out).toContain('same SDK installation');
+    expect(out).not.toContain('create a new author certificate');
+    expect(out).toContain('Profiles the Tizen CLI knows: KinoTV');
+    expect(savedSettings()).toEqual({ tv: TV, profile: 'KinoTV' });
+    expect(calls()).toContain('tizen install-permit -t QE55Q60CAU');
   });
 
   it("stops and lists the profiles there are when the named one doesn't exist", () => {

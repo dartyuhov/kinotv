@@ -242,4 +242,44 @@ fs.copyFileSync(path.join(${JSON.stringify(join(project, 'dist-release'))}, path
     expect(code).toBe(1);
     expect(out).toContain('KinoTV0001.KinoTV');
   });
+
+  it.each(['commented-out application', 'wrong namespace', 'duplicate declaration'])('refuses %s before replacing release assets', (kind) => {
+    writeProject();
+    fakeBuild();
+    const application = '<tizen:application id="KinoTV0001.KinoTV" package="KinoTV0001" required_version="3.0"/>';
+    const xml = renderConfigXml({ version: '1.4.0' });
+    const invalid = kind === 'commented-out application' ? xml.replace(application, `<!-- ${application} -->`)
+      : kind === 'wrong namespace' ? xml.replace('http://tizen.org/ns/widgets', 'urn:other')
+      : xml.replace(application, `${application}\n${application}`);
+    writeFileSync(join(project, 'dist/config.xml'), invalid);
+    mkdirSync(join(project, 'dist-release'));
+    writeFileSync(released('previous-release'), 'keep until validation succeeds');
+
+    const { code, out } = assemble();
+
+    expect(code).toBe(1);
+    expect(out).toContain('Invalid KinoTV manifest');
+    expect(readFileSync(released('previous-release'), 'utf8')).toBe('keep until validation succeeds');
+    expect(readdirSync(join(project, 'dist-release'))).toEqual(['previous-release']);
+  });
+
+  it('assembles alternate namespace prefixes accepted by the standalone installer without changing manifest bytes', () => {
+    writeProject();
+    fakeBuild();
+    const xml = renderConfigXml({ version: '1.4.0' })
+      .replace(/tizen:/g, 'tv:').replace('xmlns:tizen=', 'xmlns:tv=')
+      .replace('<widget ', '<w:widget xmlns:w="http://www.w3.org/ns/widgets" ').replace('</widget>', '</w:widget>');
+    writeFileSync(join(project, 'dist/config.xml'), xml);
+
+    const { code, out } = assemble();
+
+    expect(code, out).toBe(0);
+    expect(Buffer.from(unzipSync(readFileSync(released('KinoTV.wgt')))['config.xml']!).toString('utf8')).toBe(xml);
+    tizenStub(INSTALL_OK);
+    stub('sdb', TV_CONNECTED);
+    sandbox.saveSettings({ tv: TV, profile: 'KinoTV' });
+    const installed = sandbox.node(released('kinotv-installer.mjs'), ['--wgt', released('KinoTV.wgt'), '--release', 'v1.4.0']);
+    expect(installed.code, installed.out).toBe(0);
+    expect(installed.out).toContain('KinoTV 1.4.0 is installed');
+  });
 });

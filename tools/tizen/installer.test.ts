@@ -169,6 +169,25 @@ ${INSTALL_OK}`);
     expect(out).toContain('KinoTV 1.5.0 is installed');
   });
 
+  it('stops for recovery when the saved profile is missing instead of defaulting to another author profile', () => {
+    const wgt = releaseWgt('1.5.0');
+    tizenStub(INSTALL_OK);
+    stub('sdb', TV_CONNECTED);
+    saveSettings({ tv: TV, profile: 'OriginalProfile' });
+
+    const { code, out } = installer(['--wgt', wgt]);
+
+    expect(code).toBe(1);
+    expect(out).toContain('Saved security profile "OriginalProfile" was not found');
+    expect(out).toContain('Recover or import the original author.p12');
+    expect(out).not.toContain('create a new author certificate');
+    expect(out).not.toContain('Finish creating the certificate');
+    expect(out).toContain('Uninstalling removes local session/settings');
+    expect(out).toContain('bash install.sh');
+    expect(savedSettings()).toEqual({ tv: TV, profile: 'OriginalProfile' });
+    expect(calls().some((c) => /^tizen (package|install|run|uninstall) /.test(c))).toBe(false);
+  });
+
   it('rejects a downloaded widget that does not match the selected release before touching the TV', () => {
     const wgt = releaseWgt('1.4.0');
     const { code, out } = installer(['--wgt', wgt, '--release', 'v1.5.0']);
@@ -241,7 +260,7 @@ if (args[0] === 'package') {
     expect(calls().filter((c) => /^tizen (package|install )/.test(c))).toEqual([]);
   });
 
-  it('explains a package the TV refused', () => {
+  it('recovers the original author identity first when an update is refused', () => {
     const wgt = releaseWgt();
     tizenStub(`if (args[0] === 'install') console.log('app_id[KinoTV0001] install failed[118, -11], reason: Author certificate not match :');`);
     stub('sdb', TV_CONNECTED);
@@ -251,7 +270,35 @@ if (args[0] === 'package') {
 
     expect(code).toBe(1);
     expect(out).toContain('The TV refused to install KinoTV');
-    expect(out).toContain('tizen uninstall -p KinoTV0001.KinoTV');
+    expect(out).toContain('Recover or import the original author.p12');
+    expect(out).toContain('same Samsung account or profile name');
+    expect(out).toContain('Uninstalling removes local session/settings');
+    expect(out).toContain('deliberate last resort');
+    expect(out).not.toContain('tizen uninstall');
+    expect(calls().some((c) => /^tizen (uninstall|run) /.test(c))).toBe(false);
+  });
+
+  it.each([
+    ['unknown failure', 'install failed[999, -1]', 'Read the log above'],
+    ['distributor failure', 'install failed[118, -12], invalid certificate chain 1010', "TV's DUID"],
+  ])('preserves update continuity in recovery advice for %s', (_case, failure, diagnostic) => {
+    const wgt = releaseWgt();
+    tizenStub(`if (args[0] === 'install') console.log(${JSON.stringify(failure)});`);
+    stub('sdb', TV_CONNECTED);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+
+    const { code, out } = installer(['--wgt', wgt]);
+
+    expect(code).toBe(1);
+    expect(out).toContain(diagnostic);
+    expect(out).toContain('original author certificate');
+    expect(out).not.toContain('tizen uninstall');
+    expect(out).not.toContain('recreate the Samsung certificate');
+    if (_case === 'unknown failure') {
+      expect(out).toContain('Uninstalling removes local session/settings');
+      expect(out).toContain('deliberate last resort');
+    } else expect(out).toContain('distributor certificate');
+    expect(calls().some((c) => /^tizen (uninstall|run) /.test(c))).toBe(false);
   });
 
   it('checks the package before touching the TV: a missing file', () => {
