@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { accessSync, constants, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
@@ -5,6 +6,7 @@ import { build } from 'vite';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { renderConfigXml } from '../tizen/configXml.ts';
 import { INSTALL_OK, TV, TV_CONNECTED, useSandbox } from '../tizen/sandbox.ts';
+import { copyWidget, extractWgt } from '../tizen/wgt.ts';
 
 // `npm run release:assets` (tools/release/assemble.ts) turns a production build into the files the
 // release workflow attaches to a GitHub release. Run here in a sandbox project, as CI runs it.
@@ -21,6 +23,7 @@ beforeEach(() => ({ project, home } = sandbox.paths));
 function writeProject({ version = '1.4.0', githubRepo = 'someone/kinotv' } = {}): void {
   writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'kinotv', version, kinotv: { githubRepo } }));
   writeFileSync(join(project, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
+  writeFileSync(join(project, 'THIRD_PARTY_NOTICES.md'), '# Fixture notices\n');
 }
 
 /** A minimal production build in dist/ (the real build is covered by tools/tizen/package.test.ts). */
@@ -43,7 +46,7 @@ describe('the release assets', () => {
     expect(pkg.kinotv.githubRepo).toBe('dartyuhov/kinotv');
     expect(lock.version).toBe(pkg.version);
     expect(lock.packages['']?.version).toBe(pkg.version);
-    for (const name of ['package.json', 'package-lock.json']) {
+    for (const name of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) {
       writeFileSync(join(project, name), readFileSync(join(ROOT, name)));
     }
     // Ignore local env files and replace client configuration explicitly. These fixtures never make
@@ -68,22 +71,68 @@ describe('the release assets', () => {
     expect(manifest).toContain('id="KinoTV0001.KinoTV" package="KinoTV0001"');
     expect(Object.keys(files)).toEqual(expect.arrayContaining(['index.html', 'icon.png', 'config.xml']));
     expect(Object.keys(files).some((name) => /signature|\.map$|(^|\/)\./.test(name))).toBe(false);
+    const inventory = Buffer.from(files['THIRD_PARTY_NOTICES.md'] ?? []).toString('utf8');
+    expect(inventory).toBe(readFileSync(join(ROOT, 'THIRD_PARTY_NOTICES.md'), 'utf8').replace(/\]\(public\/licenses\//g, '](licenses/'));
+    expect(inventory).not.toContain('](public/licenses/');
+    const licenseNames = [
+      'fflate-mit.txt', 'inter-ofl-1.1.txt', 'lodash-mit.txt', 'lucide-isc-feather-mit.txt',
+      'norigin-mit.txt', 'react-mit.txt', 'tanstack-mit.txt', 'uqr-mit.txt', 'zustand-mit.txt',
+    ];
+    expect(Object.keys(files).filter((name) => name.startsWith('licenses/')).sort()).toEqual(licenseNames.map((name) => `licenses/${name}`));
+    for (const name of licenseNames) {
+      expect(Buffer.from(files[`licenses/${name}`]!)).toEqual(readFileSync(join(ROOT, 'public/licenses', name)));
+      expect(inventory).toContain(`](licenses/${name})`);
+    }
+    const fonts = Object.keys(files).filter((name) => /\.woff2?$/.test(name));
+    expect(fonts).toHaveLength(16);
+    const css = Object.entries(files).filter(([name]) => name.endsWith('.css')).map(([, bytes]) => Buffer.from(bytes).toString('utf8')).join('\n');
+    for (const subset of ['latin', 'cyrillic']) {
+      for (const weight of [400, 600, 700, 800]) {
+        for (const format of ['woff', 'woff2']) {
+          const font = fonts.find((name) => name.includes(`inter-${subset}-${weight}-normal-`) && name.endsWith(`.${format}`));
+          expect(font, `${subset} ${weight} ${format}`).toBeDefined();
+          expect(css).toContain(font!.replace('assets/', ''));
+        }
+      }
+    }
+    const unpacked = join(project, 'unpacked');
+    const staging = join(project, 'signing-staging');
+    extractWgt(released('KinoTV.wgt'), unpacked);
+    copyWidget(unpacked, staging);
+    for (const name of ['THIRD_PARTY_NOTICES.md', ...licenseNames.map((name) => `licenses/${name}`), ...fonts]) {
+      expect(readFileSync(join(staging, name))).toEqual(Buffer.from(files[name]!));
+    }
     const script = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([, bytes]) => Buffer.from(bytes).toString('utf8')).join('\n');
     expect(script.includes('fixture-release-client-id') && script.includes('fixture-release-client-secret')).toBe(true);
     expect(script.match(/appVersion:["'`]([^"'`]+)["'`]/)?.[1]).toBe(pkg.version);
     expect(script).toContain('dartyuhov/kinotv');
     expect(readFileSync(released('install.sh'), 'utf8')).toContain('KINOTV_GITHUB_REPO:-dartyuhov/kinotv');
+    const fflateLicense = readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8');
+    expect(fflateLicense.trimEnd()).toBe(readFileSync(join(ROOT, 'node_modules/fflate/LICENSE'), 'utf8').trimEnd());
+    const installer = readFileSync(released('kinotv-installer.mjs'), 'utf8');
+    expect(installer.startsWith('/*!\n')).toBe(true);
+    expect(installer.slice(installer.indexOf('/*!') + 4, installer.indexOf('*/'))).toBe(fflateLicense);
+    expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']);
+    const sums = readFileSync(released('SHA256SUMS'), 'utf8');
+    expect(sums).toMatch(/^[a-f0-9]{64}  KinoTV\.wgt\n[a-f0-9]{64}  install\.sh\n[a-f0-9]{64}  kinotv-installer\.mjs\n$/);
+    // Independent standard-tool readback checks the final bytes, including ZIP contents and banner.
+    const checked = spawnSync('shasum', ['-a', '256', '-c', 'SHA256SUMS'], {
+      cwd: join(project, 'dist-release'), encoding: 'utf8',
+    });
+    expect(checked.status, `${checked.error ?? ''}${checked.stdout}${checked.stderr}`).toBe(0);
+    expect(checked.stdout.trim().split('\n')).toEqual(['KinoTV.wgt: OK', 'install.sh: OK', 'kinotv-installer.mjs: OK']);
   }, 60_000);
 
-  it('are the unsigned app, install.sh with the GitHub repo filled in, and the installer as one file', () => {
+  it('are the unsigned app, stamped install.sh, standalone installer, and checksum manifest', () => {
     writeProject();
     fakeBuild();
 
     const { code, out } = assemble();
 
     expect(code, out).toBe(0);
-    expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'install.sh', 'kinotv-installer.mjs']);
+    expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']);
     expect(Object.keys(unzipSync(readFileSync(released('KinoTV.wgt')))).sort()).toEqual([
+      'THIRD_PARTY_NOTICES.md',
       'assets/index-abc.js',
       'config.xml',
       'icon.png',
