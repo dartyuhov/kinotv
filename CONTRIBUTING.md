@@ -125,6 +125,21 @@ The tools look in `PATH` and `$TIZEN_HOME` (default `~/tizen-studio`).
 Local choices live in ignored `tizen/.signing/settings.json`; keep certificates,
 their passwords, and that file out of contributions.
 
+The downloaded installer stores these choices relative to its working directory;
+the bootstrap uses `~/KinoTV` or `KINOTV_DIR`. Reuse that directory for updates,
+or select the existing Samsung profile when starting in a new directory. A
+profile name alone doesn't preserve author identity: retain the original
+`author.p12` and password. Don't uninstall first when testing same-author updates.
+
+The release installer removes stale signed output, requires a new signed WGT,
+and checks its application/package identity and version against the input before
+installation. `--release vX.Y.Z` on the Node installer also requires that input
+version to match the tag. The shell bootstrap supports `--release` and `--wgt`;
+with `--wgt`, it checks only the downloaded installer against release checksums
+and doesn't bind the local widget to the tag. Follow the
+[download and signing guide](docs/installation.md#select-and-check-downloaded-files)
+for the complete checksum procedure, including checking `install.sh` itself.
+
 ## Submit an issue or pull request
 
 Use [GitHub Issues](https://github.com/dartyuhov/kinotv/issues) for ordinary bugs
@@ -175,3 +190,52 @@ revision; they don't automatically validate newer source.
 Release publication, signing credentials, legal notices, and repository settings
 are maintainer-coordinated work. Public source availability alone doesn't mean
 that an installable release has been published or tested on your TV.
+
+## Publishing a release
+
+The launch release process is manual tag → validated draft → manual publication
+→ anonymous download verification. The draft implementation was reviewed
+read-only at `3683bad`; it is separate integration work and isn't present in
+this guide's `0c70c46` base, whose older workflow publishes directly on a tag
+push. Confirm that the selected candidate includes the draft workflow before
+creating a release tag. Public release assets and public-download TV acceptance
+are still pending.
+
+Use this sequence when the launch coordinator authorizes remote release work:
+
+1. Select the reviewed candidate and confirm matching stable numeric versions in
+   source, package/lock metadata, and the built widget, the intended repository,
+   and effective release client configuration (presence only). Finish relevant
+   candidate checks, notices, exposure review, and agreed pre-publication device
+   checks. Exact copyright-holder name/year, the private reporting contact, and
+   the host/TV support baseline still require maintainer confirmation.
+2. Create and push a matching `vX.Y.Z` tag manually only with scoped approval.
+   The tag-driven workflow runs the release gate and CI, builds the unsigned WGT,
+   assembles the four assets, and stages or repairs a **draft**. It doesn't
+   publish automatically. Its configuration-presence gate doesn't prove client
+   ownership or upstream permission.
+3. Wait for the complete workflow to finish. Review the validated draft's tag
+   and source SHA, notes, and all four assets: `KinoTV.wgt`, `install.sh`,
+   `kinotv-installer.mjs`, and `SHA256SUMS`. Draft validation downloads the hosted
+   assets and compares their bytes with the local assembly and checksums; it
+   doesn't establish legal or TV acceptance. A failed run can leave an incomplete
+   draft. Inspect the failure and rerun the same tag workflow to repair it.
+   Published/completed releases are refused; don't move tags or replace public
+   assets as routine recovery.
+4. Review the legal and launch evidence with the coordinator, then publish the
+   validated draft manually under separate publication approval. Don't publish
+   while its workflow is running. Draft validation alone isn't approval to
+   announce the launch.
+5. Retrieve public release metadata and all four assets **without authentication**
+   into a clean folder. Confirm the selected tag and complete asset set, check
+   `SHA256SUMS`, and inspect the unsigned widget's identity/version and notices.
+   Use those exact downloads for local signing, fresh installation, device-code
+   sign-in, native playback, and a same-author upgrade retaining session/settings
+   on the agreed baseline. Record the exact source/package, device/firmware,
+   date, and pass/fail/blocked results in the
+   [integrated TV checklist](docs/integrated-tv-acceptance.md).
+
+Keep local preparation, observed GitHub configuration, publication, and verified
+installation as separate results. Announcement and launch completion require
+the public-download checks and coordinated TV evidence; a tag or green draft
+workflow alone doesn't establish them.
