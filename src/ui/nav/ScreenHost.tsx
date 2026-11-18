@@ -1,6 +1,7 @@
 import { doesFocusableExist, FocusContext, setFocus, useFocusable } from '@noriginmedia/norigin-spatial-navigation';
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { registerScroller, scrollerFor, type StackEntry } from './stack';
+import { restoreArtworkFocus } from '../components/cardReadiness';
 import './ScreenHost.css';
 
 const ScreenContext = createContext<number | null>(null);
@@ -34,6 +35,7 @@ export function ScreenHost({ entry, children }: { entry: StackEntry; children: R
   // Runs after the children's effects, so their focusables are registered by now.
   useEffect(() => {
     const target = entry.restore?.focusKey;
+    if (target && restoreArtworkFocus(target, focusKey)) return;
     void setFocus(target && doesFocusableExist(target) ? target : focusKey);
   }, [entry, focusKey]);
 

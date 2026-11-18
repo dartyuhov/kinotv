@@ -23,9 +23,22 @@ let observers = 0;
 const beforeNavigation = () => { previousFocus = getCurrentFocusKey(); navigation++; };
 export const artworkNavigationOrigin = () => previousFocus;
 
+const artworkRestorers = new Map<string, (target: string) => void>();
+
+/** Restore a saved artwork leaf through its owner, after selecting a usable fallback. */
+export function restoreArtworkFocus(target: string, fallback: string): boolean {
+  for (const [key, restore] of artworkRestorers) {
+    if (!target.startsWith(`${key}:`)) continue;
+    void setFocus(fallback);
+    restore(target);
+    return true;
+  }
+  return false;
+}
+
 /** Scroll/load an incoming container without leaving focus on an invisible leaf. */
-export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferred?: string) {
-  const pending = useRef<{ from: string; navigation: number; target?: string }>();
+export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferred?: string, prepareRestore?: () => void) {
+  const pending = useRef<{ from?: string; navigation: number; target?: string }>();
   const [revision, retry] = useState(0);
   useEffect(() => {
     if (!observers++) window.addEventListener('keydown', beforeNavigation, true);
@@ -40,13 +53,27 @@ export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferr
   }, [key, ready, preferred]);
   useEffect(() => {
     const request = pending.current;
+    if (request && request.navigation !== navigation) {
+      pending.current = undefined;
+      return;
+    }
     if (!request || !(request.target ? ready.has(request.target) : ready.size)) return;
     pending.current = undefined;
-    if (request.navigation === navigation && getCurrentFocusKey() === request.from) void setFocus(request.target ?? key);
+    if (request.navigation === navigation && (request.from === undefined || getCurrentFocusKey() === request.from)) void setFocus(request.target ?? key);
   }, [key, ready, revision]);
   const request = useCallback((target: string) => {
     pending.current = { from: getCurrentFocusKey(), navigation, target };
     retry(value => value + 1);
   }, []);
+  useEffect(() => {
+    artworkRestorers.set(key, target => {
+      prepareRestore?.();
+      // The old screen's key can still be current while Norigin schedules the
+      // fallback. Restoration is owned by this navigation until another key.
+      pending.current = { navigation, target };
+      retry(value => value + 1);
+    });
+    return () => { artworkRestorers.delete(key); };
+  }, [key, request, prepareRestore]);
   return { enter, request };
 }

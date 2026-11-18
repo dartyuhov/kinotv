@@ -42,7 +42,11 @@ test('Home vertical browse and delayed return reuse artwork without filesystem r
   await app.open(); await remote.press('down');
   const first = page.getByRole('button', { name: 'Фильм 97000', exact: true });
   await expect(first.locator('img')).toHaveJSProperty('naturalWidth', 16);
-  await remote.press('down', 'down');
+  await expect(app.focused).toHaveAccessibleName('Фильм 97000');
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Фильм 98000');
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Подборка');
   await expect(first).not.toBeInViewport();
   await expect(first.locator('img')).not.toHaveAttribute('src');
   // Allow the previous retention window and batched writes to finish.
