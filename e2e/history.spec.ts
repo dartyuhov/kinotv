@@ -1,9 +1,9 @@
 import { fakeFilm, fakeHome, fakeSeries, filmProgress, seriesProgress } from './harness/catalog';
 import { fakeHistory, historyEntry } from './harness/history';
-import { expect, test } from './harness/test';
+import { expect, browsingTest as test } from './harness/test';
 import type { Remote } from './harness/remote';
 
-async function history(remote: Remote) { await remote.press('right', 'right', 'right', 'right', 'right', 'right', 'right'); }
+async function history(remote: Remote) { await remote.repeat('right', 6); }
 const series = fakeSeries(851, 'Гавань', [['Первая', 'Вторая'], ['Третья']]);
 const film = fakeFilm(852, 'Река');
 

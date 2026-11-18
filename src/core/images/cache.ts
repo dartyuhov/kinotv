@@ -261,18 +261,36 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
   // Transport slots belong to shared sources, not consumers. Storage admission is serialized separately.
   const queue: { image: SharedImage; start: () => void; cancel: () => void }[] = [];
   let active = 0;
-  // Cached reads and downloads share one decode lane. The transport limit alone
-  // doesn't bound validation of a screenful of cold persistent hits.
-  let decoding: Promise<unknown> = Promise.resolve();
-  function prepare(payload: Blob, signal: AbortSignal): Promise<Blob> {
-    const result = decoding.then(async () => {
-      if (signal.aborted) throw new Error('Artwork cancelled');
-      const prepared = await validate(payload);
-      if (signal.aborted) throw new Error('Artwork cancelled');
-      return prepared ?? payload;
-    });
-    decoding = result.catch(() => undefined);
+  // Persistence can lag presentation, but cannot accumulate unlimited payloads.
+  const admissions = new Set<Promise<void>>();
+  const readLanes: Promise<unknown>[] = [Promise.resolve(), Promise.resolve()];
+  let nextRead = 0;
+  function demandedRead(key: string, signal: AbortSignal) {
+    const lane = nextRead++ % readLanes.length;
+    const result = readLanes[lane]!.then(() => signal.aborted ? undefined : readRecord(key));
+    readLanes[lane] = result.catch(() => undefined);
     return result;
+  }
+  // Cached hits and downloads share two preparation slots: overlap independent
+  // decoders without allocating a screenful of decoder/canvas surfaces at once.
+  const preparation: Array<() => void> = [];
+  let preparing = 0;
+  function prepare(payload: Blob, signal: AbortSignal): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      preparation.push(() => {
+        preparing++;
+        void (async () => {
+          if (signal.aborted) throw new Error('Artwork cancelled');
+          const prepared = await validate(payload);
+          if (signal.aborted) throw new Error('Artwork cancelled');
+          return prepared ?? payload;
+        })().then(resolve, reject).finally(() => {
+          preparing--;
+          preparation.shift()?.();
+        });
+      });
+      if (preparing < 2) preparation.shift()?.();
+    });
   }
   function drain(): void {
     const rank = { visible: 0, refresh: 1, prefetch: 2 };
@@ -321,12 +339,15 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
       }
       warm.delete(source);
       if (signal.aborted) throw new Error('Artwork cancelled');
-      const key = await exclusive(() => keyFor(source));
+      // Hashing and read-only demand must not queue behind unrelated file writes.
+      // Leased records are protected from cleanup; replacement commits are atomic
+      // in storage (and the TV adapter can read the previous backup during rename).
+      const key = await keyFor(source);
       let cached: Awaited<ReturnType<typeof decodeRecord>> | undefined;
       let preparedReplacement = false;
       if (available) {
         try {
-          cached = await exclusive(async () => signal.aborted ? undefined : readRecord(key));
+          cached = await demandedRead(key, signal);
           if (signal.aborted) throw new Error('Artwork cancelled');
           if (cached) {
             if (cached.metadata.source === source && !hasDirective(cached.metadata.cacheControl, 'no-store')) {
@@ -365,7 +386,10 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
       if (staleAllowed && cached) publish(image, cached.payload);
       if (preparedReplacement && cached) await persist(key, cached.metadata, cached.payload, epoch, signal);
       const refresh = async (): Promise<string | undefined> => {
-        try { return await scheduled(image, async () => {
+        // Admission remains part of ready/settled, but not a transport slot.
+        let admission: Promise<void> | undefined;
+        try {
+          const url = await scheduled(image, async () => {
           const controller = new AbortController();
           const cancel = () => controller.abort();
           signal.addEventListener('abort', cancel, { once: true });
@@ -409,15 +433,24 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
           const noStore = hasDirective(response.headers.get('cache-control') ?? '', 'no-store');
           const reserve = async (size: number) => {
             await initialized;
-            try { await exclusive(async () => {
+            try {
               reservations.delete(reservation);
               if (!canPersist || noStore || epoch !== generation || requestSignal.aborted) { canPersist = false; return; }
               const placeholder = new Blob([], { type: response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() });
               const metadata = { ...responseMetadata(source, placeholder, response.headers, receivedAt), size };
               const required = encodeRecord(metadata, placeholder).size + size;
-              if (await cleanup(required, key)) reservations.set(reservation, required);
-              else canPersist = false;
-            }); } catch {
+              // Reservations only charge memory here, synchronously. When no
+              // eviction is needed, a disk write cannot stall the body reader.
+              if (bytes() + reserved() + required <= limit * .9 && entries.size < 2000) {
+                reservations.set(reservation, required);
+                return;
+              }
+              await exclusive(async () => {
+                if (epoch !== generation || requestSignal.aborted) { canPersist = false; return; }
+                if (await cleanup(required, key)) reservations.set(reservation, required);
+                else canPersist = false;
+              });
+            } catch {
               canPersist = false;
               available = false;
               reservations.delete(reservation);
@@ -432,15 +465,25 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
           // their completion contract without putting disk latency on screen.
           const url = publish(image, body);
           if (!hasDirective(response.headers.get('cache-control') ?? '', 'no-store')) {
-            if (canPersist) await persist(key, metadata, body, epoch, requestSignal, undefined, false, reservation);
-          } else await discard(key, epoch);
+            if (canPersist) admission = persist(key, metadata, body, epoch, signal, undefined, false, reservation);
+          } else admission = discard(key, epoch);
           return url;
           } finally {
             clearTimeout(timer);
             signal.removeEventListener('abort', cancel);
-            await exclusive(async () => { reservations.delete(reservation); });
+            if (!admission) reservations.delete(reservation);
+            else {
+              admission = admission.finally(() => { reservations.delete(reservation); admissions.delete(admission!); });
+              admissions.add(admission);
+              // At most four admitted/waiting payloads plus the other active
+              // transport. Backpressure storage stalls instead of retaining a catalog.
+              if (admissions.size >= 4) await Promise.race(admissions);
+            }
           }
-        }); } catch { return undefined; } finally { image.finish(); }
+          });
+          await admission;
+          return url;
+        } catch { return undefined; } finally { image.finish(); }
       };
       if (staleAllowed) {
         image.refreshing = true;

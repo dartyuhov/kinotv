@@ -34,7 +34,7 @@ it('reports external subtitles pending in async READY until activation commands 
   await Promise.resolve();
 });
 
-it('holds the native singleton until deferred prepare completes before a replacement live adapter opens', async () => {
+it('cancels deferred prepare on unmount so a replacement live adapter opens without its callback', async () => {
   const calls: string[] = [];
   const prepared: Array<() => void> = [];
   let state: ReturnType<AvPlay['getState']> = 'NONE';
@@ -61,13 +61,14 @@ it('holds the native singleton until deferred prepare completes before a replace
   a.destroy();
   const b = avplayFactory.create(host);
   const loadB = b.load({ url: 'https://live.test/b', type: 'hls' }, { startAt: 0 });
-  await Promise.resolve();
-  expect(calls).toEqual(['close', 'open:https://live.test/a', 'prepare']);
-  prepared[0]!();
   await vi.waitFor(() => expect(prepared).toHaveLength(2));
   expect(calls).toEqual(['close', 'open:https://live.test/a', 'prepare', 'close', 'close', 'open:https://live.test/b', 'prepare']);
   prepared[1]!();
   await Promise.all([loadA, loadB]);
+  const beforeLateCallback = [...calls];
+  prepared[0]!();
+  await Promise.resolve();
+  expect(calls).toEqual(beforeLateCallback);
   // READY stays paused until the screen explicitly asks to play. Finite native duration is irrelevant.
   expect(calls).not.toContain('play');
   expect(calls).not.toContain('seek');

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { readStartupTab } from './startupPreference';
 
 /** Tab bar order (spec §4). */
-export const TAB_IDS = ['search', 'home', 'movies', 'series', 'iwatch', 'tv', 'sport', 'bookmarks', 'history', 'settings'] as const;
+export const TAB_IDS = ['search', 'home', 'movies', 'series', 'iwatch', 'tv', 'bookmarks', 'history', 'settings'] as const;
 export type TabId = (typeof TAB_IDS)[number];
 
 export const HOME_TAB: TabId = 'home';

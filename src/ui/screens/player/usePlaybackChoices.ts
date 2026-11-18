@@ -7,6 +7,8 @@ import { fallbackChoices, fixedQualities, uniquePreference, type HlsManifestSour
 import { streamCandidates } from '../../../core/player/streams';
 import type { PlayerAdapter, Tracks } from '../../../core/player/types';
 import { readManifest, emptyManifest } from '../../../core/player/manifestTracks';
+import { serviceAudioSources } from '../../../core/player/audioSources';
+import type { SourceChoice } from '../../../core/player/playbackChoices';
 
 interface SeriesPreference { audio?: string; subtitle?: string }
 const QUALITY = 'kinotv:playback:quality';
@@ -20,7 +22,7 @@ export function usePlaybackChoices(player: PlayerAdapter | null, video: Video | 
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [quality, setQuality] = useState('auto');
-  const [notice, setNotice] = useState<'none' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'>('none');
+  const [notice, setNotice] = useState<'none' | 'audioFailed' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'>('none');
   const [external, setExternal] = useState<string | null>(null);
   const [externalPending, setExternalPending] = useState<string | null>(null);
   const control = useRef<ReturnType<typeof coordinator> | null>(null);
@@ -56,7 +58,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   startAt: number, refreshLinks: () => Promise<MediaLinks>, update: {
     externalOptions(value: Array<{ id: string; lang: string; forced: boolean }>): void;
     tracks(value: Tracks): void; qualities(value: string[]): void; busy(value: boolean): void; failed(value: boolean): void; quality(value: string): void;
-    notice(value: 'none' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'): void; external(value: string | null): void;
+    notice(value: 'none' | 'audioFailed' | 'subtitleFailed' | 'subtitleLoading' | 'fallback'): void; external(value: string | null): void;
     externalPending(value: string | null): void;
   }) {
   let disposed = false;
@@ -85,6 +87,13 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   });
   let activeChoice = -1;
   let activeQuality = desiredQuality;
+  let selectedServiceAudio: string | undefined;
+  let identifiedSourceAudio: string | undefined;
+  let pendingServiceAudio: string | undefined;
+  let audioRequest = 0;
+  let audioValidating = false;
+  let nativeLaneUnsafe = false;
+  const serviceOptions = () => serviceAudioSources(video.audios, links.files, player.capabilities);
   let chainStarted = 0;
   const files = createSubtitleFiles();
   const getExternalOptions = () => player.setExternalSubtitle && files.available ? links.subtitles.flatMap((s, index) => {
@@ -154,19 +163,28 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
 
   function refreshTracks() {
     if (disposed) return;
-    const tracks = player.getTracks();
+    const tracks = { ...player.getTracks() };
+    const options = serviceOptions();
+    const effectiveAudio = selectedServiceAudio ?? identifiedSourceAudio;
+    if (options.length && (effectiveAudio || tracks.audio.length <= 1)) {
+      // Single-audio HLS2 metadata describes its delivery, not all service audios.
+      // Until an explicit container source is selected, do not claim its language.
+      tracks.audioUnidentified = !effectiveAudio;
+      tracks.audio = options.map(({ sources: _sources, ...track }) => ({ ...track,
+        selected: track.id === effectiveAudio, pending: track.id === pendingServiceAudio }));
+    }
     update.tracks(tracks);
     if (submittedExternal && tracks.externalSubtitle?.selected && !tracks.externalSubtitle.pending && tracks.externalSubtitle.path === submittedExternal.path) {
       update.external(submittedExternal.id);
       update.externalPending(null);
       submittedExternal = null;
     } else if (tracks.externalSubtitle?.selected === false) update.external(null);
-    if (busy) return;
+    if (busy || pendingServiceAudio) return;
     // Metadata can arrive after the initial native track list. Apply each semantic preference once
     // when it actually matches, marking BEFORE commands that synchronously emit another event.
     const audio = uniquePreference(tracks.audio, preference.audio);
     const audioKey = `${sourceVersion}:${preference.audio}`;
-    if (audio && restoredAudio !== audioKey) { restoredAudio = audioKey; player.selectAudio(audio.id); }
+    if (audio && restoredAudio !== audioKey) { restoredAudio = audioKey; chooseAudio(audio.id, false); }
     const subtitleKey = `${sourceVersion}:${preference.subtitle}`;
     if (restoredSubtitle === subtitleKey) return;
     if (preference.subtitle === 'off') { restoredSubtitle = subtitleKey; chooseSubtitle(null, false); }
@@ -179,9 +197,9 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     }
   }
   const offTracks = player.on('tracks', refreshTracks);
-  const offTime = player.on('time', ({ position }) => { if (!busy) transport.position = position; });
+  const offTime = player.on('time', ({ position }) => { if (!busy || audioValidating) transport.position = position; });
   const offState = player.on('state', (state) => {
-    if (!busy && (state === 'playing' || state === 'paused')) {
+    if ((!busy || audioValidating) && (state === 'playing' || state === 'paused')) {
       transport.playing = state === 'playing' && !backgrounded;
       if (transport.playing) visibilityPauseIntent = false; // explicit foreground transport resumes
     }
@@ -192,7 +210,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     void load(activeQuality, transport.position, transport.playing, activeChoice + 1);
   });
 
-  async function load(quality: string, position: number, playing: boolean, from = 0) {
+  async function load(quality: string, position: number, playing: boolean, from = 0, explicit?: SourceChoice[]) {
     const request = ++version;
     ++sourceVersion;
     subtitleAbort?.abort();
@@ -207,8 +225,16 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     update.notice('none');
     if (from === 0) chainStarted = Date.now();
     activeQuality = quality;
+    nativeLaneUnsafe = false;
     transport = { position, playing: playing && !backgrounded && !visibilityPauseIntent };
-    const choices = fallbackChoices(links.files, player.capabilities, quality, manifests);
+    let choices = explicit ?? fallbackChoices(links.files, player.capabilities, quality, manifests);
+    if (!explicit && selectedServiceAudio) {
+      const option = serviceOptions().find(option => option.id === selectedServiceAudio);
+      const verified = option ? await verifiedAudioChoices(option.id, quality) : [];
+      if (disposed || request !== version) return;
+      // Never silently switch to a different dub during quality/recovery.
+      choices = verified;
+    }
     for (let index = from; index < choices.length; index++) {
       if (disposed || request !== version) return;
       if (Date.now() - chainStarted > 60_000) break;
@@ -228,6 +254,11 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
         }
         await player.load({ ...source, duration: video.duration, audios: video.audios, subtitles: links.subtitles, manifest }, { startAt: position });
         if (disposed || request !== version) return;
+        // The muxed playlist explicitly selects container audio N. Service IDs
+        // and native indices are different namespaces; match the supplied index
+        // uniquely, never array order or the firmware's fabricated language.
+        const matches = manifest.muxedAudioIndex === undefined ? [] : video.audios.filter(audio => audio.index === manifest.muxedAudioIndex);
+        identifiedSourceAudio = matches.length === 1 ? serviceOptions().find(option => option.id === `service-audio:${matches[0]!.id}:${matches[0]!.index}`)?.id : undefined;
         activeChoice = index;
         busy = false;
         update.busy(false);
@@ -235,16 +266,79 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
         if (index > 0) update.notice('fallback');
         if (transport.playing && !visibilityPauseIntent && !backgrounded && !document.hidden) player.play();
         refreshTracks();
-        return;
+        return true;
       } catch (error) {
         // A missing callback blocks AVPlay's lane. Repeating loads cannot recover it safely.
-        if ((error as { detail?: string })?.detail?.includes('TimeoutError')) break;
+        if ((error as { detail?: string })?.detail?.includes('TimeoutError')) { nativeLaneUnsafe = true; break; }
       }
     }
     if (disposed || request !== version) return;
     busy = false;
     update.busy(false);
     update.failed(true);
+    return false;
+  }
+
+  async function verifiedAudioChoices(id: string, quality: string): Promise<SourceChoice[]> {
+    const option = serviceOptions().find(option => option.id === id);
+    if (!option) return [];
+    const abort = new AbortController();
+    manifestAbort = abort;
+    const inspected = await Promise.all(option.sources.slice(0, 4).map(async source => ({
+      ...source, manifest: await readManifest(source.url, abort.signal),
+    })));
+    // A successful HTTP status alone can be an HTML error page. Require a real
+    // HLS ladder/media playlist before disturbing the current native source.
+    const valid = inspected.filter(source => source.manifest.variants.length || source.manifest.mediaPlaylist);
+    return fallbackChoices([], player.capabilities, quality, valid);
+  }
+
+  function chooseAudio(id: string, remember = true) {
+    if (busy || disposed) return;
+    const option = serviceOptions().find(option => option.id === id);
+    if (!option) {
+      const track = player.getTracks().audio.find(track => track.id === id);
+      if (!track || selectedServiceAudio) return;
+      if (remember) { preference = { ...preference, audio: track.preferenceKey }; restoredAudio = `${sourceVersion}:${preference.audio}`; save(); }
+      player.selectAudio(id);
+      return;
+    }
+    if ((selectedServiceAudio ?? identifiedSourceAudio) === id) return;
+    const request = ++audioRequest;
+    const previous = selectedServiceAudio;
+    pendingServiceAudio = id;
+    audioValidating = true;
+    busy = true;
+    update.busy(true);
+    update.notice('none');
+    refreshTracks();
+    void (async () => {
+      const choices = await verifiedAudioChoices(id, desiredQuality);
+      if (disposed || request !== audioRequest) return;
+      audioValidating = false;
+      if (!choices.length) {
+        pendingServiceAudio = undefined; busy = false; update.busy(false); update.notice('audioFailed'); refreshTracks(); return;
+      }
+      const position = transport.position;
+      const playing = transport.playing;
+      const success = await load(desiredQuality, position, playing, 0, choices);
+      if (disposed || request !== audioRequest) return;
+      pendingServiceAudio = undefined;
+      if (success) {
+        selectedServiceAudio = id;
+        if (remember) { preference = { ...preference, audio: option.preferenceKey }; restoredAudio = `${sourceVersion}:${preference.audio}`; save(); }
+      } else {
+        selectedServiceAudio = previous;
+        if (!nativeLaneUnsafe) await load(desiredQuality, position, playing);
+        if (disposed || request !== audioRequest) return;
+        update.notice('audioFailed');
+      }
+      refreshTracks();
+    })().catch(() => {
+      if (disposed || request !== audioRequest) return;
+      audioValidating = false; pendingServiceAudio = undefined; busy = false;
+      update.busy(false); update.notice('audioFailed'); refreshTracks();
+    });
   }
 
   async function start(position: number, playing: boolean) {
@@ -279,15 +373,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       storage.set(QUALITY, id);
       void load(id, transport.position, transport.playing);
     },
-    audio(id: string) {
-      const tracks = player.getTracks().audio;
-      const track = tracks.find((track) => track.id === id);
-      if (!track) return;
-      preference = { ...preference, audio: uniquePreference(tracks, track.preferenceKey)?.preferenceKey };
-      restoredAudio = `${sourceVersion}:${preference.audio}`;
-      save();
-      player.selectAudio(id);
-    },
+    audio: chooseAudio,
     subtitle: chooseSubtitle,
     retry() {
       if (busy || disposed) return;

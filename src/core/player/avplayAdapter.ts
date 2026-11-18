@@ -5,8 +5,10 @@ import type { PlaybackSource, PlaybackState, PlayerAdapter, PlayerError, PlayerF
 
 // AVPlay is a singleton, including across screen unmount/remount. Hold this lane until the native
 // callback, NOT just until a UI timeout. Samsung forbids even getState/close during a pending seek.
+// PREPARE is different: close is legal in IDLE and cancels a callback-less native preparation.
 let lane = Promise.resolve();
 let owner: AvPlayAdapter | undefined;
+let pendingPrepare: { cancel: () => void } | undefined;
 function serialize<T>(work: () => T | Promise<T>): Promise<T> {
   const result = lane.then(work);
   lane = result.then(() => undefined, () => undefined);
@@ -30,13 +32,15 @@ function playerError(error: unknown): PlayerError {
   };
 }
 
-/** Async prepare/restore/seek all keep the native lane until one of Samsung's callbacks fires. */
+/** Seek/restore retain the native lane until a callback; never abandon them on a UI timeout. */
 function nativeAsync(start: (ok: () => void, fail: (error: unknown) => void) => void): Promise<void> {
   return new Promise((resolve, reject) => start(resolve, reject));
 }
 
 class AvPlayAdapter implements PlayerAdapter {
-  readonly capabilities = { streams: ['hls4', 'hls2', 'hls', 'http'] as const, ...nativeVideoCapabilities(), adaptiveBitrate: true };
+  // Real TV probes: hls4 can hang PREPARE or terminate the process; the same media plays via hls2,
+  // including 2160p. Prefer that transport without disabling codecs, UHD or fallback alternatives.
+  readonly capabilities = { streams: ['hls2', 'hls4', 'hls', 'http'] as const, ...nativeVideoCapabilities(), adaptiveBitrate: true };
   private readonly events = createEmitter();
   readonly on = this.events.on;
   private readonly surface: HTMLObjectElement;
@@ -53,6 +57,7 @@ class AvPlayAdapter implements PlayerAdapter {
   private audioIndexes = new Map<string, number>();
   private subtitleIndexes = new Map<string, number>();
   private pendingAudio?: string;
+  private submittedAudio?: string;
   private pendingSubtitle: string | null = null;
   private externalSubtitleShift = 0;
   private externalSubtitlePath?: string;
@@ -66,6 +71,7 @@ class AvPlayAdapter implements PlayerAdapter {
   private trackNotificationQueued = false;
   private pauseRevision = 0;
   private cancelLoad?: (error?: PlayerError) => void;
+  private cancelPrepare?: () => boolean;
 
   constructor(host: HTMLElement, private readonly api: AvPlay) {
     const surface = document.createElement('object');
@@ -79,6 +85,7 @@ class AvPlayAdapter implements PlayerAdapter {
   load(source: PlaybackSource, { startAt }: { startAt: number }): Promise<void> {
     if (this.destroyed) return Promise.reject(cancelled);
     this.cancelLoad?.();
+    pendingPrepare?.cancel(); // also covers a previous screen that still owns the singleton
     const generation = ++this.generation;
     this.source = source;
     this.position = seconds(startAt);
@@ -87,6 +94,7 @@ class AvPlayAdapter implements PlayerAdapter {
     this.audioIndexes.clear();
     this.subtitleIndexes.clear();
     this.pendingAudio = undefined;
+    this.submittedAudio = undefined;
     this.pendingSubtitle = null;
     this.externalSubtitleShift = 0;
     this.externalSubtitlePath = undefined;
@@ -99,26 +107,35 @@ class AvPlayAdapter implements PlayerAdapter {
     this.notifyTracks();
     this.events.emit('buffering', true);
 
-    // Bound the caller's wait without violating Samsung's callback gate. A missing native callback
-    // leaves the lane blocked; a timeout must never cause a competing seek/close/open.
+    // The overall caller deadline also covers queued work and a start-position seek. Only an active
+    // PREPARE may close early; a pending seek must retain the lane even after this deadline.
     return new Promise<void>((resolve, reject) => {
       const finish = (error?: PlayerError) => {
         clearTimeout(timer);
         if (this.cancelLoad === cancel) this.cancelLoad = undefined;
         if (error) reject(error); else resolve();
       };
-      const cancel = (error = cancelled) => finish(error);
-      this.cancelLoad = cancel;
-      const timer = setTimeout(() => {
-        if (!this.current(generation, false)) return;
-        ++this.generation;
-        const error = playerError('TimeoutError');
-        this.fail(error);
+      const cancel = (error = cancelled) => {
+        if (this.current(generation, false)) ++this.generation;
+        const closed = this.cancelPrepare?.();
+        // The coordinator deliberately stops on TimeoutError when the native lane is unsafe.
+        // Only a confirmed PREPARE close makes this deadline recoverable by the next source.
+        if (closed && error.detail === 'AVPlay: TimeoutError') {
+          error = { kind: 'network', detail: 'AVPlay: prepare timed out' };
+        }
         finish(error);
-        // Runs only AFTER a late native callback releases the lane.
+        return error;
+      };
+      this.cancelLoad = cancel;
+      const expire = () => {
+        if (!this.current(generation, false)) return;
+        const error = cancel(playerError('TimeoutError'));
         const expiredGeneration = this.generation;
+        this.fail(error);
+        // For seeks this still runs only AFTER a native callback releases the lane.
         void serialize(() => { if (this.generation === expiredGeneration) this.closeOwned(); });
-      }, 30_000);
+      };
+      const timer = setTimeout(expire, 30_000);
 
       void serialize(async () => {
         if (!this.current(generation, false)) throw cancelled;
@@ -146,7 +163,7 @@ class AvPlayAdapter implements PlayerAdapter {
           const missingResolution = !source.manifest?.variants.length && this.capabilities.uhd;
           this.api.setStreamingProperty('ADAPTIVE_INFO', `${adaptive}${missingResolution ? '|FIXED_MAX_RESOLUTION=3840X2160' : ''}`);
         }
-        await nativeAsync((ok, fail) => this.api.prepareAsync(ok, fail));
+        await this.prepare(generation, expire, cancel);
         if (!this.current(generation)) throw cancelled;
         const duration = seconds(this.api.getDuration() / 1000);
         if (duration > 0) this.duration = duration;
@@ -168,6 +185,48 @@ class AvPlayAdapter implements PlayerAdapter {
           void serialize(() => { if (this.generation === generation) this.closeOwned(); });
         } else finish(cancelled);
       });
+    });
+  }
+
+  private prepare(generation: number, expire: () => void, cancel: () => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let closing = false;
+      const pending = { cancel };
+      const finish = (error?: unknown) => {
+        if (settled || closing) return;
+        settled = true;
+        clearTimeout(timer);
+        if (pendingPrepare === pending) pendingPrepare = undefined;
+        if (this.cancelPrepare === abort) this.cancelPrepare = undefined;
+        if (error === undefined) resolve(); else reject(error);
+      };
+      const abort = () => {
+        // This hook exists only while THIS preparation holds the lane: never close a seek or a
+        // replacement owner. Fence callbacks before close, which may synchronously dispatch them.
+        if (settled || pendingPrepare !== pending || owner !== this) return false;
+        closing = true;
+        try {
+          this.api.close();
+        } catch {
+          // A failed close is not proof of cancellation. Keep the native callback gate intact.
+          closing = false;
+          return false;
+        }
+        owner = undefined;
+        closing = false;
+        finish(cancelled);
+        return true;
+      };
+      const timer = setTimeout(expire, 15_000);
+      pendingPrepare = pending;
+      this.cancelPrepare = abort;
+      try {
+        this.api.prepareAsync(
+          () => finish(this.current(generation) ? undefined : cancelled),
+          (error) => finish(error ?? 'UnknownError'),
+        );
+      } catch (error) { finish(error ?? 'UnknownError'); }
     });
   }
 
@@ -365,9 +424,9 @@ class AvPlayAdapter implements PlayerAdapter {
       if (!active()) return;
       const safe = playerError(error);
       ++this.generation; // invalidate an in-flight prepare/seek completion, too
+      const failedGeneration = this.generation;
       this.cancelLoad?.(safe);
       this.fail(safe);
-      const failedGeneration = this.generation;
       void serialize(() => { if (this.generation === failedGeneration) this.closeOwned(); });
     };
     this.api.setListener({
@@ -424,9 +483,14 @@ class AvPlayAdapter implements PlayerAdapter {
       const audio = current.find((track) => track.type === 'AUDIO' && track.index >= 0);
       if (audio) {
         const selected = `${this.generation}:AUDIO:${audio.index}`;
+        if (selected === this.pendingAudio && this.submittedAudio === selected) {
+          this.pendingAudio = undefined;
+          this.submittedAudio = undefined;
+          this.notifyTracks();
+        }
         if (selected !== this.selectedAudio) {
           this.selectedAudio = selected;
-            this.notifyTracks();
+          this.notifyTracks();
         }
       }
     } catch { /* selection remains known from successful commands */ }
@@ -465,8 +529,11 @@ class AvPlayAdapter implements PlayerAdapter {
           try { return normalizeLanguage(JSON.parse(t.extra_info).language ?? '') === lang; } catch { return false; }
         }).length === 1;
         const meta = unique && matches.length === 1 ? matches[0] : undefined;
-        const label = [lang, rendition?.name, meta?.type?.title, meta?.author?.title].filter(Boolean).join(' · ');
-        tracks.audio.push({ id, lang, label: `${label} · ${tracks.audio.length + 1}`, preferenceKey: semanticUnique ? `hls:${lang}:${semanticName}:${rendition?.channels ?? ''}` : unique ? (meta ? `${lang}:${meta.type?.id ?? ''}:${meta.author?.id ?? ''}` : `language:${lang}`) : undefined });
+        const nativeName = [info.name, info.title, info.label].find(value => typeof value === 'string' &&
+          value.trim() && value.length <= 160 && !/[\x00-\x1f]|https?:\/\//i.test(value));
+        const label = [lang === 'unk' || lang === 'und' ? undefined : lang, rendition?.name ?? nativeName,
+          meta?.type?.title, meta?.author?.title].filter(Boolean).join(' · ');
+        tracks.audio.push({ id, lang, label: label ? `${label} · ${tracks.audio.length + 1}` : '', preferenceKey: semanticUnique ? `hls:${lang}:${semanticName}:${rendition?.channels ?? ''}` : unique ? (meta ? `${lang}:${meta.type?.id ?? ''}:${meta.author?.id ?? ''}` : `language:${lang}`) : undefined });
         this.audioIndexes.set(id, track.index);
       } else {
         const matches = this.source?.subtitles?.filter((s) => s.embed && s.lang === lang) ?? [];
@@ -489,9 +556,18 @@ class AvPlayAdapter implements PlayerAdapter {
     if (this.suspended || this.api.getState() !== 'PLAYING') return; // AUDIO cannot switch in PAUSED
     const index = this.pendingAudio === undefined ? undefined : this.audioIndexes.get(this.pendingAudio);
     if (index === undefined) return;
-    this.api.setSelectTrack('AUDIO', index);
-    this.selectedAudio = this.pendingAudio;
-    this.pendingAudio = undefined;
+    if (this.submittedAudio === this.pendingAudio) return;
+    try {
+      this.api.setSelectTrack('AUDIO', index);
+      this.submittedAudio = this.pendingAudio;
+      // Some firmware applies immediately, others report the old track until
+      // buffering completes. Only current-stream evidence clears pending.
+      this.refreshTracks();
+    } catch {
+      // Optional track switching must not tear down the working video/source.
+      this.pendingAudio = undefined;
+      this.submittedAudio = undefined;
+    }
     this.notifyTracks();
   }
 

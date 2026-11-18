@@ -5,7 +5,9 @@ import { solidPng } from './harness/fakeCdn';
 test('Home loads a vertical row on entry and reuses it on return', async ({ app, api, cdn, page, remote }) => {
   const fresh = fakeItems(91_000, 30), popular = fakeItems(92_000, 30);
   fakeHome(api, { hot: [], movies: [], serials: [], fresh, popular });
-  await app.open(); await remote.press('down');
+  await app.open();
+  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
+  await remote.press('down');
   const nextRow = page.getByRole('button', { name: 'Фильм 92000', exact: true });
   await expect(nextRow).not.toBeInViewport();
   await remote.press('down');
@@ -46,11 +48,15 @@ test('Home vertical browse and delayed return reuse artwork without filesystem r
   // Allow the previous retention window and batched writes to finish.
   await page.waitForTimeout(2000);
   const reads = await page.evaluate(() => (window as unknown as { artworkReads: number }).artworkReads);
-  await remote.press('up', 'up');
+  await remote.press('up');
+  await expect(app.focused).toHaveAccessibleName('Фильм 98000');
+  await remote.press('up');
   await expect(first).toBeInViewport();
   await expect(first.locator('img')).toHaveJSProperty('naturalWidth', 16);
   expect(await page.evaluate(() => (window as unknown as { artworkReads: number }).artworkReads)).toBe(reads);
   // ScreenStack unmounts Home: the same session cache must work through that too.
+  await expect(first).toHaveAttribute('data-artwork', 'ready');
+  await expect(app.focused).toHaveAccessibleName('Фильм 97000');
   await remote.press('ok');
   await expect(page.locator('[data-screen="title"]')).toBeVisible();
   await page.waitForTimeout(1800);
@@ -63,6 +69,7 @@ test('Home vertical browse and delayed return reuse artwork without filesystem r
 test('brief scroll-out and reversal retain a loaded thumbnail URL', async ({ app, api, page, remote }) => {
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: fakeItems(94_000, 60), popular: [] });
   await app.open();
+  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
   await remote.press('down');
   const first = page.getByRole('button', { name: 'Фильм 94000', exact: true });
   await expect(first.locator('img')).toHaveJSProperty('naturalWidth', 16);
@@ -86,6 +93,7 @@ test('scroll retention releases on expiry and never retains more than eight clip
   await app.open();
   await remote.press('down');
   for (let i = 0; i < 20; i++) {
+    await expect(page.getByRole('button', { name: `Фильм ${96_001 + i}`, exact: true })).toHaveAttribute('data-artwork', 'ready');
     await remote.press('right');
     await expect(app.focused.locator('img')).toHaveJSProperty('naturalWidth', 250);
   }

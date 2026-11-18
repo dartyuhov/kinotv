@@ -142,19 +142,15 @@ test('background releases live playback; foreground resolves a new URL paused wi
   expect(api.requests.filter((r) => /marktime|toggle/.test(r.path))).toEqual([]);
 });
 
-test('Sport explains the unsupported source and Go to TV works without invented classification requests', async ({ app, api, page, remote }) => {
-  api.on('GET', '/v1/tv', { json: { channels: [{ ...A, title: 'Sport Матч Test' }] } });
+test('TV is followed directly by Bookmarks without an unsupported Sport tab', async ({ app, api, page, remote }) => {
+  api.on('GET', '/v1/tv', { json: { channels: [A] } });
   await app.open();
-  await remote.repeat('right', 5);
-  const beforeSport = api.requests.length;
-  await expect(page.getByRole('tabpanel').getByRole('status')).toContainText('Надёжный источник прямых спортивных трансляций пока не установлен');
-  await expect(page.locator('[data-grid]')).toHaveCount(0);
-  await remote.press('ok');
-  await expect(app.focused).toHaveAccessibleName('Перейти к ТВ');
-  await remote.press('ok');
+  await remote.repeat('right', 4);
   await expect(page.getByRole('tab', { name: 'ТВ', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('button', { name: 'Sport Матч Test, Прямой эфир' })).toBeVisible();
-  expect(api.requests.slice(beforeSport).filter((r) => /\/sport|\/genres|\/items/.test(r.path))).toEqual([]);
+  await expect(page.getByRole('button', { name: 'Test Channel A, Прямой эфир' })).toBeVisible();
+  await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Закладки');
+  await expect(page.getByRole('tab', { name: 'Спорт', exact: true })).toHaveCount(0);
 });
 
 for (const response of [{ channels: [] }, {}, { channels: 'bad' }, { channels: [{ id: null }] }]) {

@@ -61,7 +61,72 @@ describe('npm run tv', () => {
     expect(calls().filter((c) => c.startsWith('npm'))).toEqual([]);
   });
 
+  it.each([
+    ['both blank', 'VITE_KP_CLIENT_ID=\nVITE_KP_CLIENT_SECRET=\n', ['VITE_KP_CLIENT_ID', 'VITE_KP_CLIENT_SECRET']],
+    ['ID missing', 'VITE_KP_CLIENT_SECRET=sandbox-placeholder\n', ['VITE_KP_CLIENT_ID']],
+    ['secret whitespace-only', 'VITE_KP_CLIENT_ID=sandbox-client\nVITE_KP_CLIENT_SECRET="   "\n', ['VITE_KP_CLIENT_SECRET']],
+  ])('rejects invalid production OAuth config (%s) before rebuilding or installing, preserving the existing artifact', (_name, config, missing) => {
+    tizenStub();
+    stub('sdb', TV_CONNECTED);
+    stub('npm', BUILD);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+    writeFileSync(join(project, '.env.local'), config);
+    fakeBuild();
+    const existing = readFileSync(join(project, 'dist/index.html'), 'utf8');
+
+    const { code, out } = cli(['tv']);
+
+    expect(code).toBe(1);
+    for (const key of missing) expect(out).toContain(key);
+    expect(out).not.toContain('sandbox-placeholder');
+    expect(out).not.toContain('sandbox-client');
+    expect(out).toContain('--no-build');
+    expect(calls().filter((c) => c.startsWith('npm') || /^tizen (package|install|run)/.test(c))).toEqual([]);
+    expect(readFileSync(join(project, 'dist/index.html'), 'utf8')).toBe(existing);
+  });
+
+  it('allows --no-build with an existing configured artifact even when the local build config is blank', () => {
+    tizenStub();
+    stub('sdb', TV_CONNECTED);
+    stub('npm', BUILD);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+    writeFileSync(join(project, '.env.local'), 'VITE_KP_CLIENT_ID=\nVITE_KP_CLIENT_SECRET=\n');
+    fakeBuild();
+    const artifact = 'const client = { id: "sandbox-client", secret: "sandbox-placeholder" };';
+    writeFileSync(join(project, 'dist/assets/index-abc.js'), artifact);
+
+    const { code, out } = cli(['tv', '--no-build']);
+
+    expect(code).toBe(0);
+    expect(calls().filter((c) => c.startsWith('npm'))).toEqual([]);
+    expect(calls()).toContainEqual(expect.stringMatching(/^tizen install /));
+    expect(out).toContain('Launched KinoTV');
+    expect(readFileSync(join(project, 'dist/assets/index-abc.js'), 'utf8')).toBe(artifact);
+    const files = unzipSync(readFileSync(join(project, 'dist-tizen/KinoTV.wgt')));
+    expect(Buffer.from(files['assets/index-abc.js']!).toString('utf8')).toBe(artifact);
+  });
+
+  it('accepts ephemeral build environment overrides over blank local config without printing them', () => {
+    tizenStub();
+    stub('sdb', TV_CONNECTED);
+    stub('npm', BUILD);
+    saveSettings({ tv: TV, profile: 'KinoTV' });
+    writeFileSync(join(project, '.env.local'), 'VITE_KP_CLIENT_ID=\nVITE_KP_CLIENT_SECRET=\n');
+
+    const { code, out } = node(CLI, ['tv'], '', {
+      VITE_KP_CLIENT_ID: 'sandbox-client',
+      VITE_KP_CLIENT_SECRET: 'sandbox-placeholder',
+    });
+
+    expect(code).toBe(0);
+    expect(calls()).toContain('npm run build');
+    expect(calls()).toContainEqual(expect.stringMatching(/^tizen install /));
+    expect(out).not.toContain('sandbox-client');
+    expect(out).not.toContain('sandbox-placeholder');
+  });
+
   it('builds, signs, installs and launches the app on the connected TV', () => {
+    configureBuild();
     tizenStub(`if (args[0] === 'install') console.log('Tizen application is successfully installed.');`);
     stub('sdb', TV_CONNECTED);
     stub('npm', BUILD);
@@ -80,6 +145,7 @@ describe('npm run tv', () => {
   });
 
   it('in debug mode, launches with the inspector and prints the DevTools address', () => {
+    configureBuild();
     tizenStub(`if (args[0] === 'install') console.log('Tizen application is successfully installed.');`);
     stub('sdb', TV_CONNECTED);
     stub('npm', BUILD);
@@ -99,6 +165,7 @@ describe('npm run tv', () => {
   });
 
   it('explains an install the TV rejected, even though the Tizen CLI exits with 0', () => {
+    configureBuild();
     tizenStub(`if (args[0] === 'install') console.log('app_id[KinoTV0001] install failed[118, -11], reason: Author certificate not match :');`);
     stub('sdb', TV_CONNECTED);
     stub('npm', BUILD);
@@ -248,6 +315,10 @@ for (const [rel, body] of [['tools/ide/bin/tizen', "console.log('Tizen CLI 2.5.2
     expect(out).toContain('KinoTV');
   });
 });
+
+function configureBuild(): void {
+  writeFileSync(join(project, '.env.production'), 'VITE_KP_CLIENT_ID=sandbox-client\nVITE_KP_CLIENT_SECRET=sandbox-placeholder\n');
+}
 
 // `npm run build` that writes a minimal widget to dist/.
 const BUILD = `

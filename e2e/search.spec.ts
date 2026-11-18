@@ -204,7 +204,8 @@ test('search runs 300 ms after typing stops, from 2 characters, and shows only t
   await expect(results(page).getByRole('button')).toHaveAccessibleName('Тихая гавань');
 });
 
-test('▼ from the bottom row moves to the results; OK opens the title, and Back returns to the same result', async ({ app, api, page, remote }) => {
+for (const exitColumn of [0, 1, 2, 3]) {
+test(`▼ from bottom key ${exitColumn + 1} enters results; Left/Right, OK and Back preserve selection`, async ({ app, api, page, remote }) => {
   fakeSearch(api, { тихая: [HARBOUR, HARBOUR_2] });
   await app.open();
   await openSearch(app, remote);
@@ -213,7 +214,12 @@ test('▼ from the bottom row moves to the results; OK opens the title, and Back
 
   await remote.press('down');
   await expect(app.focused).toHaveAccessibleName('RU → EN');
+  await remote.repeat('right', exitColumn);
   await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Тихая гавань');
+  await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Тихая гавань 2');
+  await remote.press('left');
   await expect(app.focused).toHaveAccessibleName('Тихая гавань');
   await remote.press('right', 'ok');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Тихая гавань 2');
@@ -222,6 +228,30 @@ test('▼ from the bottom row moves to the results; OK opens the title, and Back
   await expect(app.focused).toHaveAccessibleName('Тихая гавань 2');
   await expect(searchbox(page)).toHaveText('тихая');
   expect(searches(api).filter((q) => q === 'тихая'), 'the results come back from the cache').toHaveLength(1);
+});
+}
+
+test('changing an existing query keeps results reachable and navigable beyond the visible cards', async ({ app, api, page, remote }) => {
+  const many = Array.from({ length: 30 }, (_, i) => fakeItem(500 + i, `Результат ${i + 1}`));
+  fakeSearch(api, { ти: [HARBOUR], тихая: many });
+  await app.open();
+  await openSearch(app, remote);
+  await typeOn(app, remote, 'ru', 'ти');
+  await expect(results(page).getByRole('button')).toHaveCount(1);
+  await typeOn(app, remote, 'ru', 'хая');
+  await expect(results(page).getByRole('button', { name: 'Результат 1', exact: true })).toBeVisible();
+  await remote.press('down', 'down');
+  await expect(app.focused).toHaveAccessibleName('Результат 1');
+  for (let i = 1; i <= 20; i++) {
+    await expect(results(page).getByRole('button', { name: `Результат ${i + 1}`, exact: true })).toHaveAttribute('data-artwork', 'ready');
+    await remote.press('right');
+  }
+  await expect(app.focused).toHaveAccessibleName('Результат 21');
+  await expect(app.focused).toBeInViewport({ ratio: 1 });
+  await remote.press('left', 'ok');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Результат 20');
+  await remote.press('back');
+  await expect(app.focused).toHaveAccessibleName('Результат 20');
 });
 
 test('when nothing is found, a message and a "Популярное сейчас" row are shown instead', async ({ app, api, page, remote }) => {
