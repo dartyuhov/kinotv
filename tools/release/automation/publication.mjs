@@ -113,14 +113,29 @@ async function trustedChecks(api, pr) {
   // REST head_sha is the PR head, not the synthetic merge github.sha tested by
   // checkout. PR associations use minimal repo objects (url, not full_name).
   const repoUrl = `https://api.github.com/repos/${api.repo}`;
+  let commitAssociation;
+  async function associated(run) {
+    if (!Array.isArray(run.pull_requests)) return false;
+    if (run.pull_requests.length) return run.pull_requests.some(p =>
+      p.number === pr.number && p.url === `${repoUrl}/pulls/${pr.number}` &&
+      p.head?.repo?.url === repoUrl && p.base?.repo?.url === repoUrl && p.base.ref === 'main');
+    // GitHub can serialize merged PR runs with pull_requests: []. Establish
+    // the link independently; exact run SHA/repository/workflow/branch checks
+    // below still apply, and a conflicting nonempty association never falls back.
+    commitAssociation ??= (await api.list(`/commits/${pr.head.sha}/pulls`)).some(p =>
+      p.number === pr.number && p.merged_at && p.merge_commit_sha === pr.merge_commit_sha &&
+      p.head?.sha === pr.head.sha && p.head.ref === branch && p.head.repo?.full_name === api.repo &&
+      p.base?.ref === 'main' && p.base.repo?.full_name === api.repo);
+    return commitAssociation;
+  }
   for (const [sha, event, expectedBranch] of [[pr.head.sha, 'pull_request', branch], [pr.merge_commit_sha, 'push', 'main']]) {
-    const runs = (await api.list(`/actions/workflows/ci.yml/runs?event=${event}&head_sha=${sha}`))
+    const candidates = (await api.list(`/actions/workflows/ci.yml/runs?event=${event}&head_sha=${sha}`))
       .filter(r => r.head_sha === sha && r.path === '.github/workflows/ci.yml' &&
         r.event === event && r.head_branch === expectedBranch && r.repository?.full_name === api.repo &&
-        r.head_repository?.full_name === api.repo && (event === 'push' || r.pull_requests?.some(p =>
-          p.number === pr.number && p.url === `${repoUrl}/pulls/${pr.number}` &&
-          p.head?.repo?.url === repoUrl && p.base?.repo?.url === repoUrl && p.base.ref === 'main')))
+        r.head_repository?.full_name === api.repo)
       .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt);
+    const runs = [];
+    for (const run of candidates) if (event === 'push' || await associated(run)) runs.push(run);
     if (runs.length) {
       // Latest run/attempt wins, even when queued or failed. Main is only a
       // fallback for absent trusted PR CI, never a bypass of a known failure.
