@@ -204,11 +204,14 @@ it('persists prepared artwork and keeps HTTP validators for the original source'
 it('prepares two independent images concurrently and skips abandoned queued preparation', async () => {
   const finishes: Array<() => void> = [];
   const prepare = vi.fn(() => new Promise<void>((resolve) => finishes.push(resolve)));
-  const cache = createImageCache({ store: createBrowserImageStore(), transport: async () => response(), validate: prepare });
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const cache = createImageCache({ store: createBrowserImageStore(), transport, validate: prepare });
   const first = cache.acquire(source);
   const second = cache.acquire(`${source}second`);
-  const abandoned = cache.acquire(`${source}abandoned`);
+  // Hash/storage completion can reorder acquisitions. Occupy both preparation
+  // slots before introducing the demand that must remain queued.
   await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+  const abandoned = cache.acquire(`${source}abandoned`);
   abandoned.release();
   finishes[0]!();
   finishes[1]!();
@@ -216,6 +219,7 @@ it('prepares two independent images concurrently and skips abandoned queued prep
   await second.ready;
   await abandoned.ready;
   expect(prepare).toHaveBeenCalledTimes(2);
+  expect(transport).toHaveBeenCalledTimes(2);
   first.release();
   second.release();
 });

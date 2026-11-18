@@ -36,6 +36,7 @@ export function fixture() {
     'CHANGELOG.md': '# Changelog\n\n## 0.1.0 (2026-11-18)\n\n### Features\n\n* automatic releases\n',
   };
   const runs = [mainRun()];
+  const associations = [structuredClone(pr)];
   const queries = [];
   const api = {
     repo,
@@ -46,13 +47,14 @@ export function fixture() {
     },
     async list(path) {
       queries.push(path);
+      if (path === `/commits/${head}/pulls`) return associations;
       if (path.includes('/pulls')) return [pr];
       if (path.includes('/runs')) return runs;
       throw new Error(`Unexpected list ${path}`);
     },
     async file(path, ref) { assert.equal(ref, sha); return Buffer.from(files[path]); },
   };
-  return { api, pr, files, runs, queries };
+  return { api, pr, files, runs, queries, associations };
 }
 
 test('only exact merged App release PR approval resolves version, source, and notes', async () => {
@@ -122,6 +124,54 @@ test('latest exact PR-head CI qualifies without waiting for the concurrent main 
   await assert.rejects(approve(api, { sourceSha: sha, bot }), /Latest trusted CI/);
 });
 
+test('merged PR CI with empty run associations qualifies through independent commit association', async () => {
+  const { api, runs, queries } = fixture();
+  runs.splice(0, runs.length, prRun({ pull_requests: [] }), mainRun({ conclusion: 'failure' }));
+  assert.equal((await approve(api, { prNumber: 42, bot })).sha, sha);
+  assert.ok(queries.includes(`/commits/${head}/pulls`));
+  assert.ok(!queries.some(path => path.includes(`head_sha=${sha}`)));
+});
+
+for (const kind of ['absent', 'unrelated-pr', 'sha', 'merge', 'unmerged', 'fork', 'base-repo', 'branch', 'base-ref']) {
+  test(`empty run associations reject ${kind} independent commit association`, async () => {
+    const { api, runs, associations } = fixture();
+    const association = associations[0];
+    if (kind === 'absent') associations.length = 0;
+    if (kind === 'unrelated-pr') association.number = 43;
+    if (kind === 'sha') association.head.sha = 'd'.repeat(40);
+    if (kind === 'merge') association.merge_commit_sha = 'd'.repeat(40);
+    if (kind === 'unmerged') association.merged_at = null;
+    if (kind === 'fork') association.head.repo.full_name = 'fork/kinotv';
+    if (kind === 'base-repo') association.base.repo.full_name = 'fork/kinotv';
+    if (kind === 'branch') association.head.ref = 'ordinary';
+    if (kind === 'base-ref') association.base.ref = 'other';
+    runs.splice(0, runs.length, prRun({ pull_requests: [] }));
+    await assert.rejects(approve(api, { prNumber: 42, bot }), /No successful trusted CI/);
+  });
+}
+
+for (const kind of ['fork', 'repository', 'workflow', 'sha', 'event', 'branch']) {
+  test(`independent commit association cannot qualify ${kind} run identity`, async () => {
+    const { api, runs } = fixture();
+    const run = prRun({ pull_requests: [] });
+    if (kind === 'fork') run.head_repository.full_name = 'fork/kinotv';
+    if (kind === 'repository') run.repository.full_name = 'fork/kinotv';
+    if (kind === 'workflow') run.path = '.github/workflows/spoof.yml';
+    if (kind === 'sha') run.head_sha = 'd'.repeat(40);
+    if (kind === 'event') run.event = 'pull_request_target';
+    if (kind === 'branch') run.head_branch = 'ordinary';
+    runs.splice(0, runs.length, run);
+    await assert.rejects(approve(api, { prNumber: 42, bot }), /No successful trusted CI/);
+  });
+}
+
+test('latest independently associated failed PR attempt blocks older success and successful main', async () => {
+  const { api, runs } = fixture();
+  runs.splice(0, runs.length, prRun(), mainRun(),
+    prRun({ pull_requests: [], run_attempt: 2, conclusion: 'failure' }));
+  await assert.rejects(approve(api, { prNumber: 42, bot }), /Latest trusted CI/);
+});
+
 test('a later update of the managed release branch does not invalidate the approved PR run', async () => {
   const { api, runs } = fixture();
   const run = prRun();
@@ -134,7 +184,7 @@ test('a later update of the managed release branch does not invalidate the appro
 
 for (const kind of ['fork', 'repository', 'workflow', 'sha', 'event', 'branch', 'pr-number', 'pr-url', 'head-repo', 'base-repo', 'base-ref', 'missing-association']) {
   test(`PR CI rejects ${kind} metadata and only falls back to exact main push CI`, async () => {
-    const { api, runs } = fixture();
+    const { api, runs, associations } = fixture();
     const run = prRun();
     if (kind === 'fork') run.head_repository.full_name = 'fork/kinotv';
     if (kind === 'repository') run.repository.full_name = 'fork/kinotv';
@@ -147,7 +197,7 @@ for (const kind of ['fork', 'repository', 'workflow', 'sha', 'event', 'branch', 
     if (kind === 'head-repo') run.pull_requests[0].head.repo.url = 'https://api.github.com/repos/fork/kinotv';
     if (kind === 'base-repo') run.pull_requests[0].base.repo.url = 'https://api.github.com/repos/fork/kinotv';
     if (kind === 'base-ref') run.pull_requests[0].base.ref = 'other';
-    if (kind === 'missing-association') run.pull_requests = [];
+    if (kind === 'missing-association') { run.pull_requests = []; associations.length = 0; }
     runs.splice(0, runs.length, run);
     await assert.rejects(approve(api, { prNumber: 42, bot }), /No successful trusted CI/);
     runs.push(mainRun());
