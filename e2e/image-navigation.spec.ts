@@ -1,16 +1,26 @@
-import { fakeHome, fakeItems, fakeSeries, fakeCatalog } from './harness/catalog';
+import { fakeHome, fakeItems, fakeSeries, fakeCatalog, fakeList } from './harness/catalog';
 import { expect, test } from './harness/test';
 import { solidPng } from './harness/fakeCdn';
+import type { Page } from '@playwright/test';
+import type { Remote } from './harness/remote';
+
+async function enterReadyRow(page: Page, remote: Remote, title: string) {
+  const card = page.getByRole('button', { name: title, exact: true });
+  await expect(card).toHaveAttribute('data-artwork', 'ready');
+  await expect(card).toBeEnabled();
+  await remote.press('down');
+  await expect(card).toHaveAttribute('data-focused', 'true');
+}
 
 test('stale sharp backdrop subscribes to changed artwork and releases outgoing layers after the refresh fade', async ({ app, api, cdn, page, remote }) => {
   const items = fakeItems(1400, 3);
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   const source = items[0]!.posters.wide!;
   cdn.respond(source, { headers: { 'cache-control': 'max-age=0', etag: '"old"' }, body: solidPng([255, 0, 0]) });
-  await app.open(); await remote.press('down');
+  await app.open(); await enterReadyRow(page, remote, 'Фильм 1400');
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 16);
   cdn.respond(source, { headers: { 'cache-control': 'max-age=3600', etag: '"new"' }, body: solidPng([0, 255, 0], 32, 18), delay: 800 });
-  await page.reload(); await remote.press('down');
+  await page.reload(); await enterReadyRow(page, remote, 'Фильм 1400');
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 16);
   const staleUrl = await page.getByTestId('backdrop').last().getAttribute('src');
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 32);
@@ -19,7 +29,9 @@ test('stale sharp backdrop subscribes to changed artwork and releases outgoing l
   await expect.poll(() => page.evaluate(async (url) => {
     try { await fetch(url!); return false; } catch { return true; }
   }, staleUrl)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Фильм 1401', exact: true })).toHaveAttribute('data-artwork', 'ready');
   await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Фильм 1401');
   await expect(page.getByTestId('backdrop').last()).toHaveAttribute('data-source', items[1]!.posters.wide!);
   await expect(page.getByTestId('backdrop')).toHaveCount(1);
 });
@@ -48,19 +60,42 @@ test('abandoning an undecoded same-source refresh retains only the decoded sharp
   const source = items[0]!.posters.wide!;
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   cdn.respond(source, { headers: { 'cache-control': 'max-age=0' } });
-  await app.open(); await remote.press('down');
+  await app.open(); await enterReadyRow(page, remote, 'Фильм 1420');
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 16);
-  cdn.respond(source, { headers: { 'cache-control': 'max-age=3600' }, body: solidPng([0, 255, 0], 32, 18), delay: 1500 });
-  await clock.pause();
-  await page.reload(); await remote.press('down'); await clock.runFor(200);
   await expect(page.getByTestId('backdrop').last()).toHaveClass(/loaded/);
+  cdn.respond(source, { headers: { 'cache-control': 'max-age=3600' }, body: solidPng([0, 255, 0], 32, 18) });
+  let releaseRefresh!: () => void;
+  const refreshGate = new Promise<void>(resolve => { releaseRefresh = resolve; });
+  await page.route(source, async route => { await refreshGate; await route.fallback(); });
+  let releaseCatalog!: () => void;
+  const catalogGate = new Promise<void>(resolve => { releaseCatalog = resolve; });
+  api.on('GET', '/v1/items/fresh', async () => { await catalogGate; return fakeList(items); });
+  const catalogRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/v1/items/fresh');
+  await page.reload();
+  await catalogRequest;
+  await expect(page.getByRole('tab', { name: 'Главная', exact: true })).toHaveAttribute('data-focused', 'true');
+  await expect(page.getByRole('button', { name: 'Фильм 1420', exact: true })).toHaveCount(0);
+  releaseCatalog();
+  await enterReadyRow(page, remote, 'Фильм 1420');
+  // Freeze only after catalog delivery, card readiness and exact row entry.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  await clock.runFor(200);
+  // Establish the live, decoded stale layer before answering refresh.
+  await expect(page.getByTestId('backdrop').last()).toHaveClass(/loaded/);
+  await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 16);
   const oldUrl = await page.getByTestId('backdrop').last().getAttribute('src');
+  expect(await page.evaluate((url) => (window as unknown as { artworkResources: Set<string> }).artworkResources.has(url!), oldUrl)).toBe(true);
   await clock.runFor(400);
   await expect(page.getByTestId('backdrop')).toHaveCount(1);
+  releaseRefresh();
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 32);
   const refreshUrl = await page.getByTestId('backdrop').last().getAttribute('src');
+  expect(refreshUrl).not.toBe(oldUrl);
+  await expect.poll(() => cdn.requests.filter(request => request.source === source).length).toBe(2);
   await expect(page.getByTestId('backdrop').last()).not.toHaveClass(/loaded/);
+  await expect(page.getByRole('button', { name: 'Фильм 1421', exact: true })).toHaveAttribute('data-artwork', 'ready');
   await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Фильм 1421');
   await expect.poll(() => page.evaluate((url) => (window as unknown as { artworkResources: Set<string> }).artworkResources.has(url!), refreshUrl)).toBe(false);
   expect(await page.evaluate((url) => (window as unknown as { artworkResources: Set<string> }).artworkResources.has(url!), oldUrl)).toBe(true);
   await clock.runFor(200);
@@ -92,11 +127,7 @@ test('stale idle prefetch finishes delayed validation and persists freshness bef
       };
     });
   }, { source, metadata });
-  const enterRow = async () => {
-    await expect(page.getByRole('button', { name: 'Фильм 1450', exact: true })).toHaveAttribute('data-artwork', 'ready');
-    await remote.press('down');
-    await expect(app.focused).toHaveAccessibleName('Фильм 1450');
-  };
+  const enterRow = () => enterReadyRow(page, remote, 'Фильм 1450');
   await clock.pause(); await app.open(); await enterRow();
   await clock.runFor(300);
   for (const item of prefetched) await expect.poll(() => cdn.requests.filter((r) => r.source === item.posters.medium).length).toBe(1);
@@ -121,7 +152,10 @@ test('landscape artwork and previews use managed URLs and share wide bytes with 
   await expect(page.locator('.frosted__image')).toHaveAttribute('src', /^blob:/);
   await expect(page.getByTestId('backdrop').last()).toHaveAttribute('src', /^blob:/);
   expect(cdn.requests.filter((r) => r.source === items[0]!.posters.wide)).toHaveLength(1);
-  await remote.press('down', 'down');
+  await expect(page.locator('.card--landscape').first()).toHaveAttribute('data-artwork', 'ready');
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Смотреть');
+  await remote.press('down');
   await expect(app.focused).toHaveClass(/card/);
 });
 
@@ -131,15 +165,19 @@ test('focus settles for 200 ms; slow obsolete sharp completions cannot replace t
   cdn.respond(items[0]!.posters.wide!, { delay: 900 });
   await clock.pause();
   await app.open();
-  await remote.press('down');
+  await enterReadyRow(page, remote, 'Фильм 820');
   await expect(app.focused).toHaveAccessibleName('Фильм 820');
   await clock.runFor(199);
   expect(cdn.requested.filter((path) => path.startsWith('/wide/'))).toEqual([]);
   await clock.runFor(1);
   await expect.poll(() => cdn.requested.includes('/wide/820.jpg')).toBe(true);
+  await expect(page.getByRole('button', { name: 'Фильм 821', exact: true })).toHaveAttribute('data-artwork', 'ready');
   await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Фильм 821');
   await clock.runFor(100);
+  await expect(page.getByRole('button', { name: 'Фильм 822', exact: true })).toHaveAttribute('data-artwork', 'ready');
   await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('Фильм 822');
   await clock.runFor(199);
   expect(cdn.requested).not.toContain('/wide/821.jpg');
   expect(cdn.requested).not.toContain('/wide/822.jpg');
@@ -161,7 +199,7 @@ test('visible windows download first, idle prefetch is capped at two and stops o
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   await clock.pause();
   await app.open();
-  await remote.press('down');
+  await enterReadyRow(page, remote, 'Фильм 840');
   const posters = () => cdn.requested.filter((path) => path.endsWith('/medium.jpg'));
   await expect.poll(() => posters().length).toBe(8);
   await expect.poll(() => cdn.active).toBe(0);
@@ -198,7 +236,10 @@ test('episode thumbnails share persistent reuse and pending idle work is suspend
   fakeHome(api, { hot: [series], movies: [], serials: [], fresh: [], popular: [] });
   await clock.pause();
   await app.open();
-  await remote.press('down', 'ok');
+  await expect(page.getByRole('button', { name: 'Смотреть', exact: true })).toBeVisible();
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Смотреть');
+  await remote.press('ok');
   await expect(page.locator('[data-screen="title"]')).toBeVisible();
   await expect(app.focused).toHaveAccessibleName('Смотреть S1 · E1');
   await remote.press('down', 'down');
@@ -231,11 +272,13 @@ test('repeated navigation releases offscreen and outgoing resources with at most
   const items = fakeItems(960, 50);
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   await app.open();
-  await remote.press('down');
+  await enterReadyRow(page, remote, 'Фильм 960');
   await expect(page.getByTestId('backdrop').last()).toHaveAttribute('data-source', items[0]!.posters.wide!);
   const firstUrl = await page.locator('.card img').first().getAttribute('src');
   for (let i = 0; i < 16; i++) {
+    await expect(page.getByRole('button', { name: `Фильм ${961 + i}`, exact: true })).toHaveAttribute('data-artwork', 'ready');
     await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName(`Фильм ${961 + i}`);
     await expect(page.getByTestId('backdrop').last()).toHaveAttribute('data-source', items[i + 1]!.posters.wide!);
     expect(await page.getByTestId('backdrop').count()).toBeLessThanOrEqual(2);
   }
@@ -260,12 +303,13 @@ test('repeated navigation releases offscreen and outgoing resources with at most
   expect(posterRequests()).toBe(beforeRevisit);
 });
 
-test('catalog grid limits artwork to the clipped viewport plus two directional neighbors', async ({ app, api, cdn, remote, clock }) => {
+test('catalog grid limits artwork to the clipped viewport plus two directional neighbors', async ({ app, api, cdn, page, remote, clock }) => {
   const items = fakeItems(1050, 100);
   fakeCatalog(api, { items: () => items });
   await clock.pause();
   await app.open();
-  await remote.press('right', 'down');
+  await remote.press('right');
+  await enterReadyRow(page, remote, 'Фильм 1050');
   await expect(app.focused).toHaveClass(/card/);
   await clock.runFor(1000);
   // Storage/decoding and IntersectionObserver delivery aren't driven by the fake
@@ -287,8 +331,7 @@ test('reversing direction cancels obsolete queued speculation and only warms two
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   await clock.pause();
   await app.open();
-  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
-  await remote.press('down');
+  await enterReadyRow(page, remote, 'Фильм 1200');
   for (let i = 1; i <= 20; i++) {
     await expect(page.getByRole('button', { name: `Фильм ${1200 + i}`, exact: true })).toHaveAttribute('data-artwork', 'ready');
     await remote.press('right');
@@ -312,8 +355,7 @@ test('failed artwork preserves title placeholders, existing backdrop and remote 
   cdn.respond(items[1]!.posters.small, { contentType: 'text/html', body: 'unavailable' });
   cdn.respond(items[1]!.posters.wide!, { status: 500 });
   await app.open();
-  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
-  await remote.press('down');
+  await enterReadyRow(page, remote, 'Фильм 1300');
   await expect(page.getByTestId('backdrop').last()).toHaveClass(/loaded/);
   const retained = await page.getByTestId('backdrop').last().getAttribute('src');
   await remote.press('right');
