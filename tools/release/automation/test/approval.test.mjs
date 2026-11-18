@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { approve } from '../publication.mjs';
+import { approve, pendingApproval, resolveApproval } from '../publication.mjs';
 
 const sha = 'a'.repeat(40), head = 'b'.repeat(40), repo = 'dartyuhov/kinotv', bot = 'release-app[bot]';
 export function fixture() {
@@ -49,6 +49,47 @@ test('ordinary PRs cannot publish even when their title and labels mimic Release
   pr.user.login = 'contributor';
   assert.equal(await approve(api, { sourceSha: sha, bot }), undefined);
   await assert.rejects(approve(api, { prNumber: 42, bot }), /trusted/);
+});
+
+test('A running, R pending, B replacing R still resolves durable R from closed PR state', async () => {
+  const { api, pr } = fixture();
+  const originalList = api.list;
+  let closed = [];
+  api.list = async path => path.startsWith('/pulls?') ? closed : originalList(path);
+  assert.equal(await pendingApproval(api, { bot }), undefined); // ordinary A starts
+  closed = [pr]; // R merges; its workflow is pending, then replaced by B
+  const approval = await pendingApproval(api, { bot }); // B reconciles repository state
+  assert.equal(approval.prNumber, 42);
+  assert.equal(approval.sha, sha); // never B's ordinary push SHA
+  pr.labels = [{ name: 'autorelease: tagged' }];
+  assert.equal(await pendingApproval(api, { bot }), undefined);
+});
+
+test('pending reconciliation orders all candidates oldest first and never skips a broken oldest approval', async () => {
+  const { api, pr } = fixture();
+  const originalList = api.list;
+  const later = { ...pr, number: 43, merged_at: '2026-11-18T11:00:00Z' };
+  const spoof = { ...pr, number: 44, user: { login: 'contributor' } };
+  api.list = async path => path.startsWith('/pulls?') ? [later, spoof, pr] : originalList(path);
+  assert.equal((await pendingApproval(api, { bot })).prNumber, 42);
+  pr.body = 'invalid release markers';
+  await assert.rejects(pendingApproval(api, { bot }), /markers/);
+});
+
+test('dispatch cannot bypass oldest pending approval, while completed verification retries remain available', async () => {
+  const { api, pr } = fixture();
+  const originalList = api.list;
+  const originalRequest = api.request;
+  const later = { ...pr, number: 43, merged_at: '2026-11-18T11:00:00Z' };
+  api.list = async path => path.startsWith('/pulls?') ? [later, pr] : originalList(path);
+  api.request = async path => path === '/pulls/43' ? later : originalRequest(path);
+  await assert.rejects(resolveApproval(api, { bot, prNumber: 43 }), /older pending release/);
+  assert.equal((await resolveApproval(api, { bot })).prNumber, 42);
+  pr.labels = [{ name: 'autorelease: tagged' }];
+  assert.equal((await resolveApproval(api, { bot })).prNumber, 43);
+  assert.equal((await resolveApproval(api, { bot, prNumber: 42, sourceSha: sha })).prNumber, 42);
+  later.labels = [{ name: 'autorelease: tagged' }];
+  assert.equal(await resolveApproval(api, { bot }), undefined);
 });
 
 test('latest exact PR-head CI qualifies without waiting for the concurrent main CI push', async () => {

@@ -112,7 +112,9 @@ describe('the release workflow', () => {
     expect(release.on.workflow_dispatch).toEqual({ inputs: {
       release_pr: { description: 'Merged release PR number to retry or verify', required: true, type: 'string' },
     } });
-    expect(Object.keys(release.on).sort()).toEqual(['push', 'workflow_dispatch']);
+    expect(Object.keys(release.on).sort()).toEqual(['push', 'schedule', 'workflow_dispatch']);
+    expect(release.on.schedule).toEqual([{ cron: '17,47 * * * *' }]);
+    expect(release.jobs.approval!.steps!.find(s => s.run?.endsWith('publish.mjs prepare'))!.env).not.toHaveProperty('SOURCE_SHA');
   });
 
   it('runs exact-source CI and packaging only after approval and publishes after both pass', () => {
@@ -167,12 +169,17 @@ describe('the release workflow', () => {
 describe('the release PR workflow', () => {
   const wf = workflow('release-please.yml');
   it('creates App-authored release PRs on main without creating releases or circular tag triggers', () => {
-    expect(wf.on).toEqual({ push: { branches: ['main'] } });
+    expect(wf.on).toEqual({ push: { branches: ['main'] },
+      workflow_run: { workflows: ['Publish release'], types: ['completed'], branches: ['main'] },
+      schedule: [{ cron: '23,53 * * * *' }],
+    });
     expect(wf.permissions).toEqual({ contents: 'read' });
     const steps = wf.jobs['release-pr']!.steps!;
     expect(steps[steps.length - 1]!.run).toBe('node tools/release/automation/release-pr.mjs');
     expect(steps[steps.length - 1]!.env!.GH_TOKEN).toBe('${{ steps.app.outputs.token }}');
     expect(steps.some(s => s.run === 'node tools/release/automation/config.mjs')).toBe(true);
+    expect(steps.find(s => s.uses?.startsWith('actions/checkout@'))!.with?.ref).toBe('main');
+    expect(wf.jobs['release-pr']).toHaveProperty('if', expect.stringContaining("github.event.workflow_run.conclusion == 'success'"));
     expect(steps.find(s => s.uses?.startsWith('actions/create-github-app-token@'))!.with).toMatchObject({
       'client-id': '${{ vars.RELEASE_APP_CLIENT_ID }}', 'private-key': '${{ secrets.RELEASE_APP_PRIVATE_KEY }}',
       repositories: '${{ github.event.repository.name }}', 'permission-contents': 'write',

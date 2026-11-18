@@ -1,10 +1,10 @@
 import { appendFile, readFile } from 'node:fs/promises';
-import { GitHub, approve, publish, check } from './publication.mjs';
+import { GitHub, resolveApproval, publish, check } from './publication.mjs';
 
 try {
   const api = new GitHub({ repo: process.env.GH_REPO });
-  const approval = await approve(api, { sourceSha: process.env.SOURCE_SHA || undefined,
-    prNumber: process.env.RELEASE_PR || undefined, bot: process.env.RELEASE_APP_BOT_LOGIN });
+  const approval = await resolveApproval(api, { bot: process.env.RELEASE_APP_BOT_LOGIN,
+    sourceSha: process.env.SOURCE_SHA || undefined, prNumber: process.env.RELEASE_PR || undefined });
   if (process.argv[2] === 'prepare') {
     const output = approval ? { approved: 'true', source_sha: approval.sha,
       version: approval.version, release_pr: String(approval.prNumber) } : { approved: 'false' };

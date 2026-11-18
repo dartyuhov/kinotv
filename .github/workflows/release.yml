@@ -3,6 +3,10 @@ name: Publish release
 on:
   push:
     branches: [main]
+  # Durable PR reconciliation recovers coalesced pushes, missed wake-ups, and
+  # checks that were not yet green. The pending Actions slot is never the queue.
+  schedule:
+    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       release_pr:
@@ -45,7 +49,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
-          SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
           RELEASE_PR: ${{ inputs.release_pr }}
 
   test:

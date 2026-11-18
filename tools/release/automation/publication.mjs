@@ -46,6 +46,31 @@ export class GitHub {
   }
 }
 
+// Actions concurrency is a lossy wake-up mechanism, not the release queue.
+// Closed PR state is durable; enumerate every page without search-index lag or
+// update-order assumptions, then always attempt the oldest pending merge first.
+export async function pendingApproval(api, { bot }) {
+  check(bot && /^[\w-]+\[bot\]$/.test(bot), 'Configure RELEASE_APP_BOT_LOGIN; see docs/releases.md');
+  const pending = (await api.list('/pulls?state=closed&base=main&sort=updated&direction=asc'))
+    .filter(pr => pr.merged_at && pr.user?.login === bot && pr.head?.ref === branch &&
+      pr.head.repo?.full_name === api.repo && pr.base?.repo?.full_name === api.repo &&
+      pr.base.ref === 'main' && pr.labels.some(l => l.name === 'autorelease: pending'))
+    .sort((a, b) => Date.parse(a.merged_at) - Date.parse(b.merged_at) || a.number - b.number);
+  if (!pending.length) return undefined;
+  // Do not skip a failed/unready/stale oldest approval to publish a later one.
+  return approve(api, { prNumber: pending[0].number, bot });
+}
+
+export async function resolveApproval(api, { bot, prNumber, sourceSha }) {
+  if (!prNumber) return pendingApproval(api, { bot });
+  const approval = await approve(api, { bot, prNumber, sourceSha });
+  if (approval.pending) {
+    const oldest = await pendingApproval(api, { bot });
+    check(oldest?.prNumber === approval.prNumber, 'An older pending release must complete first');
+  }
+  return approval;
+}
+
 export async function approve(api, { sourceSha, prNumber, bot }) {
   check(bot && /^[\w-]+\[bot\]$/.test(bot), 'Configure RELEASE_APP_BOT_LOGIN to the installed release App bot login; see docs/releases.md');
   let pr;

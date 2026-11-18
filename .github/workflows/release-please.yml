@@ -3,6 +3,12 @@ name: Release PR
 on:
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Publish release]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '23,53 * * * *'
 
 permissions:
   contents: read
@@ -13,11 +19,16 @@ concurrency:
 
 jobs:
   release-pr:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
+          ref: main
           persist-credentials: false
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:

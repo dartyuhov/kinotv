@@ -138,3 +138,24 @@ test('merged pending release blocks a second release PR until publisher complete
   } });
   assert.deepEqual(await manifest.createPullRequests(), []);
 });
+
+test('publication completion reconciles F deferred while R was pending using real Release Please', async () => {
+  const [pending] = await plan(['fix: release R'], { version: '0.1.0' });
+  let labels = ['autorelease: pending'];
+  let created;
+  const manifest = () => repository(['feat: feature F merged during R publication'], { version: '0.1.1', overrides: {
+    async *pullRequestIterator(branch, state) {
+      assert.equal(branch, 'main');
+      if (state === 'MERGED') yield { number: 42, title: pending.title.toString(), body: pending.body.toString(),
+        headBranchName: pending.headRefName, labels };
+    },
+    async createPullRequest(pr) { created = { ...pr, number: 43 }; return created; },
+  } });
+  assert.deepEqual(await (await manifest()).createPullRequests(), []); // F push's writer ran too early
+  assert.equal(created, undefined);
+  labels = ['autorelease: tagged']; // R publisher finishes
+  // The completion-triggered writer (no further main push) rereads main history.
+  assert.equal((await (await manifest()).createPullRequests())[0].number, 43);
+  assert.match(created.title, /0\.2\.0/);
+  assert.match(created.body.toString(), /feature F merged during R publication/);
+});

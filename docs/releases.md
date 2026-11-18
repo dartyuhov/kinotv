@@ -48,8 +48,10 @@ fixtures and read-only permissions, with no release secrets.
 
 ## Version and publication contract
 
-The two workflows run independently on `main` pushes. Publication ignores
-ordinary merges. Release Please uses its locked Node strategy from the isolated
+The two workflows reconcile repository state on `main` pushes and twice-hourly
+schedules. Successful publication-workflow completion also wakes the release PR
+writer, which reads current `main` rather than the completed run's old checkout.
+Release Please uses its locked Node strategy from the isolated
 `tools/release/automation/` package, without adding dependencies to the app.
 
 - `fix:` requests a patch, `feat:` a minor, and `!` / `BREAKING CHANGE:` a major,
@@ -85,8 +87,25 @@ ordinary merges. Release Please uses its locked Node strategy from the isolated
   four hosted files, and checks their bytes, sizes, digests, and checksums against
   the local assembly. It returns the validated release ID. Approval and source
   guards run again before that exact draft becomes public automatically.
-- One non-cancelling concurrency group serializes publication, including retries.
-  Older versions/history are rejected. A completed retry checks release approval
+- One concurrency group serializes publication, including retries. Its default
+  pending slot is lossy: even with `cancel-in-progress: false`, a new run replaces
+  the previous pending run. It is **not the release queue**. Every automatic run
+  enumerates all closed main PR pages and selects the oldest pending merged PR
+  with the expected App, branch, and repository, then applies all approval checks.
+  A later ordinary push can therefore recover an earlier release merge. An
+  unready, invalid, or stale oldest approval fails visibly; it isn't skipped in
+  favor of a later release. The pending label survives until publication and
+  lifecycle completion. Explicit retries of pending PRs must also respect this
+  order; completed retries remain verification-only.
+- After publication clears the pending label, a successful workflow-completion
+  event reconciles Release Please again. Features merged while publication was
+  in flight are picked up without another main push. The writer uses the same
+  serialized writer group for every trigger, always reads current main history,
+  and uses its App token only for PR mutations. Scheduled reconciliation recovers
+  missed/coalesced wake-ups and failed label/writer operations. GitHub schedules
+  can be delayed or dropped, so this is eventual recovery, not a time guarantee.
+  No completion event in this flow triggers publication of an unmerged PR.
+- Older versions/history are rejected. A completed retry checks release approval
   identity, tag, and every hosted asset; it never replaces public assets.
 
 ## Recovery
@@ -100,7 +119,9 @@ Inspect the failed gate first; don't move tags or publish while a run is active.
 2. Rerun the failed workflow, or run **Publish release** on branch `main` with
    `release_pr` set to the already merged release PR number. This input cannot
    select an arbitrary ref/version or approve an ordinary PR. It resolves the
-   original merge, checks ancestry/freshness, retests, and rebuilds that source.
+   original merge, checks ancestry/freshness and pending order, retests, and
+   rebuilds that source. Automatic pushes/scheduled runs also reconcile pending
+   merged approvals, independent of the triggering push SHA.
 3. A matching draft can retain correct assets and repair interrupted/bad uploads.
    Network errors aren't treated as missing releases. A completed public release
    can only pass verification; mismatched public bytes or identity stop the run
