@@ -82,7 +82,6 @@ export function Grid<T>({
 }: GridProps<T>) {
   const { ready, report } = useCardReadiness();
   const { enter, request } = useArtworkFocus(gridKey, ready);
-  const pendingIndex = useRef<number>();
   const remembered = useRowMemory((s) => s.index[gridKey] ?? 0);
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
@@ -109,7 +108,6 @@ export function Grid<T>({
       const targetKey = gridCardKey(gridKey, keyOf(all[to]!));
       const target = siblings.find(s => s.focusKey === targetKey);
       if (target) return target;
-      pendingIndex.current = to;
       remember(gridKey, to);
       request(targetKey);
       return siblings.find(s => s.focusKey === currentKey) ?? null;
@@ -130,8 +128,6 @@ export function Grid<T>({
 
   const onFocusIndex = useCallback(
     (i: number) => {
-      if (pendingIndex.current !== undefined && i !== pendingIndex.current) return;
-      pendingIndex.current = undefined;
       if (i !== previous.current) setDirection(i - previous.current);
       previous.current = i;
       remember(gridKey, i);

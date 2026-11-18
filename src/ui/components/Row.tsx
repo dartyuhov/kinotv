@@ -67,7 +67,11 @@ export function Row<T>({
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
   const preferred = items[index];
-  const { enter, request } = useArtworkFocus(rowKey, ready, preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)));
+  const prepareRestore = useCallback(() => {
+    setRequested(true);
+    onRowFocus?.(rowKey);
+  }, [onRowFocus, rowKey]);
+  const { enter, request } = useArtworkFocus(rowKey, ready, preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)), prepareRestore);
   const [direction, setDirection] = useState(1);
   const previous = useRef(index);
   const latest = useRef({ items, itemKey, index, onItemFocus, onItemPress, ready });
