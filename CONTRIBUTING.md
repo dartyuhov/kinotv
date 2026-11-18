@@ -174,10 +174,10 @@ tracker just to submit a contribution.
 ## Sensitive reports
 
 Don't post sensitive findings, exploit details, account data, certificates, or
-private logs in public issues or PRs. A private reporting destination has not
-yet been confirmed. The launch coordinator must confirm and publish that route
-before reporting guidance is complete. There is no confirmed private contact
-or response-time promise to list here.
+private logs in public issues or PRs. Email sensitive findings privately to
+[darst94@gmail.com](mailto:darst94@gmail.com). Include a description, affected
+version, and reproduction steps, with credentials and account data redacted.
+Reports are handled on a best-effort basis, without a response-time promise.
 
 ## Documentation and release scope
 
@@ -204,8 +204,8 @@ Use this sequence when the launch coordinator authorizes remote release work:
    source, package/lock metadata, and the built widget, the intended repository,
    and effective release client configuration (presence only). Finish relevant
    candidate checks, notices, exposure review, and agreed pre-publication device
-   checks. Exact copyright-holder name/year, the private reporting contact, and
-   the host/TV support baseline still require maintainer confirmation.
+   checks. Exact copyright-holder name/year and the host/TV support baseline
+   still require maintainer confirmation.
 2. Create and push a matching `vX.Y.Z` tag manually only with scoped approval.
    The tag-driven workflow runs the release gate and CI, builds the unsigned WGT,
    assembles the four assets, and stages or repairs a **draft**. It doesn't

@@ -117,7 +117,9 @@ host, TV, firmware, source, and installed-package identities.
 The following gates remain open before launch completion:
 
 - Confirm the exact MIT copyright holder/year and add the original-code license;
-  confirm the private reporting contact and maintained host/TV support baseline.
+  confirm the maintained host/TV support baseline. The maintainer confirmed
+  [darst94@gmail.com](mailto:darst94@gmail.com) for private reports; the English,
+  Russian, and contributor guides now list that contact.
 - Select and review final runtime integration and an exact candidate, then record
   candidate-specific checks and artifacts with effective release configuration.
 - Run a maintained, redacting exposure scan over intended public history/current

@@ -127,8 +127,9 @@ focused checks. Use [GitHub Issues](https://github.com/dartyuhov/kinotv/issues)
 for nonsensitive bugs and proposals; you don't need the internal Beads tracker.
 Include app version/source, host, TV model/firmware, reproduction steps, and
 sanitized results. Don't attach account tokens, stream URLs, passwords, or
-signing material. A private reporting destination is still awaiting maintainer
-confirmation; don't submit sensitive findings in a public issue or PR.
+signing material. Email sensitive findings privately to
+[darst94@gmail.com](mailto:darst94@gmail.com), with credentials and account data
+redacted. Don't submit sensitive findings in a public issue or PR.
 
 The original [design document](docs/superpowers/specs/2026-11-02-kinotv-tizen-app-design.md)
 contains historical plans, not a current compatibility or feature guarantee.
