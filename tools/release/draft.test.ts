@@ -70,6 +70,11 @@ it('creates only a draft for an existing tag and verifies the entire downloaded 
   expect(server.calls.some((args) => args.includes('PATCH') || args.includes('--clobber'))).toBe(false);
 });
 
+it('returns the exact validated draft identity for the automatic publisher', async () => {
+  const server = github();
+  expect(await stageDraft({ root, env, gh: server.gh })).toEqual({ id: 7, tag: 'v1.4.0', sha, published: false });
+});
+
 it('retries an interrupted upload, retains correct assets, repairs a corrupt draft asset and is then a read-only no-op', async () => {
   const server = github();
   const interrupted: Gh = (args, input) => {

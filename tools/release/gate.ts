@@ -20,7 +20,7 @@ function problems(env: NodeJS.ProcessEnv): Array<{ title: string; lines: string[
   const found: Array<{ title: string; lines: string[] }> = [];
   const project = readProject();
   const { version, githubRepo } = project;
-  const tag = env.GITHUB_REF_NAME ?? '';
+  const tag = env.RELEASE_TAG ?? env.GITHUB_REF_NAME ?? '';
   const repository = env.GITHUB_REPOSITORY ?? '';
 
   for (const title of releaseProjectProblems(project)) found.push({ title, lines: [] });
@@ -40,7 +40,7 @@ function problems(env: NodeJS.ProcessEnv): Array<{ title: string; lines: string[
   if (tag !== `v${version}`) {
     found.push({
       title: `The tag ${tag || '(none)'} does not match the package.json version ${version}.`,
-      lines: [`Tag the release as v${version}, or set "version" in package.json to ${tag.replace(/^v/, '') || 'the new version'} first.`],
+      lines: ['Merge a matching generated release PR; do not create or move tags manually.'],
     });
   }
 
@@ -65,7 +65,7 @@ function problems(env: NodeJS.ProcessEnv): Array<{ title: string; lines: string[
 
 const found = problems(process.env);
 if (found.length === 0) {
-  console.log(`✓ Release ${process.env.GITHUB_REF_NAME} can be published: app client configuration is present and source versions match. Presence does not verify client ownership or upstream authorization.`);
+  console.log(`✓ Release ${process.env.RELEASE_TAG ?? process.env.GITHUB_REF_NAME} can be published: app client configuration is present and source versions match. Presence does not verify client ownership or upstream authorization.`);
 } else {
   for (const { title, lines } of found) {
     // An annotation's message must be one line; %0A is GitHub's escaped newline.

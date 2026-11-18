@@ -159,8 +159,10 @@ For a pull request, follow these steps:
 4. Run relevant checks and record exact commands/results, skipped checks, and
    device observations separately. A browser fixture pass is not TV acceptance.
 5. Review your diff for local config, tokens, signed URLs, and signing files.
-6. Open a PR using the template. Conventional titles such as `fix(player): …`
-   or `docs: …` help maintainers prepare squash commits.
+6. Open a PR using the template. Use Conventional Commit titles such as
+   `fix(player): …`, `feat: …`, or `docs: …` for squash commits. Fixes request a
+   patch, features a minor, and `!` / `BREAKING CHANGE:` a major release, including
+   before 1.0. Documentation-only changes don't independently request a release.
 
 Fork checks must work with fixtures and no publishing credentials. Contributors
 don't need Beads or release access. Maintainers link accepted GitHub reports to
@@ -207,47 +209,30 @@ that an installable release has been published or tested on your TV.
 
 ## Publishing a release
 
-The launch release process is manual tag → validated draft → manual publication
-→ anonymous download verification. The integrated workflow stages or repairs a
-draft and validates its assets; publication remains manual. Public release assets
-and public-download TV acceptance are still pending.
+The approved process is main merge → automatic release PR → release PR merge →
+tested exact-merge build → validated draft → automatic publication. **Merging the
+trusted release PR is the sole publication approval.** Review the candidate,
+notes, notices, and launch evidence before merging it. Don't create tags or
+publish drafts manually.
 
-Use this sequence when the launch coordinator authorizes remote release work:
+Release Please updates `package.json`, both root lockfile versions,
+`.release-please-manifest.json`, and `CHANGELOG.md`. The app and widget derive
+their version from `package.json`. The first release is `0.1.0`; later releases
+follow Conventional Commits. The publisher creates `vX.Y.Z` only at the approved
+merge SHA, validates the four hosted assets, then makes the release public.
 
-1. Select the reviewed candidate and confirm matching stable numeric versions in
-   source, package/lock metadata, and the built widget, the intended repository,
-   and effective release client configuration (presence only). Finish relevant
-   candidate checks, notices, exposure review, and agreed pre-publication device
-   checks. The agreed initial verification baseline is macOS with Samsung Q60C
-   running Tizen 9 / Chromium 120; record exact host and firmware versions during
-   acceptance.
-2. Create and push a matching `vX.Y.Z` tag manually only with scoped approval.
-   The tag-driven workflow runs the release gate and CI, builds the unsigned WGT,
-   assembles the four assets, and stages or repairs a **draft**. It doesn't
-   publish automatically. Its configuration-presence gate doesn't prove client
-   ownership or upstream permission.
-3. Wait for the complete workflow to finish. Review the validated draft's tag
-   and source SHA, notes, and all four assets: `KinoTV.wgt`, `install.sh`,
-   `kinotv-installer.mjs`, and `SHA256SUMS`. Draft validation downloads the hosted
-   assets and compares their bytes with the local assembly and checksums; it
-   doesn't establish legal or TV acceptance. A failed run can leave an incomplete
-   draft. Inspect the failure and rerun the same tag workflow to repair it.
-   Published/completed releases are refused; don't move tags or replace public
-   assets as routine recovery.
-4. Review the legal and launch evidence with the coordinator, then publish the
-   validated draft manually under separate publication approval. Don't publish
-   while its workflow is running. Draft validation alone isn't approval to
-   announce the launch.
-5. Retrieve public release metadata and all four assets **without authentication**
-   into a clean folder. Confirm the selected tag and complete asset set, check
-   `SHA256SUMS`, and inspect the unsigned widget's identity/version and notices.
-   Use those exact downloads for local signing, fresh installation, device-code
-   sign-in, native playback, and a same-author upgrade retaining session/settings
-   on the agreed baseline. Record the exact source/package, device/firmware,
-   date, and pass/fail/blocked results in the
-   [integrated TV checklist](docs/integrated-tv-acceptance.md).
+See [release setup, trust checks, and recovery](docs/releases.md). Automation
+isn't operational until this change is merged and the release GitHub App is
+installed and configured. No public release or public-download TV acceptance is
+established by these source changes.
 
-Keep local preparation, observed GitHub configuration, publication, and verified
-installation as separate results. Announcement and launch completion require
-the public-download checks and coordinated TV evidence; a tag or green draft
-workflow alone doesn't establish them.
+After publication, retrieve public metadata and all four assets **without
+authentication** into a clean folder. Check `SHA256SUMS`, the unsigned widget's
+identity/version, and notices. Use those downloads for local signing, fresh
+installation, device-code sign-in, native playback, and a same-author upgrade
+retaining session/settings. Record exact source/package, device, firmware, date,
+and pass/fail/blocked results in the
+[integrated TV checklist](docs/integrated-tv-acceptance.md). The selected initial
+baseline is macOS with Samsung Q60C on Tizen 9 / Chromium 120. Publication and
+successful fixture checks remain separate from physical acceptance and launch
+completion.

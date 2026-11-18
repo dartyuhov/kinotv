@@ -14,6 +14,12 @@ available yet.** The commands below describe the current tools and the intended
 downloaded-file journey; they aren't evidence of a completed public-download
 installation.
 
+The approved [automatic release flow](releases.md) publishes after a reviewed
+release PR is merged and its exact merge passes checks and draft validation.
+App setup and hosted operation remain pending. A published asset set still needs
+anonymous-download and physical TV acceptance; the workflow doesn't sign it for
+your TV or establish those results.
+
 ## Prerequisites and scope
 
 The agreed initial verification baseline is macOS plus Samsung Q60C on Tizen 9 /

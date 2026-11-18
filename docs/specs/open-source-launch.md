@@ -1,5 +1,13 @@
 # KinoTV open-source launch
 
+The maintainer's November 18, 2026 replacement release decision supersedes this
+spec's initial manual-tag/manual-publication choice: use automatic release PRs,
+with the trusted release PR merge as the sole publication approval. See the
+[current release contract](../releases.md) for exact-source tests, build, draft
+validation, automatic publication, and recovery. The original decisions below
+remain historical context. Physical/public-download acceptance remains separate;
+this implementation doesn't authorize immediate release/tag or settings changes.
+
 ## Problem Statement
 
 KinoTV is publicly visible, but another subscriber cannot yet rely on a complete,
