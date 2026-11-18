@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { setLogger } from 'release-please';
 import { releaseManifest } from '../release-pr.mjs';
 import { approve } from '../publication.mjs';
 
 const root = new URL('../../../../', import.meta.url);
 const quiet = { info() {}, warn() {}, error() {}, debug() {}, trace() {} };
+// Strategies and updaters use RP's global logger, not the manifest logger.
+// Silence its Unicode checkpoints in this isolated test process: Node 22 can
+// misread them as runner frames (https://github.com/nodejs/node/issues/65934).
+setLogger(quiet);
 async function repository(messages, { version = '0.0.0', files = ['src/App.tsx'], bootstrap = false, overrides = {}, lifecycle } = {}) {
   const config = JSON.parse(await readFile(new URL('release-please-config.json', root)));
   const scm = {
