@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.1](https://github.com/dartyuhov/kinotv/compare/v0.1.0...v0.1.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* **ci:** qualify merged PR checks and stabilize cache fixture ([3429f25](https://github.com/dartyuhov/kinotv/commit/3429f257563c5ea01d65679c631c2dbaf5dcaad9))
+* **release:** qualify merged PR CI and stabilize artwork test ([8cdbf52](https://github.com/dartyuhov/kinotv/commit/8cdbf529d82cc4689b257808318092a50883a6fa))
+* **release:** resolve new draft by returned identity ([39c2f23](https://github.com/dartyuhov/kinotv/commit/39c2f23681c40e934a67133ed7458c8969b28043))
+* **release:** resolve new drafts from create response ([eb81fe0](https://github.com/dartyuhov/kinotv/commit/eb81fe02770a8fb79de8a0d589c6bdbe0933c14a))
+* **release:** send content length for binary gh uploads ([968c486](https://github.com/dartyuhov/kinotv/commit/968c486a4d66108fadc1f3dc3cb72414e3201570))
+
 ## 0.1.0 (2026-11-18)
 
 
