@@ -71,6 +71,10 @@ for (const { source, cancel } of (['row', 'grid'] as const).flatMap(source => [f
     await expect(first).toHaveAttribute('data-artwork', 'ready');
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('Фильм 89000');
+    const saved = page.getByRole('button', { name: 'Фильм 89001', exact: true });
+    await expect(saved).toHaveAttribute('data-artwork', 'ready');
+    await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName('Фильм 89001');
     await remote.press('ok');
     await expect(page.locator('[data-screen="title"]')).toBeVisible();
     await page.evaluate(() => { window.decodeControl.hold = true; });
@@ -88,8 +92,10 @@ for (const { source, cancel } of (['row', 'grid'] as const).flatMap(source => [f
       await expect(first).toHaveAttribute('data-artwork', 'ready');
       await expect(app.focused).toHaveAccessibleName(source === 'row' ? 'Главная' : 'Фильмы');
     } else {
-      await expect(app.focused).toHaveAccessibleName('Фильм 89000');
+      await expect(app.focused).toHaveAccessibleName('Фильм 89001');
       await expect(app.focused).toHaveAttribute('data-artwork', 'ready');
+      await remote.press('left');
+      await expect(app.focused).toHaveAccessibleName('Фильм 89000');
     }
   });
 }

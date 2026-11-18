@@ -1,6 +1,17 @@
+import type { Page } from '@playwright/test';
 import { fakeHome, fakeItem } from './harness/catalog';
 import { solidPng } from './harness/fakeCdn';
 import { expect, test } from './harness/test';
+import type { Remote } from './harness/remote';
+
+async function returnHome(page: Page, remote: Remote) {
+  const home = page.getByRole('tab', { name: 'Главная', exact: true });
+  for (let remaining = await page.getByRole('tab').count(); remaining > 0; remaining--) {
+    if (await home.getAttribute('data-focused') === 'true') break;
+    await remote.press('left');
+  }
+  await expect(home).toHaveAttribute('data-focused', 'true');
+}
 
 test('remote clear reports managed usage, preserves saved session/preferences and later navigation reuses new artwork', async ({ app, api, cdn, page, remote }) => {
   const item = fakeItem(1400, 'Кэш настроек');
@@ -28,7 +39,7 @@ test('remote clear reports managed usage, preserves saved session/preferences an
   expect(await page.evaluate(() => localStorage.getItem('kinotv:session'))).toBe(saved);
   expect(await page.evaluate(() => localStorage.getItem('image-test:preferences'))).toBe('preserve');
   await remote.press('up', 'up');
-  await remote.repeat('left', 8);
+  await returnHome(page, remote);
   await expect(page.locator('.card img').first()).toHaveJSProperty('naturalWidth', 16);
   expect(cdn.requests.filter((r) => r.source === item.posters.medium)).toHaveLength(2);
   await page.reload();
@@ -88,7 +99,7 @@ test('clear failure is actionable, keeps focus and sign-in, and supports a succe
   await expect(page.getByText('Кэш изображений очищен', { exact: true })).toBeVisible();
   await expect(page.getByText('Сохранение изображений доступно', { exact: true })).toBeVisible();
   await remote.press('up', 'up');
-  await remote.repeat('left', 8);
+  await returnHome(page, remote);
   await expect(app.focused).toHaveAccessibleName('Главная');
 });
 

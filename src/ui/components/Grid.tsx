@@ -128,9 +128,14 @@ export function Grid<T>({
 
   const onFocusIndex = useCallback(
     (i: number) => {
-      if (i !== previous.current) setDirection(i - previous.current);
+      // The resolver retains current focus while an undecoded target loads.
+      // Norigin calls onFocus again for that same leaf; do not overwrite the
+      // requested scroll index and remove the incoming target's artwork demand.
+      if (i !== previous.current) {
+        setDirection(i - previous.current);
+        remember(gridKey, i);
+      }
       previous.current = i;
-      remember(gridKey, i);
       const item = latest.current.items[i];
       if (item !== undefined) latest.current.onItemFocus?.(item, i);
     },

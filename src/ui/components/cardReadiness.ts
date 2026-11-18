@@ -45,6 +45,10 @@ export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferr
     return () => { if (!--observers) window.removeEventListener('keydown', beforeNavigation, true); };
   }, []);
   const enter = useCallback(() => {
+    // A scheduled fallback can enter this container after Back has already
+    // requested a saved leaf. Keep that request rather than taking the first
+    // card to decode (or replacing it with a generic container entry).
+    if (pending.current?.target && pending.current.navigation === navigation) return;
     if (getCurrentFocusKey() !== key) return;
     if (preferred ? ready.has(preferred) : ready.size) { void setFocus(preferred ?? ready.values().next().value!); return; }
     pending.current = { from: previousFocus, navigation, target: preferred };

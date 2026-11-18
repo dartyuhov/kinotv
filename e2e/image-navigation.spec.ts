@@ -77,14 +77,39 @@ test('stale idle prefetch finishes delayed validation and persists freshness bef
   const prefetched = items.slice(8, 10);
   for (const item of prefetched) cdn.respond(item.posters.medium, { headers: { 'cache-control': 'max-age=0', etag: '"one"' } });
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
-  await clock.pause(); await app.open(); await remote.press('down');
+  const persisted = (source: string, metadata = false) => page.evaluate(async ({ source, metadata }) => {
+    const key = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source)))]
+      .map(byte => byte.toString(16).padStart(2, '0')).join('') + (metadata ? '-meta' : '');
+    return new Promise<boolean>((resolve, reject) => {
+      const request = indexedDB.open('kinotv-images');
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('files', 'readonly');
+        const record = tx.objectStore('files').get(key);
+        tx.oncomplete = () => { db.close(); resolve(record.result instanceof Blob); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+  }, { source, metadata });
+  const enterRow = async () => {
+    await expect(page.getByRole('button', { name: 'Фильм 1450', exact: true })).toHaveAttribute('data-artwork', 'ready');
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Фильм 1450');
+  };
+  await clock.pause(); await app.open(); await enterRow();
   await clock.runFor(300);
   for (const item of prefetched) await expect.poll(() => cdn.requests.filter((r) => r.source === item.posters.medium).length).toBe(1);
+  // Network observation precedes validation/admission. A restart is only a
+  // persistent-cache revisit once the prefetched payload has committed.
+  for (const item of prefetched) await expect.poll(() => persisted(item.posters.medium)).toBe(true);
   for (const item of prefetched) cdn.respond(item.posters.medium, { headers: { 'cache-control': 'max-age=3600', etag: '"one"' }, conditional: true, delay: 500 });
-  await page.reload(); await remote.press('down'); await clock.runFor(300);
+  await page.reload(); await enterRow();
+  await clock.runFor(300);
   for (const item of prefetched) await expect.poll(() => cdn.transfers.filter((r) => r.source === item.posters.medium).map((r) => r.status)).toEqual([200, 304]);
-  await clock.settle();
-  await page.reload(); await remote.press('down'); await clock.runFor(300);
+  for (const item of prefetched) await expect.poll(() => persisted(item.posters.medium, true)).toBe(true);
+  await page.reload(); await enterRow();
+  await clock.runFor(300);
   for (const item of prefetched) expect(cdn.requests.filter((r) => r.source === item.posters.medium)).toHaveLength(2);
 });
 

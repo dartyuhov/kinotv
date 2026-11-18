@@ -2,7 +2,10 @@ import { expect, test } from './harness/test';
 
 test('Back in a tab screen moves focus up to its tab', async ({ app, remote, page }) => {
   await app.open();
-  await remote.press('right', 'right', 'ok', 'down'); // Сериалы → second action
+  await remote.press('right', 'right');
+  await expect(page.locator('.grid .card').first()).not.toHaveAttribute('data-artwork', 'loading');
+  await remote.press('ok');
+  await expect(app.focused).toHaveClass(/card/);
 
   await remote.press('back');
   await expect(app.focused).toHaveAccessibleName('Сериалы');

@@ -418,13 +418,16 @@ it('falls back transiently on write failure and fences old in-flight writes when
 });
 
 it('limits shared transport to two downloads and cancels work with no consumers', async () => {
-  const answers: ((response: Response) => void)[] = [];
-  const transport = vi.fn<ImageTransport>(() => new Promise((resolve) => { answers.push(resolve); }));
+  const answers = new Map<string, (response: Response) => void>();
+  const transport = vi.fn<ImageTransport>((url) => new Promise((resolve) => { answers.set(url, resolve); }));
   const cache = createImageCache({ store: createBrowserImageStore(), transport, validate });
-  const leases = Array.from({ length: 5 }, (_, i) => cache.acquire(`${source}${i}`));
+  // Hash/storage completion order is independent of acquire order. Occupy both
+  // slots before queueing work, and answer the source whose lease we await.
+  const leases = [cache.acquire(`${source}0`), cache.acquire(`${source}1`)];
   await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2));
+  leases.push(...Array.from({ length: 3 }, (_, i) => cache.acquire(`${source}${i + 2}`)));
   leases[2]!.release();
-  answers[0]!(response());
+  answers.get(`${source}0`)!(response());
   await leases[0]!.ready;
   await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(3));
   expect(transport.mock.calls.map(([url]) => url)).not.toContain(`${source}2`);
