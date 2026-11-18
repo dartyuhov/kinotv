@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { fakeCatalog, fakeItem, fakeItems } from './harness/catalog';
 import type { FakeApi } from './harness/fakeApi';
-import { expect, test } from './harness/test';
+import { expect, browsingTest as test } from './harness/test';
 
 const grid = (page: Page, name: string) => page.getByRole('region', { name });
 
@@ -40,7 +40,7 @@ test('Down before the first page has arrived lands on the first card once it doe
   });
   await app.open();
   await remote.press('right', 'down');
-  await expect(page.getByRole('tab', { name: 'Фильмы' })).not.toHaveAttribute('data-focused');
+  await expect(page.getByRole('tab', { name: 'Фильмы' })).toHaveAttribute('data-focused', 'true');
 
   answer();
   await expect(app.focused).toHaveAccessibleName('Медленная река');

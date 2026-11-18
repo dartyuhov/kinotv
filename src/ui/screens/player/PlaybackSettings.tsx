@@ -66,13 +66,14 @@ export function PlaybackSettings({ choices, title, onClose }: { choices: Playbac
     {tab === 0 ? <div className="playback-settings__info"><h3>{title}</h3><p>{t('player.quality')}: {choices.quality === 'auto' ? t('player.auto') : choices.quality}</p>
       <p>{t('player.trackLabelHint')}</p><p>{t('player.fixedHint')}</p></div> : <div className="playback-settings__columns">
       {columns.map((options, col) => <section key={`${tab}:${col}`}><h3>{tab === 2 ? t('player.quality') : col === 0 ? t('player.audio') : t('player.subtitles')}</h3>
+        {tab === 1 && col === 0 && tracks.audioUnidentified && <p>{t('player.audioUnidentified')}</p>}
         <div className="playback-settings__list" role="group">{!options.length && <p>{t('player.noTracks')}</p>}
           {options.map((option, index) => <button key={option.id} tabIndex={activeColumn === col && activeRow === index ? 0 : -1}
             data-focused={activeColumn === col && activeRow === index} data-pending={option.pending === true} aria-pressed={option.selected === true} aria-disabled={choices.busy}
             onClick={() => { if (!choices.busy) option.select(); }}><span className="playback-settings__label">{option.label}</span><span className="playback-settings__selection">{option.pending ? t('player.pending') : option.selected ? `✓ ${t('player.applied')}` : ''}</span></button>)}
         </div></section>)}
     </div>}
-    <p className="playback-settings__status" role="status">{choices.busy ? t('player.switching') : choices.notice === 'subtitleFailed' ? t('player.subtitleFailed') :
+    <p className="playback-settings__status" role="status">{choices.busy ? t('player.switching') : choices.notice === 'audioFailed' ? t('player.audioFailed') : choices.notice === 'subtitleFailed' ? t('player.subtitleFailed') :
       choices.notice === 'subtitleLoading' ? t('player.subtitleLoading') : choices.notice === 'fallback' ? t('player.fallback') : choices.externalPending || [...tracks.audio, ...tracks.subtitles].some((track) => track.pending) ? t('player.pendingHint') : ''}</p>
   </div></div>;
 }
@@ -87,7 +88,7 @@ export function PlaybackPills({ choices, open }: { choices: PlaybackChoices; ope
   const external = choices.externalOptions.find((track) => track.id === choices.external);
   const externalPending = choices.externalOptions.find((track) => track.id === choices.externalPending);
   return <div className="playback-pills" aria-label={t('player.settings')}>
-    <button tabIndex={-1} onClick={open}>▲ {t('player.audio')}: {audio ? audioLabel(audio) : '—'}
+    <button tabIndex={-1} onClick={open}>▲ {t('player.audio')}: {choices.tracks.audioUnidentified ? t('player.audioUnidentified') : audio ? audioLabel(audio) : '—'}
       {pendingAudio && <span className="playback-pills__pending">{t('player.pending')}: {audioLabel(pendingAudio)}</span>}</button>
     <button tabIndex={-1} onClick={open}>{t('player.subtitles')}: {external ? `${languageName(external.lang)} · ${t('player.external')}${external.forced ? ` · ${t('player.forced')}` : ''}` : subtitle ? subtitleLabel(subtitle) : choices.tracks.subtitlesOff ? t('player.off') : '—'}
       {pendingSubtitle && <span className="playback-pills__pending">{t('player.pending')}: {subtitleLabel(pendingSubtitle)}</span>}

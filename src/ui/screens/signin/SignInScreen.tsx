@@ -39,10 +39,12 @@ export function SignInScreen() {
 
   return (
     <FocusContext.Provider value={focusKey}>
-      <div ref={ref} className="signin" data-screen="signin">
+      <div ref={ref} className="signin" data-screen="signin" aria-busy={state.status === 'requesting'}>
         <h1 className="signin__title">{t('signin.title')}</h1>
         {state.status === 'failed' ? (
-          <p className="signin__message">{t('signin.failed')}</p>
+          <p className="signin__message">{t(state.reason === 'auth' ? 'signin.authRejected' : state.reason === 'network' ? 'signin.networkFailed' : 'signin.failed')}</p>
+        ) : state.status === 'requesting' ? (
+          <p className="signin__message" role="status">{t('signin.requesting')}</p>
         ) : (
           <div className="signin__body">
             <ol className="signin__steps">
@@ -66,7 +68,8 @@ export function SignInScreen() {
         <div className="signin__actions">
           <Button
             focusKey={ACTION_FOCUS_KEY}
-            label={state.status === 'failed' ? t('signin.retry') : t('signin.newCode')}
+            label={state.status === 'requesting' ? t('signin.requesting') : state.status === 'failed' ? t('signin.retry') : t('signin.newCode')}
+            disabled={state.status === 'requesting'}
             onPress={() => flow.current?.restart()}
           />
         </div>

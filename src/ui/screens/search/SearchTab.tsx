@@ -62,6 +62,7 @@ export function SearchTab() {
               <>
                 <p className="search__message">{t('search.nothing', { query: term })}</p>
                 <Row
+                  key="search:popular"
                   focusKey="search:popular"
                   title={t('search.popular')}
                   variant="poster"
@@ -75,6 +76,8 @@ export function SearchTab() {
             ) : (
               <Row
                 // Per query, so each new search starts at its first result, and Back finds the one it left.
+                // Norigin registers focus keys on mount: changing the key requires a new row instance.
+                key={`search:results:${term}`}
                 focusKey={`search:results:${term}`}
                 title={t('search.results')}
                 variant="poster"

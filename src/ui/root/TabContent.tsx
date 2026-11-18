@@ -5,7 +5,7 @@ import { MoviesTab, SeriesTab } from '../screens/catalog/CatalogTab';
 import { BookmarksTab } from '../screens/bookmarks/BookmarksTab';
 import { HomeTab } from '../screens/home/HomeTab';
 import { IWatchTab } from '../screens/iwatch/IWatchTab';
-import { TvTab, SportTab } from '../screens/live/TvTab';
+import { TvTab } from '../screens/live/TvTab';
 import { SearchTab } from '../screens/search/SearchTab';
 import { SettingsTab } from '../screens/settings/SettingsTab';
 import { HistoryTab } from '../screens/history/HistoryTab';
@@ -22,7 +22,6 @@ const TAB_SCREENS: Record<TabId, ComponentType<{ tab: TabId }>> = {
   series: SeriesTab,
   iwatch: IWatchTab,
   tv: TvTab,
-  sport: SportTab,
   bookmarks: BookmarksTab,
   history: HistoryTab,
   settings: SettingsTab,

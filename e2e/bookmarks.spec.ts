@@ -3,7 +3,7 @@ import { fakeBookmarks } from './harness/bookmarks';
 import { fakeFilm, fakeHome, fakeItem, fakeTitle } from './harness/catalog';
 import type { FakeResponse } from './harness/fakeApi';
 import type { Remote } from './harness/remote';
-import { expect, test } from './harness/test';
+import { expect, browsingTest as test } from './harness/test';
 
 const LATER = fakeItem(401, 'Долгая дорога / The Long Road', { year: 2020 });
 const ISLAND = fakeItem(402, 'Остров / The Island', { type: 'serial', year: 2023 });
@@ -11,7 +11,7 @@ const LIGHTHOUSE = fakeItem(403, 'Маяк / The Lighthouse', { year: 2019 });
 
 /** From Home's tab, along the tab bar to Bookmarks (it shows as soon as it has focus). */
 async function openBookmarksTab(page: Page, remote: Remote) {
-  await remote.repeat('right', 6);
+  await remote.repeat('right', 5);
   await expect(page.getByRole('tab', { name: 'Закладки' })).toHaveAttribute('aria-selected', 'true');
 }
 

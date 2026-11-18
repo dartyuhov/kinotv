@@ -8,7 +8,6 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { Grid } from '../../components/Grid';
 import { screenStack } from '../../nav/stack';
-import { tabFocusKey, useTabStore } from '../../root/tabs';
 import './live.css';
 
 export function TvTab() {
@@ -27,16 +26,5 @@ export function TvTab() {
       }}
       onItemPress={(channel) => screenStack.push('livePlayer', { channelId: channel.id, lineupIds: query.data!.map((c) => c.id), originTab: 'tv' })}
       message={query.isPending ? undefined : state} />
-  </div>;
-}
-
-export function SportTab() {
-  return <div className="live-tab">
-    <h1>{t('tabs.sport')}</h1>
-    <p role="status">{t('live.sportUnavailable')}</p>
-    <Button focusKey="sport:tv" label={t('live.goToTv')} onPress={() => {
-      useTabStore.getState().setActiveTab('tv');
-      void setFocus(tabFocusKey('tv'));
-    }} />
   </div>;
 }

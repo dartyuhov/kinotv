@@ -8,6 +8,13 @@ const files: VideoFile[] = [2160, 1080, 720].map((h, i) => ({ codec: 'h264', w: 
 const capabilities = { streams: ['hls4', 'hls2', 'http'] as const, hevc: true, uhd: true };
 
 describe('playback choices', () => {
+  it('identifies muxed HLS audio only from unanimous explicit variant URI selectors', () => {
+    expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nhttps://cdn.test/signed/index-v1a4.m3u8?loc=de\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nlow/index-v1a4.m3u8').muxedAudioIndex).toBe(4);
+    expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nindex-v1-a12.m3u8').muxedAudioIndex).toBe(12);
+    for (const uri of ['video.m3u8', 'index-v1a0.m3u8', 'index-v1a1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nindex-v1a2.m3u8', 'index-v1a1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nunknown.m3u8']) {
+      expect(parseManifest(`#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\n${uri}`).muxedAudioIndex).toBeUndefined();
+    }
+  });
   it('keeps supplied HLS sources for Auto when every optional manifest inspection failed', () => {
     const supplied = [{ ...files[0]!, urls: { hls4: 'https://cdn.test/master', hls2: 'https://cdn.test/alternate' } }];
     const inspected = [

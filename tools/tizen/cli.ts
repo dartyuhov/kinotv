@@ -5,7 +5,8 @@
 //   npm run tv:debug    the same, launched in debug mode; prints the DevTools address
 import { print, runMain } from './host.ts';
 import { runSetup } from './setup.ts';
-import { packageCommand, tvCommand } from './tv.ts';
+import { packageCommand } from './tv.ts';
+import { tvCommand } from './tvCommand.ts';
 
 const USAGE = `Usage: node tools/tizen/cli.ts <command>
 

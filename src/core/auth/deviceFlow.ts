@@ -4,7 +4,7 @@ import type { OAuth, Tokens } from './oauth';
 export type DeviceFlowState =
   | { status: 'requesting' }
   | { status: 'waiting'; userCode: string; verificationUri: string }
-  | { status: 'failed' };
+  | { status: 'failed'; reason: 'network' | 'auth' | 'unavailable' };
 
 export interface DeviceFlow {
   /** Throws away the current code and asks for a new one. Also the retry after `failed`. */
@@ -29,6 +29,7 @@ export interface DeviceFlowOptions {
 export function startDeviceFlow({ oauth, onState, onApproved }: DeviceFlowOptions): DeviceFlow {
   // Each code gets a generation; answers that arrive for an older one are ignored.
   let generation = 0;
+  let requesting = false;
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -38,14 +39,24 @@ export function startDeviceFlow({ oauth, onState, onApproved }: DeviceFlowOption
   }
 
   async function requestCode() {
+    if (requesting) return;
+    requesting = true;
     clearTimers();
     const gen = ++generation;
+    onState({ status: 'requesting' });
     let device;
     try {
       device = await oauth.requestDeviceCode();
-    } catch {
-      if (gen === generation) onState({ status: 'failed' });
+    } catch (error) {
+      if (gen === generation) {
+        const reason = isApiError(error) && (error.kind === 'network' || error.kind === 'timeout')
+          ? 'network'
+          : isClientRejection(error) ? 'auth' : 'unavailable';
+        onState({ status: 'failed', reason });
+      }
       return;
+    } finally {
+      requesting = false;
     }
     if (gen !== generation) return;
 
@@ -83,7 +94,6 @@ export function startDeviceFlow({ oauth, onState, onApproved }: DeviceFlowOption
     clearTimers();
   }
 
-  onState({ status: 'requesting' });
   void requestCode();
 
   return {
@@ -92,4 +102,11 @@ export function startDeviceFlow({ oauth, onState, onApproved }: DeviceFlowOption
     },
     stop,
   };
+}
+
+function isClientRejection(error: unknown): boolean {
+  return isApiError(error) && (
+    error.kind === 'auth' || error.status === 403 ||
+    error.code === 'incorrect_client_credentials' || error.code === 'invalid_client' || error.code === 'unauthorized_client'
+  );
 }

@@ -16,7 +16,7 @@ test('fresh launches use the saved tab rather than the last visited tab', async 
   await expect(app.focused).toHaveAccessibleName('Фильмы');
 });
 
-for (const raw of ['not-json', '"removed-tab"', 'null', '42', '{}', '["movies"]']) {
+for (const raw of ['not-json', '"removed-tab"', '"sport"', 'null', '42', '{}', '["movies"]']) {
   test(`invalid preference ${raw} falls back to Home`, async ({ app, page }) => {
     await page.addInitScript(({ key, raw }) => localStorage.setItem(key, raw), { key: STARTUP_KEY, raw });
     await app.open();
@@ -123,7 +123,7 @@ test('remote picker uses root labels, cancels cleanly and saves without changing
   await remote.press('ok');
   const picker = page.getByRole('listbox', { name: 'Начальная вкладка' });
   await expect(picker.getByRole('option')).toHaveText([
-    'Поиск', 'Главная', 'Фильмы', 'Сериалы', 'Я смотрю', 'ТВ', 'Спорт', 'Закладки', 'История', 'Настройки',
+    'Поиск', 'Главная', 'Фильмы', 'Сериалы', 'Я смотрю', 'ТВ', 'Закладки', 'История', 'Настройки',
   ]);
   await expect(app.focused).toHaveAccessibleName('Главная');
   await remote.press('down', 'back');

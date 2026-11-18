@@ -208,6 +208,139 @@ test.describe('starting playback', () => {
 });
 
 test.describe('controls', () => {
+  test('initial HLS2 selection comes from its actual variant selector despite misleading native English metadata', async ({ app, api, page, remote, player }) => {
+    river(api);
+    const item = { ...RIVER, videos: RIVER.videos!.map(video => ({ ...video, audios: [
+      { id: 700001, index: 3, lang: 'rus', codec: 'aac', channels: 6, type: { id: 2, title: 'Многоголосый' }, author: { id: 103, title: 'Amedia' } },
+      { id: 1990189, index: 1, lang: 'rus', codec: 'aac', channels: 2, type: { id: 4, title: 'Одноголосый' }, author: { id: 24, title: 'Д. Пучков' } },
+    ] })) };
+    api.on('GET', `/v1/items/${RIVER.id}`, { json: { item } });
+    const base = 'https://cdn.test/signed/file.mp4/';
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 1080, urls: { hls2: `${base}hls2.m3u8`, hls: `${base}master-v1a1.m3u8` } }], subtitles: [] } });
+    await page.route(`${base}*`, route => route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nindex-v1a1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nlow/index-v1a1.m3u8\n' }));
+    await app.open();
+    await player.script({ adaptiveBitrate: true, tracks: { audio: [{ id: 'native:9', lang: 'eng', label: 'eng', selected: true }] } });
+    await playFromHero(page, remote);
+    await expect.poll(() => player.loads()).toEqual([{ url: `${base}hls2.m3u8`, startAt: 0 }]);
+    await expect(page.locator('.playback-pills')).toContainText('Д. Пучков');
+    await expect(page.locator('.playback-pills')).not.toContainText('Текущая дорожка не определена');
+    await remote.press('up');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Д. Пучков/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByRole('button', { name: /Amedia/ })).toHaveAttribute('aria-pressed', 'false');
+    expect((await player.calls()).filter(call => call.op === 'selectAudio')).toEqual([]);
+  });
+
+  test('service audio switches a validated HLS container source at the paused position without native-ID guessing', async ({ app, api, clock, page, remote, player }) => {
+    river(api);
+    const item = { ...RIVER, videos: RIVER.videos!.map(video => ({ ...video, audios: [
+      { id: 15508, index: 4, lang: 'rus', codec: 'aac', channels: 2, type: { id: 5, title: 'Авторский' }, author: { id: 4, title: 'Гаврилов' } },
+      { id: 15504, index: 2, lang: 'eng', codec: 'aac', channels: 2, type: null, author: null },
+    ] })) };
+    api.on('GET', `/v1/items/${RIVER.id}`, { json: { item } });
+    const base = 'https://cdn.test/signed/file.mp4/';
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 800, urls: { hls2: `${base}hls2.m3u8`, hls: `${base}master-v1a1.m3u8` } }], subtitles: [] } });
+    await page.route(`${base}*`, route => route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x800\nvideo.m3u8\n' }));
+    await clock.pause();
+    await app.open();
+    await player.script({ adaptiveBitrate: true, tracks: { audio: [{ id: 'native:9', lang: 'eng', label: 'eng', selected: true }] } });
+    await playFromHero(page, remote);
+    await player.time(145);
+    await remote.press('pause', 'up', 'down');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Дорожка 1/ })).toHaveCount(0);
+    await expect(dialog.locator('section').first().getByRole('button', { pressed: true })).toHaveCount(0);
+    await expect(page.locator('.playback-pills')).toContainText('Текущая дорожка не определена');
+    const russian = dialog.getByRole('button', { name: /русский.*Авторский.*Гаврилов/i });
+    await expect(russian).toBeVisible();
+    await russian.click();
+    await expect.poll(() => player.loads()).toContainEqual({ url: `${base}master-v1a4.m3u8`, startAt: 145 });
+    await expect.poll(() => player.state()).toBe('paused');
+    await expect(russian).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.playback-pills')).toContainText('Гаврилов');
+    await expect(page.locator('.playback-pills')).not.toContainText('Текущая дорожка не определена');
+    expect((await player.calls()).filter(call => call.op === 'selectAudio')).toEqual([]);
+    // A non-playlist response must not replace the working audio or cause a native reload.
+    const before = await player.loads();
+    await page.route(`${base}master-v1a2.m3u8`, route => route.fulfill({ body: '<html>unavailable</html>' }));
+    await dialog.getByRole('button', { name: /английский.*AAC/i }).click();
+    await expect(dialog.getByRole('status')).toContainText('Не удалось');
+    expect(await player.loads()).toEqual(before);
+    await expect(russian).toHaveAttribute('aria-pressed', 'true');
+    // Quality changes must retain the explicitly selected container audio.
+    await remote.press('up');
+    await dialog.getByRole('tab', { name: 'Качество', exact: true }).click();
+    await dialog.getByRole('button', { name: '1080p', exact: true }).click();
+    await expect.poll(async () => (await player.loads()).length).toBe(before.length + 1);
+    expect((await player.loads()).slice(-1)[0]).toEqual({ url: `${base}master-v1a4.m3u8`, startAt: 145 });
+    await expect.poll(() => player.state()).toBe('paused');
+  });
+
+  test('failed service-audio prepare restores the working source and leaving cancels late validation', async ({ app, api, page, remote, player }) => {
+    river(api);
+    const item = { ...RIVER, videos: RIVER.videos!.map(video => ({ ...video, audios: [
+      { id: 15508, index: 4, lang: 'rus', codec: 'aac', channels: 2, type: null, author: { id: 4, title: 'Гаврилов' } },
+    ] })) };
+    api.on('GET', `/v1/items/${RIVER.id}`, { json: { item } });
+    const base = 'https://cdn.test/signed/file.mp4/';
+    api.on('GET', '/v1/items/media-links', { json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 800, urls: { hls2: `${base}hls2.m3u8`, hls: `${base}master-v1a1.m3u8` } }], subtitles: [] } });
+    await page.route(`${base}*`, route => route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x800\nvideo.m3u8\n' }));
+    await app.open();
+    await player.script({ adaptiveBitrate: true, tracks: { audio: [{ id: 'native:9', lang: 'eng', label: 'eng', selected: true }] } });
+    await playFromHero(page, remote);
+    await remote.press('pause', 'up');
+    await page.route(`${base}master-v1a4.m3u8`, route => route.fulfill({ body: '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nsegment.ts\n' }));
+    await player.script({ adaptiveBitrate: true, loadError: 'unsupported' });
+    const russian = page.getByRole('dialog').getByRole('button', { name: /Гаврилов/ });
+    await russian.click();
+    await expect(page.getByRole('dialog').getByRole('status')).toContainText('Не удалось');
+    expect((await player.loads()).slice(-1)[0]?.url).toBe(`${base}hls2.m3u8`);
+    await expect.poll(() => player.state()).toBe('paused');
+    const before = await player.loads();
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    await page.route(`${base}master-v1a4.m3u8`, async route => { await wait; await route.fulfill({ body: '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nsegment.ts\n' }).catch(() => undefined); });
+    await russian.click();
+    await expect(russian).toHaveAttribute('data-pending', 'true');
+    await remote.press('back');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await remote.press('back', 'back');
+    await expect(page.locator('[data-screen="title"]')).toBeVisible();
+    release();
+    await page.waitForTimeout(100);
+    expect(await player.loads()).toEqual(before);
+  });
+
+  test('the next episode restores semantic service audio with its own container number', async ({ app, api, page, remote, player }) => {
+    const series = fakeSeries(31, 'Тихая гавань', [['Первая', 'Вторая']]);
+    fakeHome(api, { hot: [series], movies: [], serials: [] });
+    series.seasons![0]!.episodes.forEach((video, index) => {
+      video.audios = [{ id: 15508 + index, index: index === 0 ? 4 : 7, lang: 'rus', codec: 'aac', channels: 2,
+        type: { id: 5, title: 'Авторский', short_title: 'AVO' }, author: { id: 4, title: 'Гаврилов', short_title: null } }];
+    });
+    api.on('GET', `/v1/items/${series.id}`, { json: { item: series } });
+    const base = 'https://cdn.test/';
+    api.on('GET', '/v1/items/media-links', req => ({ json: { files: [{ codec: 'h264', quality: '1080p', quality_id: 3,
+      w: 1920, h: 800, urls: { hls2: `${base}${req.query.mid}/hls2.m3u8`, hls: `${base}${req.query.mid}/master-v1a1.m3u8` } }], subtitles: [] } }));
+    await page.route(`${base}**`, route => route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x800\nvideo.m3u8\n' }));
+    await app.open();
+    await player.script({ adaptiveBitrate: true, tracks: { audio: [{ id: 'native:9', lang: 'eng', label: 'eng', selected: true }] } });
+    await playFromHero(page, remote);
+    await remote.press('up');
+    await page.getByRole('dialog').getByRole('button', { name: /Гаврилов/ }).click();
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.url).toBe(`${base}310101/master-v1a4.m3u8`);
+    await expect(page.getByRole('dialog').getByRole('button', { name: /Гаврилов/ })).toHaveAttribute('aria-pressed', 'true');
+    await remote.press('back');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await remote.press('channelUp');
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.url).toBe(`${base}310102/master-v1a7.m3u8`);
+    await expect.poll(() => player.state()).toBe('playing');
+    expect((await player.calls()).filter(call => call.op === 'selectAudio')).toEqual([]);
+  });
+
   test('long labels wrap without clipping, missing names stay truthful, and remote focus scrolls into view', async ({ app, api, clock, page, remote, player }) => {
     river(api);
     await clock.pause();

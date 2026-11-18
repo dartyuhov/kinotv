@@ -160,3 +160,8 @@ export const test = base.extend<Fixtures>({
 });
 
 export { expect };
+
+/** Pace content journeys by visible artwork; raw `test` retains immediate key dispatch. */
+export const browsingTest = test.extend({
+  remote: async ({ page }, use) => use(new Remote(page, true)),
+});

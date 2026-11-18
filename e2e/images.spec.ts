@@ -1,5 +1,5 @@
 import { fakeHome, fakeItem } from './harness/catalog';
-import { expect, test } from './harness/test';
+import { expect, test, browsingTest } from './harness/test';
 import { solidPng } from './harness/fakeCdn';
 
 test('a small managed budget evicts released posters while browsing remains usable', async ({ app, api, cdn, page, remote }) => {
@@ -31,7 +31,7 @@ test('a small managed budget evicts released posters while browsing remains usab
   expect(cdn.requests.filter((r) => r.source === first.posters.medium)).toHaveLength(beforeEviction + 1);
 });
 
-test('posters share a managed download and reuse it after remote revisit and restart', async ({ app, api, cdn, page, remote }) => {
+browsingTest('posters share a managed download and reuse it after remote revisit and restart', async ({ app, api, cdn, page, remote }) => {
   await page.context().addCookies([{ name: 'subscriber', value: 'fake-cookie-must-not-leak', url: 'http://fake-cdn.kinotv.test' }]);
   const item = fakeItem(701, 'Кэш');
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: [item], popular: [item] });

@@ -150,7 +150,10 @@ test('visible windows download first, idle prefetch is capped at two and stops o
   // Move beyond the downloaded window offline: visible demand remains allowed, speculative demand stops.
   await page.context().setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-  await remote.press('right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right');
+  for (let i = 1; i <= 12; i++) {
+    await expect(page.getByRole('button', { name: `Фильм ${840 + i}`, exact: true })).not.toHaveAttribute('data-artwork', 'loading');
+    await remote.press('right');
+  }
   await clock.runFor(1000);
   await expect(app.focused).toHaveAccessibleName('Фильм 852');
   await clock.runFor(3000);
@@ -254,13 +257,17 @@ test('catalog grid limits artwork to the clipped viewport plus two directional n
   expect(cdn.requested).not.toContain('/poster/1090/medium.jpg');
 });
 
-test('reversing direction cancels obsolete queued speculation and only warms two nearby cards', async ({ app, api, cdn, remote, clock }) => {
+test('reversing direction cancels obsolete queued speculation and only warms two nearby cards', async ({ app, api, cdn, page, remote, clock }) => {
   const items = fakeItems(1200, 60);
   fakeHome(api, { hot: [], movies: [], serials: [], fresh: items, popular: [] });
   await clock.pause();
   await app.open();
+  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
   await remote.press('down');
-  await remote.repeat('right', 20);
+  for (let i = 1; i <= 20; i++) {
+    await expect(page.getByRole('button', { name: `Фильм ${1200 + i}`, exact: true })).toHaveAttribute('data-artwork', 'ready');
+    await remote.press('right');
+  }
   await expect(app.focused).toHaveAccessibleName('Фильм 1220');
   await clock.runFor(100);
   await remote.press('left');
@@ -280,6 +287,7 @@ test('failed artwork preserves title placeholders, existing backdrop and remote 
   cdn.respond(items[1]!.posters.small, { contentType: 'text/html', body: 'unavailable' });
   cdn.respond(items[1]!.posters.wide!, { status: 500 });
   await app.open();
+  await expect(page.locator('.card').first()).toHaveAttribute('data-artwork', 'ready');
   await remote.press('down');
   await expect(page.getByTestId('backdrop').last()).toHaveClass(/loaded/);
   const retained = await page.getByTestId('backdrop').last().getAttribute('src');

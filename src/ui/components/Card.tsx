@@ -1,8 +1,9 @@
-import { useFocusable } from '@noriginmedia/norigin-spatial-navigation';
+import { useFocusable, type FocusDetails, type FocusableComponentLayout } from '@noriginmedia/norigin-spatial-navigation';
 import { Check } from 'lucide-react';
-import { memo, useCallback, type CSSProperties } from 'react';
+import { memo, useCallback, useContext, useEffect, useRef, useState, type CSSProperties } from 'react';
 import './Card.css';
-import { useImage } from './useImage';
+import { useImageState } from './useImage';
+import { CardReadiness } from './cardReadiness';
 import { useArtworkVisibility, useArtworkRetention, useArtworkPrefetch } from './useArtworkDemand';
 
 /** `landscape` is 16:9 (Continue watching, episodes); `poster` is 2:3 (catalog rows and grids). Spec §6.1. */
@@ -65,23 +66,52 @@ export const Card = memo(function Card({
   watched,
   badge,
 }: CardProps) {
-  const onFocus = useCallback(() => onFocusIndex(index), [index, onFocusIndex]);
-  const onEnterPress = useCallback(() => onPressIndex(index), [index, onPressIndex]);
-  const { ref } = useFocusable<object, HTMLDivElement>({ focusKey, onFocus, onEnterPress });
+  const onFocus = useCallback((_layout: FocusableComponentLayout, _props: object, details: FocusDetails) => {
+    if (!details.artworkRestore) onFocusIndex(index);
+  }, [index, onFocusIndex]);
+  const [decoded, setDecoded] = useState<string>();
+  const [broken, setBroken] = useState<string>();
+  const usable = useRef(false);
+  const onEnterPress = useCallback(() => { if (usable.current) onPressIndex(index); }, [index, onPressIndex]);
+  const elementRef = useRef<HTMLDivElement>(null);
   const percent = progress === null || progress === undefined ? null : Math.round(progress * 100);
-  const visible = useArtworkVisibility(ref) || !!visibleHint;
+  const visible = useArtworkVisibility(elementRef) || !!visibleHint;
   const role = variant === 'poster' ? 'poster' : 'thumbnail';
   const warm = useArtworkPrefetch(!visible ? prefetch : undefined);
-  const retained = useArtworkRetention(ref, visible || warm);
-  const poster = useImage(image, role, retained, visible ? 'visible' : 'prefetch');
+  const retained = useArtworkRetention(elementRef, visible || warm);
+  const { url: poster, failed } = useImageState(image, role, retained, visible ? 'visible' : 'prefetch');
+  const ready = !!poster && decoded === poster;
+  const error = failed || (!!poster && broken === poster);
+  usable.current = ready || error;
+  const { ref } = useFocusable<object, HTMLDivElement>({ focusKey, onFocus, onEnterPress, focusable: ready || error });
+  const attach = useCallback((element: HTMLDivElement | null) => {
+    (elementRef as { current: HTMLDivElement | null }).current = element;
+    (ref as { current: HTMLDivElement | null }).current = element;
+  }, [ref]);
+  const report = useContext(CardReadiness);
+  useEffect(() => {
+    report(focusKey, ready || error);
+    return () => report(focusKey, false);
+  }, [report, focusKey, ready, error]);
+  const currentPoster = useRef(poster);
+  currentPoster.current = poster;
 
   return (
-    <div ref={ref} role="button" aria-label={label} className={`card card--${variant}`} style={style}>
+    <div ref={attach} role="button" aria-label={label} aria-disabled={!ready && !error}
+      data-artwork={ready ? 'ready' : error ? 'failed' : 'loading'} className={`card card--${variant}`} style={style}>
       <div className="card__frame">
         <span className="card__fallback" aria-hidden>
           {title}
         </span>
-        <img className="card__image" src={poster} alt="" decoding="async" draggable={false} />
+        <img className="card__image" src={poster} alt="" decoding="async" draggable={false}
+          onLoad={(event) => {
+            const element = event.currentTarget;
+            const url = poster;
+            void element.decode().then(() => {
+              if (url && currentPoster.current === url) setDecoded(url);
+            }, () => { if (url && currentPoster.current === url) setBroken(url); });
+          }}
+          onError={() => { if (poster) setBroken(poster); }} />
         {variant === 'landscape' && (
           <div className="card__caption" aria-hidden>
             <span className="card__title">{title}</span>

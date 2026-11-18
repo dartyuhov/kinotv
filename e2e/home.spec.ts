@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 import { episodeProgress, fakeHome, fakeItem, fakeItems, fakePosters, fakeSerialProgress, filmProgress } from './harness/catalog';
-import { expect, test } from './harness/test';
+import { expect, browsingTest as test } from './harness/test';
 
 const row = (page: Page, name: string) => page.getByRole('region', { name });
 
@@ -233,6 +233,7 @@ test('OK on a card opens its title; Back returns to the same card, with the rows
 });
 
 test('a long row keeps only the cards on screen plus a buffer in the page', async ({ app, api, page, remote }) => {
+  test.setTimeout(60_000);
   fakeHome(api, { hot: [NORTH_WIND], movies: [], serials: [], fresh: fakeItems(1000, 200) });
   await app.open();
   const cards = row(page, 'Новинки').getByRole('button');

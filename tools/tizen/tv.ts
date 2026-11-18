@@ -3,7 +3,7 @@ import { networkInterfaces } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { APP_ID, APP_NAME } from './configXml.ts';
-import { findTool, loadSettings, ok, print, run, runAttached, setupCommand, UserError, warn } from './host.ts';
+import { findTool, loadSettings, ok, print, run, setupCommand, UserError, warn } from './host.ts';
 import { copyWidget, createUnsignedWgt } from './wgt.ts';
 
 export interface TizenTools {
@@ -71,7 +71,7 @@ export function connectTv(sdb: string, address: string): ConnectedTv {
   ]);
 }
 
-function requireTv(sdb: string): ConnectedTv {
+export function requireTv(sdb: string): ConnectedTv {
   const { tv } = loadSettings();
   if (!tv) {
     throw new UserError('No TV address saved.', [`Run ${setupCommand()} to connect a TV, or set KINOTV_TV=<tv-ip>.`]);
@@ -149,7 +149,7 @@ export function packageWidget(appDir: string, outDir: string, signing: { require
   return { file, signedWith: null };
 }
 
-function describePackage({ file, signedWith }: Packaged): void {
+export function describePackage({ file, signedWith }: Packaged): void {
   const where = relative(process.cwd(), file);
   if (signedWith) {
     ok(`Signed package: ${where} (profile "${signedWith}")`);
@@ -166,7 +166,7 @@ export async function packageCommand(options: { from?: string; out?: string }): 
   describePackage(packageWidget(appDir, outDir, { required: false }));
 }
 
-function requireProfile(tizen: string): string {
+export function requireProfile(tizen: string): string {
   const { profile } = loadSettings();
   if (!profile) {
     throw new UserError('No security profile saved.', [
@@ -227,7 +227,7 @@ export function launch(tizen: string, tv: ConnectedTv): void {
 }
 
 /** Starts the app with the Web Inspector enabled and forwards its port to this Mac. */
-function launchForDebugging(sdb: string, tv: ConnectedTv): void {
+export function launchForDebugging(sdb: string, tv: ConnectedTv): void {
   const result = run(sdb, ['-s', tv.serial, 'shell', '0', 'debug', APP_ID]);
   const port = /port:\s*(\d+)/.exec(result.output)?.[1];
   if (!port) {
@@ -241,21 +241,4 @@ function launchForDebugging(sdb: string, tv: ConnectedTv): void {
   print(`  Or open chrome://inspect in Chrome → Configure… → add localhost:${port}.`);
   print('  Samsung notes that recent Chrome versions may not work with the TV inspector; an older Chromium helps.');
   print('  The connection closes when the app exits.');
-}
-
-export async function tvCommand(options: { debug: boolean; build: boolean }): Promise<void> {
-  // Check everything that needs the user first, so a missing TV doesn't cost a build.
-  const tools = requireTools();
-  const tv = requireTv(tools.sdb);
-  requireProfile(tools.tizen);
-
-  if (options.build) {
-    print('\nBuilding…');
-    if ((await runAttached('npm', ['run', 'build'])) !== 0) throw new UserError('The build failed (see above).');
-  }
-  const packaged = packageWidget(resolve('dist'), resolve('dist-tizen'), { required: true });
-  describePackage(packaged);
-  install(tools.tizen, tv, packaged.file);
-  if (options.debug) launchForDebugging(tools.sdb, tv);
-  else launch(tools.tizen, tv);
 }
