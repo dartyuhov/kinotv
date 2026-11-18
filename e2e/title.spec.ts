@@ -309,32 +309,40 @@ test.describe('a series', () => {
     expect(api.requests.length).toBe(requests);
   });
 
-  test('OK on an episode plays it; Back returns to the same episode of the same season', async ({ app, api, page, player, remote }) => {
-    fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });
-    await app.open();
-    await openFromHero(page, remote);
-    const playerScreen = page.locator('[data-screen="player"]');
+  for (const artworkDelay of [0, 250]) {
+    test(`OK on an episode plays it; Back returns to the same episode of the same season${artworkDelay ? ' with delayed artwork' : ''}`, async ({ app, api, cdn, page, player, remote }) => {
+      for (const season of HARBOUR.seasons!) {
+        for (const episode of season.episodes) cdn.respond(episode.thumbnail, { delay: artworkDelay });
+      }
+      fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: HARBOUR_PROGRESS } });
+      await app.open();
+      await openFromHero(page, remote);
+      const playerScreen = page.locator('[data-screen="player"]');
 
-    // Resume plays the episode the viewer stopped in, from where they stopped.
-    await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
-    await remote.press('ok');
-    await expect(playerScreen.getByRole('heading', { level: 1 })).toHaveText('Старые письма');
-    await expect(playerScreen).toContainText('Тихая гавань · S1 · E3');
-    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(30 * 60);
-    await remote.press('back', 'back'); // hide the controls, then leave
-    await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
+      // Resume plays the episode the viewer stopped in, from where they stopped.
+      await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
+      await remote.press('ok');
+      await expect(playerScreen.getByRole('heading', { level: 1 })).toHaveText('Старые письма');
+      await expect(playerScreen).toContainText('Тихая гавань · S1 · E3');
+      await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(30 * 60);
+      await remote.press('back', 'back'); // hide the controls, then leave
+      await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
 
-    // An episode the viewer hasn't started plays from the beginning.
-    await remote.press('down', 'right', 'down', 'right');
-    await expect(app.focused).toHaveAccessibleName('2. Маяк');
-    await remote.press('ok');
-    await expect(playerScreen).toContainText('Тихая гавань · S2 · E2');
-    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(0);
+      // Wait for row entry before Right, which would otherwise switch the season tab.
+      await remote.press('down', 'right', 'down');
+      await expect(app.focused).toHaveAccessibleName('1. Отлив');
+      await expect(episodes(page, 2).getByRole('button', { name: '2. Маяк', exact: true })).toBeEnabled();
+      await remote.press('right');
+      await expect(app.focused).toHaveAccessibleName('2. Маяк');
+      await remote.press('ok');
+      await expect(playerScreen).toContainText('Тихая гавань · S2 · E2');
+      await expect.poll(async () => (await player.loads()).slice(-1)[0]?.startAt).toBe(0);
 
-    await remote.press('back', 'back');
-    await expect(app.focused).toHaveAccessibleName('2. Маяк');
-    await expect(page.getByRole('tab', { name: 'Сезон 2' })).toHaveAttribute('aria-selected', 'true');
-  });
+      await remote.press('back', 'back');
+      await expect(app.focused).toHaveAccessibleName('2. Маяк');
+      await expect(page.getByRole('tab', { name: 'Сезон 2' })).toHaveAttribute('aria-selected', 'true');
+    });
+  }
 });
 
 test('Home card → title → episode → player, and Back all the way returns to the same card on Home', async ({
@@ -352,13 +360,23 @@ test('Home card → title → episode → player, and Back all the way returns t
   });
   fakeTitle(api, HARBOUR);
   await app.open();
-  await remote.press('down', 'down', 'right'); // hero, Continue watching, its second card
+  await expect(page.getByRole('button', { name: 'Смотреть', exact: true })).toBeVisible();
+  await remote.press('down', 'down'); // hero, Continue watching
+  await expect(app.focused).toHaveAccessibleName('Дождь');
+  await expect(page.getByRole('region', { name: 'Продолжить просмотр' })
+    .getByRole('button', { name: 'Тихая гавань, S1 · E3', exact: true })).toBeEnabled();
+  await remote.press('right');
   await expect(app.focused).toHaveAccessibleName('Тихая гавань, S1 · E3');
 
   await remote.press('ok');
   await expect(heading(page)).toHaveText('Тихая гавань');
   await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
-  await remote.press('down', 'down', 'right', 'ok');
+  await remote.press('down', 'down');
+  await expect(app.focused).toHaveAccessibleName('3. Старые письма');
+  await expect(page.getByRole('button', { name: '4. Шторм', exact: true })).toBeEnabled();
+  await remote.press('right');
+  await expect(app.focused).toHaveAccessibleName('4. Шторм');
+  await remote.press('ok');
   await expect(page.locator('[data-screen="player"]')).toContainText('S1 · E4');
 
   await remote.press('back', 'back'); // hide the player's controls, then leave
