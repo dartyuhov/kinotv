@@ -16,9 +16,10 @@ installation.
 
 ## Prerequisites and scope
 
-The observed development environment is macOS plus Samsung Q60C on Tizen 9 /
-Chromium 120. That observation doesn't validate all Q60C firmware or constitute
-launch acceptance. Tizen 6.5+ is a design target; Chrome 85 is the build target.
+The agreed initial verification baseline is macOS plus Samsung Q60C on Tizen 9 /
+Chromium 120, matching the observed development environment. This selection
+doesn't validate all Q60C firmware or constitute launch acceptance.
+Tizen 6.5+ is a design target; Chrome 85 is the build target.
 The manifest's `required_version="3.0"` is not a tested support floor. Linux is
 unverified; this guide doesn't establish a Windows installer route.
 
@@ -334,8 +335,10 @@ Use [GitHub Issues](https://github.com/dartyuhov/kinotv/issues) for nonsensitive
 reports. Include version/source, host, TV model/firmware, exact steps, expected
 and actual result, and sanitized error text. Don't attach credentials, DUIDs,
 private signing material, authenticated stream URLs, or account response bodies.
-A private reporting contact awaits maintainer confirmation; don't put sensitive
-findings in public reports. Support is best-effort, without response deadlines.
+Email sensitive findings privately to
+[darst94@gmail.com](mailto:darst94@gmail.com), with credentials and account data
+redacted. Don't put sensitive findings in public reports. Support is best-effort,
+without response deadlines.
 
 ## Verification still required for launch
 
@@ -353,8 +356,8 @@ History/resume, watched state, Live TV, startup, audio/subtitles/quality, artwor
 and lifecycle checks. Record exact package/source identity, device/firmware,
 date, and pass/fail/blocked outcomes, with viewer confirmation of picture and
 sound. Earlier browser fixtures and development observations don't complete
-public-download acceptance. The final host/TV baseline and release candidate
-still need coordinator confirmation.
+public-download acceptance. The release candidate still needs coordinator
+confirmation; record exact macOS and TV firmware versions during acceptance.
 
 ## Samsung references
 

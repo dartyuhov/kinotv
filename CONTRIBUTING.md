@@ -218,7 +218,9 @@ Use this sequence when the launch coordinator authorizes remote release work:
    source, package/lock metadata, and the built widget, the intended repository,
    and effective release client configuration (presence only). Finish relevant
    candidate checks, notices, exposure review, and agreed pre-publication device
-   checks. The host/TV support baseline still requires maintainer confirmation.
+   checks. The agreed initial verification baseline is macOS with Samsung Q60C
+   running Tizen 9 / Chromium 120; record exact host and firmware versions during
+   acceptance.
 2. Create and push a matching `vX.Y.Z` tag manually only with scoped approval.
    The tag-driven workflow runs the release gate and CI, builds the unsigned WGT,
    assembles the four assets, and stages or repairs a **draft**. It doesn't

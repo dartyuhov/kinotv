@@ -81,8 +81,10 @@ The root [LICENSE](../LICENSE) contains the full MIT text. `package.json` and
 the root package entry in `package-lock.json` declare `MIT`; dependency records
 are unchanged. [Third-party notices](../THIRD_PARTY_NOTICES.md) remain separate.
 The private reporting contact is also confirmed as
-[darst94@gmail.com](mailto:darst94@gmail.com). The host/TV support baseline still
-needs confirmation.
+[darst94@gmail.com](mailto:darst94@gmail.com). The maintainer also confirmed
+macOS plus Samsung Q60C running Tizen 9 / Chromium 120 as the initial verification
+baseline. This selection doesn't establish public-download acceptance or support
+for other hosts, models, or firmware. Record exact versions during device checks.
 
 Local verification on `integration/kinotv-u1s`, based on `28cb07e` plus this
 license change, produced these results:
@@ -159,8 +161,6 @@ host, TV, firmware, source, and installed-package identities.
 
 The following gates remain open before launch completion:
 
-- Confirm the maintained host/TV support baseline. Original-code MIT licensing
-  and the private reporting contact are now recorded in the current guides.
 - Select and review final runtime integration and an exact candidate, then record
   candidate-specific checks and artifacts with effective release configuration.
 - Run a maintained, redacting exposure scan over intended public history/current

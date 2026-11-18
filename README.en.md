@@ -17,8 +17,9 @@ distribution format is an **unsigned `KinoTV.wgt`**, which you sign on your
 computer with your own Samsung TV certificate before installation. No maintainer
 signing certificate is distributed or required.
 
-The observed development setup is macOS and a Samsung Q60C running Tizen 9 /
-Chromium 120. This is not launch acceptance or a guarantee for other models,
+The agreed initial verification baseline is macOS and a Samsung Q60C running
+Tizen 9 / Chromium 120, matching the observed development setup. Baseline
+selection is not launch acceptance or a guarantee for other models,
 firmware, or hosts. The design targets Tizen 6.5+; the build targets Chrome 85,
 while the generated manifest declares `required_version="3.0"`. None of these
 lower bounds establishes tested compatibility. Linux is unverified, and the
