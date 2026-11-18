@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { fakeHome, fakeItem, fakeSerialProgress, fakeSeries } from './harness/catalog';
 import type { FakeApi, FakeResponse } from './harness/fakeApi';
+import { solidPng } from './harness/fakeCdn';
 import type { Remote } from './harness/remote';
 import { expect, test } from './harness/test';
 
@@ -45,22 +46,48 @@ test('I Watch lists followed series, those with new episodes first, with a count
   expect(api.requestsTo('GET', '/v1/watching/serials').some((r) => r.query.subscribed === '1')).toBe(true);
 });
 
-test('OK on a series opens its title page; Back returns to the same series', async ({ app, api, page, remote }) => {
-  fakeHome(api, {
-    followed: [fakeSerialProgress(NORTH_WIND, 2, 8), fakeSerialProgress(QUIET_HARBOUR, 5, 8, 1), fakeSerialProgress(GLASS_GARDEN, 2, 10)],
+for (const heldArtwork of [false, true]) {
+  test(`OK on a series opens its title page; Back returns to the same series${heldArtwork ? ' with delayed artwork' : ''}`, async ({ app, api, page, remote }) => {
+    fakeHome(api, {
+      followed: [fakeSerialProgress(NORTH_WIND, 2, 8), fakeSerialProgress(QUIET_HARBOUR, 5, 8, 1), fakeSerialProgress(GLASS_GARDEN, 2, 10)],
+    });
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    if (heldArtwork) {
+      for (const item of [NORTH_WIND, GLASS_GARDEN]) {
+        await page.route(item.posters.medium, async route => {
+          await held;
+          await route.fulfill({ contentType: 'image/png', body: solidPng([1, 2, 3]) });
+        });
+      }
+    }
+    await app.open();
+    await openIWatch(page, remote);
+
+    await remote.press('down');
+    await expect(app.focused).toHaveAccessibleName('Тихая гавань, 1 новая серия');
+    const next = list(page).getByRole('button', { name: 'Северный ветер', exact: true });
+    if (heldArtwork) {
+      try {
+        await expect(next).toHaveAttribute('data-artwork', 'loading');
+        // A ready first card does not make its neighbours navigable yet.
+        await remote.press('right');
+        await expect(app.focused).toHaveAccessibleName('Тихая гавань, 1 новая серия');
+      } finally {
+        release();
+      }
+    }
+    await expect(next).toHaveAttribute('data-artwork', 'ready');
+    await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName('Северный ветер');
+    await remote.press('ok');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Северный ветер');
+
+    await remote.press('back');
+    await expect(app.focused).toHaveAccessibleName('Северный ветер');
+    await expect(page.getByRole('tab', { name: 'Я смотрю' })).toHaveAttribute('aria-selected', 'true');
   });
-  await app.open();
-  await openIWatch(page, remote);
-
-  await remote.press('down');
-  await expect(app.focused).toHaveAccessibleName('Тихая гавань, 1 новая серия');
-  await remote.press('right', 'ok');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Северный ветер');
-
-  await remote.press('back');
-  await expect(app.focused).toHaveAccessibleName('Северный ветер');
-  await expect(page.getByRole('tab', { name: 'Я смотрю' })).toHaveAttribute('aria-selected', 'true');
-});
+}
 
 test('the list is fetched again whenever the tab is shown, so changes made elsewhere appear', async ({ app, api, page, remote, clock }) => {
   const home = fakeHome(api, { followed: [fakeSerialProgress(NORTH_WIND, 2, 8)] });
