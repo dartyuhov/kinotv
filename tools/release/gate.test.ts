@@ -48,6 +48,13 @@ describe('the release gate', () => {
     expect(out).not.toMatch(/own API|ownership verified|authorized client/i);
   });
 
+  it('uses the approved release version on main without overriding reserved GitHub variables', () => {
+    const { code, out } = gate({ ...SECRETS, ...GITHUB, GITHUB_REF_NAME: 'main', RELEASE_TAG: 'v1.4.0' });
+    expect(code).toBe(0);
+    expect(out).toContain('Release v1.4.0 can be published');
+    expect(gate({ ...SECRETS, ...GITHUB, RELEASE_TAG: 'v1.5.0' }).code).toBe(1);
+  });
+
   it('blocks the release and says which repository secrets to add when the credentials are missing', () => {
     const { code, out } = gate({ ...GITHUB });
 

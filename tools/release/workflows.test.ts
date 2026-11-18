@@ -107,60 +107,94 @@ describe('the CI workflow', () => {
 describe('the release workflow', () => {
   const release = workflow('release.yml');
   const jobs = Object.entries(release.jobs);
-  const gateJob = jobs.find(([, job]) => job.steps?.some((step) => step.run?.includes('node tools/release/gate.ts')));
-  const testJob = jobs.find(([, job]) => job.uses === './.github/workflows/ci.yml');
-  const draftJob = jobs.find(([, job]) => job.steps?.some((step) => step.run === 'node tools/release/draft.ts'));
-
-  it('runs only for version tags', () => {
-    expect(release.on).toEqual({ push: { tags: ['v*'] } });
+  it('accepts main pushes and only a merged release PR number for recovery, never a tag/ref input', () => {
+    expect(release.on.push).toEqual({ branches: ['main'] });
+    expect(release.on.workflow_dispatch).toEqual({ inputs: {
+      release_pr: { description: 'Merged release PR number to retry or verify', required: true, type: 'string' },
+    } });
+    expect(Object.keys(release.on).sort()).toEqual(['push', 'schedule', 'workflow_dispatch']);
+    expect(release.on.schedule).toEqual([{ cron: '17,47 * * * *' }]);
+    expect(release.jobs.approval!.steps!.find(s => s.run?.endsWith('publish.mjs prepare'))!.env).not.toHaveProperty('SOURCE_SHA');
   });
 
-  it("runs the gate with the repository secrets, and only reads the project's credentials there", () => {
-    expect(gateJob).toBeDefined();
-    const step = gateJob![1].steps!.find((s) => s.run?.includes('gate.ts'))!;
-    expect(step.env).toMatchObject({ KP_CLIENT_ID: '${{ secrets.KP_CLIENT_ID }}', KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}' });
+  it('runs exact-source CI and packaging only after approval and publishes after both pass', () => {
+    expect(release.jobs.test!.needs).toBe('approval');
+    expect(release.jobs.test!.uses).toBe('./.github/workflows/ci.yml');
+    expect(release.jobs.test).toHaveProperty('with.source_sha', '${{ needs.approval.outputs.source_sha }}');
+    expect(release.jobs.test).toHaveProperty('if', "needs.approval.outputs.approved == 'true'");
+    expect(release.jobs.package!.needs).toEqual(['approval', 'test']);
+    expect(release.jobs.publish!.needs).toEqual(['approval', 'test', 'package']);
+    const checkout = release.jobs.package!.steps!.find(s => s.uses?.startsWith('actions/checkout@'))!;
+    expect(checkout.with?.ref).toBe('${{ needs.approval.outputs.source_sha }}');
+    const ci = workflow('ci.yml');
+    expect(ci.jobs.test!.steps!.find(s => s.uses?.startsWith('actions/checkout@'))!.with?.ref).toBe('${{ inputs.source_sha || github.sha }}');
   });
 
-  it('stages a draft only after the gate passed and the full test run is green', () => {
-    expect(testJob).toBeDefined();
-    expect(draftJob).toBeDefined();
-    const needs = [draftJob![1].needs].flat();
-    expect(needs).toEqual(expect.arrayContaining([gateJob![0], testJob![0]]));
+  it('retains the gate, real OAuth build, and four-asset assembly before artifact upload', () => {
+    const steps = release.jobs.package!.steps!;
+    const gate = steps.findIndex(s => s.run === 'node tools/release/gate.ts');
+    const build = steps.findIndex(s => s.run === 'npm run build');
+    const assemble = steps.findIndex(s => s.run === 'npm run release:assets');
+    const upload = steps.findIndex(s => s.uses?.startsWith('actions/upload-artifact@'));
+    expect(gate).toBeGreaterThan(-1);
+    expect(build).toBeGreaterThan(gate);
+    expect(assemble).toBeGreaterThan(build);
+    expect(upload).toBeGreaterThan(assemble);
+    expect(steps[gate]!.env).toMatchObject({ KP_CLIENT_ID: '${{ secrets.KP_CLIENT_ID }}', KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}' });
+    expect(steps[build]!.env).toEqual({ VITE_KP_CLIENT_ID: '${{ secrets.KP_CLIENT_ID }}', VITE_KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}' });
+    expect(steps[upload]!.with).toMatchObject({ name: 'release-candidate', 'if-no-files-found': 'error' });
   });
 
-  it('builds with the configured client and calls the validated draft helper after assembly', () => {
-    const steps = draftJob![1].steps!;
-    const buildStep = steps.find((s) => s.run?.includes('npm run build'))!;
-    // The secrets are KP_*, but the app reads them as the Vite env vars VITE_KP_* (src/core/config.ts).
-    expect(buildStep.env).toEqual({
-      VITE_KP_CLIENT_ID: '${{ secrets.KP_CLIENT_ID }}',
-      VITE_KP_CLIENT_SECRET: '${{ secrets.KP_CLIENT_SECRET }}',
-    });
-    expect(steps.some((s) => s.run?.includes('npm run release:assets'))).toBe(true);
-    expect(steps.findIndex((s) => s.run === 'node tools/release/draft.ts')).toBeGreaterThan(steps.findIndex((s) => s.run === 'npm run release:assets'));
-    expect(steps.find((s) => s.run === 'node tools/release/draft.ts')!.env).toEqual({ GH_TOKEN: '${{ github.token }}' });
-    expect(runLines(release).some((line) => /gh release (create|edit|upload)/.test(line))).toBe(false);
-  });
-
-  it('can write releases only in the draft job and limits OAuth secrets to gate/build steps', () => {
+  it('keeps App tokens out of approval, CI, packaging, and all checkouts', () => {
     expect(release.permissions).toEqual({ contents: 'read' });
     for (const [name, job] of jobs) {
-      expect(job.permissions ?? release.permissions).toEqual({ contents: name === draftJob![0] ? 'write' : 'read' });
-      expect(JSON.stringify(job.env ?? {})).not.toContain('secrets.');
-      for (const step of job.steps ?? []) {
-        if (JSON.stringify(step.env ?? {}).includes('secrets.')) expect(['node tools/release/gate.ts', 'npm run build']).toContain(step.run);
-      }
+      expect(Object.values(job.permissions ?? release.permissions!)).not.toContain('write');
+      if (name !== 'publish') expect(JSON.stringify(job)).not.toContain('create-github-app-token');
+      if (name === 'approval') expect(JSON.stringify(job)).not.toContain('secrets.');
     }
-    expect(JSON.stringify(release.env ?? {})).not.toContain('secrets.');
+    const publish = release.jobs.publish!.steps!;
+    expect(publish.find(s => s.uses?.startsWith('actions/checkout@'))!.with).toEqual({ 'persist-credentials': false });
+    expect(publish.findIndex(s => s.uses?.startsWith('actions/create-github-app-token@'))).toBeGreaterThan(publish.findIndex(s => s.uses?.startsWith('actions/download-artifact@')));
+    expect(publish[publish.length - 1]!.env!.GH_TOKEN).toBe('${{ steps.publisher.outputs.token }}');
+    expect(publish[publish.length - 1]!.run).toBe('node tools/release/automation/publish.mjs publish');
   });
 
-  it('pins the reviewed CI action revisions and removes checkout credentials', () => {
-    const steps = jobs.flatMap(([, job]) => job.steps ?? []);
-    for (const step of steps.filter((s) => s.uses)) {
-      expect(['actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09', 'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444']).toContain(step.uses);
+  it('serializes every publication under one non-cancelling concurrency group', () => {
+    expect(release).toHaveProperty('concurrency', { group: 'release-publication', 'cancel-in-progress': false });
+    expect(release.jobs.approval).toHaveProperty('if', "github.ref == 'refs/heads/main'");
+  });
+  it('only calls scripts that exist', () => expectEverythingItCallsToExist(release));
+});
+
+describe('the release PR workflow', () => {
+  const wf = workflow('release-please.yml');
+  it('creates App-authored release PRs on main without creating releases or circular tag triggers', () => {
+    expect(wf.on).toEqual({ push: { branches: ['main'] },
+      workflow_run: { workflows: ['Publish release'], types: ['completed'], branches: ['main'] },
+      schedule: [{ cron: '23,53 * * * *' }],
+    });
+    expect(wf.permissions).toEqual({ contents: 'read' });
+    const steps = wf.jobs['release-pr']!.steps!;
+    expect(steps[steps.length - 1]!.run).toBe('node tools/release/automation/release-pr.mjs');
+    expect(steps[steps.length - 1]!.env!.GH_TOKEN).toBe('${{ steps.app.outputs.token }}');
+    expect(steps.some(s => s.run === 'node tools/release/automation/config.mjs')).toBe(true);
+    expect(steps.find(s => s.uses?.startsWith('actions/checkout@'))!.with?.ref).toBe('main');
+    expect(wf.jobs['release-pr']).toHaveProperty('if', expect.stringContaining("github.event.workflow_run.conclusion == 'success'"));
+    expect(steps.find(s => s.uses?.startsWith('actions/create-github-app-token@'))!.with).toMatchObject({
+      'client-id': '${{ vars.RELEASE_APP_CLIENT_ID }}', 'private-key': '${{ secrets.RELEASE_APP_PRIVATE_KEY }}',
+      repositories: '${{ github.event.repository.name }}', 'permission-contents': 'write',
+      'permission-pull-requests': 'write', 'permission-issues': 'write',
+    });
+  });
+  it('only calls scripts that exist', () => expectEverythingItCallsToExist(wf));
+});
+
+it('pins every release action to an immutable verified revision and removes checkout credentials', () => {
+  for (const name of ['release.yml', 'release-please.yml']) {
+    const steps = Object.values(workflow(name).jobs).flatMap(j => j.steps ?? []);
+    for (const step of steps.filter(s => s.uses)) {
+      expect(step.uses).toMatch(/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/);
       if (step.uses?.startsWith('actions/checkout@')) expect(step.with?.['persist-credentials']).toBe(false);
     }
-  });
-
-  it('only calls scripts that exist', () => expectEverythingItCallsToExist(release));
+  }
 });

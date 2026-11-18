@@ -7,6 +7,11 @@ on:
     branches: ['**']
   pull_request:
   workflow_call:
+    inputs:
+      source_sha:
+        description: Exact approved main merge to test
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
 
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -34,6 +40,9 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+      - name: Release automation contract tests
+        run: npm ci --prefix tools/release/automation --ignore-scripts && npm test --prefix tools/release/automation
 
       - name: Install Chromium for the e2e tests
         run: npx playwright install --with-deps chromium

@@ -1,85 +1,144 @@
-# Stages a validated draft when a maintainer pushes a version tag:
-#
-#   git tag v1.2.3 && git push origin v1.2.3        (the tag must equal "version" in package.json)
-#
-# Assets: KinoTV.wgt (unsigned), install.sh, kinotv-installer.mjs, SHA256SUMS.
-# Re-run a failed tag run to repair an incomplete draft. Published releases are refused.
-# Never publishes automatically: after validation, a maintainer reviews legal/launch
-# acceptance and publishes manually. Do not publish while this workflow is running.
-#
-# Before the first release, set on GitHub (see README → "Publishing a release"):
-#   - repository secrets KP_CLIENT_ID and KP_CLIENT_SECRET: configured borrowed app OAuth client;
-#   - "kinotv": { "githubRepo" } in package.json: this repository, "<owner>/<repo>".
-# Presence does not establish client ownership or upstream authorization.
-name: Release
+name: Publish release
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+  # Durable PR reconciliation recovers coalesced pushes, missed wake-ups, and
+  # checks that were not yet green. The pending Actions slot is never the queue.
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      release_pr:
+        description: Merged release PR number to retry or verify
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
-  gate:
-    name: Release gate
+  approval:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      approved: ${{ steps.prepare.outputs.approved }}
+      source_sha: ${{ steps.prepare.outputs.source_sha }}
+      version: ${{ steps.prepare.outputs.version }}
+      release_pr: ${{ steps.prepare.outputs.release_pr }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
-
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 22
-
-      # Checks app client configuration presence only, and requires that the
-      # tag matches package.json, and package.json names this repo. Logic and tests: tools/release/gate*.ts.
-      - name: Check credentials, version and repo
-        run: node tools/release/gate.ts
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix tools/release/automation --ignore-scripts
+      - id: prepare
+        run: node tools/release/automation/publish.mjs prepare
         env:
-          KP_CLIENT_ID: ${{ secrets.KP_CLIENT_ID }}
-          KP_CLIENT_SECRET: ${{ secrets.KP_CLIENT_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
+          RELEASE_PR: ${{ inputs.release_pr }}
 
   test:
-    name: Tests
+    needs: approval
+    if: needs.approval.outputs.approved == 'true'
     uses: ./.github/workflows/ci.yml
+    with:
+      source_sha: ${{ needs.approval.outputs.source_sha }}
 
-  draft:
-    name: Build and validate draft
-    needs: [gate, test]
+  package:
+    needs: [approval, test]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
+          ref: ${{ needs.approval.outputs.source_sha }}
           persist-credentials: false
-
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # The maintainer-selected borrowed app client is intentionally embedded.
-      # Per-user tokens/passwords are never build inputs. Secrets are scoped to this step.
-      - name: Build the app
-        run: npm run build
+      - run: node tools/release/gate.ts
+        env:
+          RELEASE_TAG: v${{ needs.approval.outputs.version }}
+          KP_CLIENT_ID: ${{ secrets.KP_CLIENT_ID }}
+          KP_CLIENT_SECRET: ${{ secrets.KP_CLIENT_SECRET }}
+      - run: npm ci
+      - run: npm run build
         env:
           VITE_KP_CLIENT_ID: ${{ secrets.KP_CLIENT_ID }}
           VITE_KP_CLIENT_SECRET: ${{ secrets.KP_CLIENT_SECRET }}
-
-      - name: Make the release files
-        run: npm run release:assets
-
-      - name: Stage or repair and validate the draft
+      - run: npm run release:assets
+      - name: Record exact artifact source
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: node tools/release/draft.ts
+          SOURCE_SHA: ${{ needs.approval.outputs.source_sha }}
+          RELEASE_VERSION: ${{ needs.approval.outputs.version }}
+        run: node --input-type=module -e 'import {writeFileSync} from "node:fs"; writeFileSync("dist-release/source.json", JSON.stringify({sha:process.env.SOURCE_SHA,version:process.env.RELEASE_VERSION}))'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-candidate
+          path: |
+            dist-release/
+            package.json
+            package-lock.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [approval, test, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      # Trusted workflow tooling only. No candidate code executes with App token.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm ci --prefix tools/release/automation --ignore-scripts
+      - run: npm test --prefix tools/release/automation
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-candidate
+          path: candidate
+      - name: Check release App configuration presence
+        run: node tools/release/automation/config.mjs
+        env:
+          RELEASE_APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc
+        id: publisher
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: read
+      - name: Validate, stage, and automatically publish
+        run: node tools/release/automation/publish.mjs publish
+        env:
+          GH_TOKEN: ${{ steps.publisher.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}
+          SOURCE_SHA: ${{ needs.approval.outputs.source_sha }}
+          RELEASE_PR: ${{ needs.approval.outputs.release_pr }}

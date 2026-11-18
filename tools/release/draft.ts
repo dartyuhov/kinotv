@@ -1,5 +1,7 @@
 // Stage/retry a draft only: node tools/release/draft.ts
 // Run from the checked-out tagged project after release:assets. No OAuth secrets needed here.
+// The automatic publisher supplies validated approval identity and consumes the
+// returned release ID; standalone invocation remains strict draft-only.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -22,12 +24,13 @@ const ghCli: Gh = (args, input) => {
 
 const names = ['KinoTV.wgt', 'install.sh', 'kinotv-installer.mjs', 'SHA256SUMS'] as const;
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-interface Release { id: number; tag_name: string; draft: boolean; published_at: string | null; immutable?: boolean }
+interface Release { id: number; tag_name: string; draft: boolean; published_at: string | null; immutable?: boolean; body?: string; target_commitish?: string; prerelease?: boolean }
 interface Asset { id: number; name: string; state: string; size: number; digest?: string | null }
 
-export async function stageDraft({ root = process.cwd(), env = process.env, gh = ghCli }: {
+export async function stageDraft({ root = process.cwd(), env = process.env, gh = ghCli, approval }: {
   root?: string; env?: NodeJS.ProcessEnv; gh?: Gh;
-} = {}): Promise<void> {
+  approval?: { marker: string; notes: string };
+} = {}): Promise<{ id: number; tag: string; sha: string; published: boolean }> {
   const project = readProject(root);
   const tag = env.GITHUB_REF_NAME;
   const repo = env.GITHUB_REPOSITORY;
@@ -41,7 +44,12 @@ export async function stageDraft({ root = process.cwd(), env = process.env, gh =
   const json = <T>(endpoint: string, extra: string[] = []): T => JSON.parse(api(endpoint, extra).toString()) as T;
   const pages = <T>(endpoint: string): T[] => json<T[][]>(endpoint, ['--paginate', '--slurp']).flat();
   const draft = (release: Release): Release => {
-    if (!Number.isSafeInteger(release?.id) || release.id <= 0 || release.tag_name !== tag || release.draft !== true || release.published_at !== null || release.immutable === true) {
+    if (approval && (release.body !== `${approval.notes}\n\n${approval.marker}` || release.target_commitish !== sha || release.prerelease !== false)) {
+      throw new Error('Release approval identity mismatch.');
+    }
+    if (!Number.isSafeInteger(release?.id) || release.id <= 0 || release.tag_name !== tag ||
+      (!approval && (release.draft !== true || release.published_at !== null || release.immutable === true)) ||
+      (approval && !(release.draft === true && release.published_at === null && release.immutable !== true || release.draft === false && Boolean(release.published_at)))) {
       throw new Error('Refusing public/completed or mismatched release; no asset or tag recovery is allowed.');
     }
     return release;
@@ -69,15 +77,18 @@ export async function stageDraft({ root = process.cwd(), env = process.env, gh =
   if (local.get('SHA256SUMS')!.toString() !== manifest) throw new Error('Local SHA256SUMS does not match the complete payload set.');
 
   if (!release) {
-    gh(['release', 'create', tag!, '--repo', RELEASE_REPOSITORY, '--draft', '--verify-tag', '--title', `KinoTV ${tag}`, '--generate-notes']);
+    gh(['release', 'create', tag!, '--repo', RELEASE_REPOSITORY, '--draft', '--verify-tag', '--title', `KinoTV ${tag}`,
+      ...(approval ? ['--target', sha!, '--notes', `${approval.notes}\n\n${approval.marker}`] : ['--generate-notes'])]);
     const created = pages<Release>(`${base}/releases?per_page=100`).filter((item) => item.tag_name === tag);
     if (created.length !== 1) throw new Error('Could not uniquely resolve the created draft; retry after inspection.');
     release = draft(created[0]!);
   }
   const id = release.id;
+  const published = release.draft === false;
   const checkDraft = () => {
     const current = draft(json<Release>(`${base}/releases/${id}`));
     if (current.id !== id) throw new Error('Release identity changed.');
+    if ((current.draft === false) !== published) throw new Error('Release visibility changed.');
     verifyTag();
   };
   const assets = () => {
@@ -101,11 +112,13 @@ export async function stageDraft({ root = process.cwd(), env = process.env, gh =
     if (found.length > 1) throw new Error(`Duplicate server asset: ${name}.`);
     if (found[0]) {
       if (valid(found[0], local.get(name)!)) continue;
+      if (published) throw new Error('Public asset validation failed; published assets are never replaced.');
       // Delete only the observed bad asset ID, never a name-based --clobber that
       // could resolve a different release/asset after a concurrent change.
       checkDraft();
       api(`${base}/releases/assets/${found[0].id}`, ['--method', 'DELETE']);
     }
+    if (published) throw new Error('Public asset set is incomplete; published assets are never replaced.');
     checkDraft();
     api(`https://uploads.github.com/${base}/releases/${id}/assets?name=${encodeURIComponent(name)}`,
       ['--method', 'POST', '-H', 'Content-Type: application/octet-stream', '--input', '-'], local.get(name));
@@ -124,9 +137,10 @@ export async function stageDraft({ root = process.cwd(), env = process.env, gh =
     throw new Error('Server asset set changed during validation; retry after inspection.');
   }
   // GitHub has no conditional "mutate only if draft" asset API. Concurrency serializes
-  // this workflow; maintainers must wait for it to finish before publishing manually.
+  // publication; maintainers must not edit releases while it is running.
   checkDraft();
-  console.log(`Validated draft ${tag}: all four assets match local bytes and SHA256SUMS. Manual maintainer publication only after legal and launch acceptance; this does not establish publication readiness.`);
+  console.log(`Validated ${published ? 'public release' : 'draft'} ${tag}: all four assets match local bytes and SHA256SUMS.`);
+  return { id, tag: tag!, sha: sha!, published };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

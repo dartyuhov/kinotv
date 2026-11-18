@@ -16,6 +16,15 @@ supersede that planning-only scope. The current authorization includes commits,
 push, and PR work; the coordinator owns the push. It doesn't authorize tags,
 releases, or repository settings changes.
 
+The approved replacement [automatic release contract](releases.md) supersedes
+the manual tag → draft → manual publication plan described in historical evidence
+below. Once merged and configured, merging the trusted release PR is the sole
+publication approval; tests, exact-merge assembly, hosted draft validation, and
+publication follow automatically. No release/tag or settings mutation is part of
+this implementation session. Read-only inspection at base `8335876` found no tags
+and no release App variables/private-key secret. App setup and hosted operation
+remain pending; the historical checks below don't verify this new automation.
+
 ## Prepared locally
 
 This category records local source integration, checks, and fixture artifacts.
@@ -293,7 +302,7 @@ full `npm test` run with **395 passing unit tests**. That is review-branch
 evidence supplied in the handoff, not a fresh full run at `c104cae`; the final
 integration evidence above contains only 125 focused unit tests.
 
-The integrated [release workflow](../.github/workflows/release.yml) uses a manual
+The historically integrated release workflow used a manual
 tag → validated draft → manual publication route. Local
 [draft tests](../tools/release/draft.test.ts) exercise creation, interrupted-upload
 repair, asset readback, and completed-release refusal through a controlled `gh`
@@ -442,8 +451,8 @@ those checks.
 ## Published
 
 Publication remains pending. No hosted draft validation, public launch release,
-or anonymous asset retrieval is established by this evidence. Tag/release work
-and manual publication require scoped approval. Follow the
+or anonymous asset retrieval is established by this evidence. The replacement
+flow uses the trusted release PR merge as publication approval. Follow the
 [contribution and release guide](../CONTRIBUTING.md#publishing-a-release) after
 candidate selection and the remaining launch gates.
 
@@ -477,9 +486,9 @@ The following gates remain open before launch completion:
   surfaces, and dispositions.
 - Recheck the withdrawn advisory and npm feed before merge, retaining the
   qualified disposition above unless new evidence changes it.
-- Complete authorized hosted PR validation; obtain separate settings and
-  tag/release-publication approvals, complete hosted readback, and record
-  anonymous-download/device evidence.
+- Complete authorized hosted PR validation and separately authorized App/settings
+  setup; review and merge the generated release PR, complete hosted readback,
+  and record anonymous-download/device evidence.
 
 Reconcile the [existing issue context](specs/open-source-launch.md#further-notes):
 `kinotv-91o.19` owns release/installer history, `.20` the superseded own-client

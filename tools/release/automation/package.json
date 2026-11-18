@@ -1,0 +1,8 @@
+{
+  "name": "kinotv-release-tooling",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "engines": { "node": ">=22.18" },
+  "devDependencies": { "release-please": "17.11.2" }
+}

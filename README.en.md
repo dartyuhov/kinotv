@@ -121,6 +121,12 @@ Launch preparation has four separate evidence categories:
 | Published | No public release assets available yet |
 | Installation verified | Public-download signing, fresh install, native playback, and retained-session upgrade are pending |
 
+The approved [automatic release flow](docs/releases.md) opens a version/changelog
+PR after fixes or features reach `main`. Merging that trusted release PR approves
+automatic publication after exact-merge checks and hosted draft validation. App
+setup and hosted operation are pending; this source change doesn't establish a
+published release or physical TV acceptance.
+
 ## License
 
 KinoTV's original code is licensed under the [MIT License](LICENSE), with
