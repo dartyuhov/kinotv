@@ -9,6 +9,14 @@ server is required. KinoTV is not affiliated with Samsung or kino.watch.
 [Contribute](CONTRIBUTING.md) ·
 [Report an ordinary bug](https://github.com/dartyuhov/kinotv/issues)
 
+![KinoTV Home with The Sopranos featured above a row of posters](docs/screenshots/home.webp)
+
+| Search | The Sopranos |
+| --- | --- |
+| [![On-screen Russian keyboard and a result for The Sopranos](docs/screenshots/search.webp)](docs/screenshots/search.webp) | [![The Sopranos details with season tabs and episode thumbnails](docs/screenshots/the-sopranos.webp)](docs/screenshots/the-sopranos.webp) |
+
+*Captured in KinoTV’s TV layout with sample catalog data and artwork via [TVmaze](https://www.tvmaze.com/).*
+
 ## Project status
 
 KinoTV is in development and maintained on a best-effort basis, with no promised

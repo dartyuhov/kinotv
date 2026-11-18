@@ -10,6 +10,14 @@
 [Участие в разработке](CONTRIBUTING.md) ·
 [Сообщить об обычной ошибке](https://github.com/dartyuhov/kinotv/issues)
 
+![Главная KinoTV: «Клан Сопрано» и ряд постеров](docs/screenshots/home.webp)
+
+| Поиск | Клан Сопрано |
+| --- | --- |
+| [![Русская экранная клавиатура и результат поиска «Клан Сопрано»](docs/screenshots/search.webp)](docs/screenshots/search.webp) | [![Карточка «Клана Сопрано» с сезонами и кадрами из серий](docs/screenshots/the-sopranos.webp)](docs/screenshots/the-sopranos.webp) |
+
+*Интерфейс KinoTV для телевизора с демонстрационным каталогом. Изображения — с [TVmaze](https://www.tvmaze.com/).*
+
 ## Возможности
 
 Для навигации достаточно стрелок, **OK** и **Назад**. Текущие исходники включают:
