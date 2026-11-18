@@ -57,3 +57,4 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_APP_BOT_LOGIN: ${{ vars.RELEASE_APP_BOT_LOGIN }}

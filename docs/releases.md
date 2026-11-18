@@ -63,6 +63,10 @@ Release Please uses its locked Node strategy from the isolated
   plan is `0.1.0`, even with breaking prelaunch changes. Don't hand-bump versions.
 - Release PRs manage package, lock, manifest, and committed changelog together.
   A pending merged release blocks a new release PR until publication finishes.
+  The writer verifies the App author, managed branch, and head/base repository
+  through raw PR metadata before honoring a merged pending label. An unrelated
+  contributor PR with copied release notes and labels cannot block it. Tagged
+  release history and ordinary commit/PR metadata remain available to the planner.
   The app and `config.xml` derive their version from the package during build.
 - Approval requires a merged PR in this repository targeting `main`, the exact
   configured App author, managed branch

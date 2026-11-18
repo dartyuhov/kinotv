@@ -6,7 +6,7 @@ import { approve } from '../publication.mjs';
 
 const root = new URL('../../../../', import.meta.url);
 const quiet = { info() {}, warn() {}, error() {}, debug() {}, trace() {} };
-async function repository(messages, { version = '0.0.0', files = ['src/App.tsx'], bootstrap = false, overrides = {} } = {}) {
+async function repository(messages, { version = '0.0.0', files = ['src/App.tsx'], bootstrap = false, overrides = {}, lifecycle } = {}) {
   const config = JSON.parse(await readFile(new URL('release-please-config.json', root)));
   const scm = {
     repository: { owner: 'dartyuhov', repo: 'kinotv' },
@@ -28,7 +28,11 @@ async function repository(messages, { version = '0.0.0', files = ['src/App.tsx']
     },
     ...overrides,
   };
-  return releaseManifest(scm, 'main', { logger: quiet });
+  return releaseManifest(scm, 'main', { logger: quiet }, { bot: 'kinotv-release[bot]',
+    readPullRequest: async () => lifecycle ?? { merged: true, user: { login: 'kinotv-release[bot]' },
+      head: { ref: 'release-please--branches--main--components--kinotv', repo: { full_name: 'dartyuhov/kinotv' } },
+      base: { ref: 'main', repo: { full_name: 'dartyuhov/kinotv' } } },
+  });
 }
 async function plan(messages, options) { return (await repository(messages, options)).buildPullRequests(); }
 
@@ -158,4 +162,44 @@ test('publication completion reconciles F deferred while R was pending using rea
   assert.equal((await (await manifest()).createPullRequests())[0].number, 43);
   assert.match(created.title, /0\.2\.0/);
   assert.match(created.body.toString(), /feature F merged during R publication/);
+});
+
+test('copied release body and pending label on unrelated contributor PR cannot block the real planner', async () => {
+  const [copied] = await plan(['fix: copied release'], { version: '0.1.0' });
+  for (const kind of ['author', 'branch', 'head-repo', 'base-repo']) {
+    const raw = { merged: true, user: { login: 'kinotv-release[bot]' },
+      head: { ref: copied.headRefName, repo: { full_name: 'dartyuhov/kinotv' } },
+      base: { ref: 'main', repo: { full_name: 'dartyuhov/kinotv' } } };
+    if (kind === 'author') raw.user.login = 'contributor';
+    if (kind === 'branch') raw.head.ref = 'ordinary-feature';
+    if (kind === 'head-repo') raw.head.repo.full_name = 'fork/kinotv';
+    if (kind === 'base-repo') raw.base.repo.full_name = 'other/kinotv';
+    const manifest = await repository(['feat: genuine contributor feature'], { version: '0.1.0', lifecycle: raw, overrides: {
+      async *pullRequestIterator(branch, state) {
+        if (state === 'MERGED') yield { number: 99, title: copied.title.toString(), body: copied.body.toString(),
+          headBranchName: copied.headRefName, labels: ['autorelease: pending'] };
+      },
+      async createPullRequest(pr) { return { ...pr, number: 100 }; },
+    } });
+    const result = await manifest.createPullRequests();
+    assert.equal(result.length, 1, kind);
+    assert.match(result[0].body.toString(), /genuine contributor feature/);
+  }
+});
+
+test('completed tagged release history reaches the planner without pending identity reads', async () => {
+  const [completed] = await plan(['fix: completed release'], { version: '0.1.0' });
+  const manifest = await repository(['fix: follow-up after completed release'], { version: '0.1.1',
+    overrides: {
+      async *pullRequestIterator(branch, state) {
+        if (state === 'MERGED') yield { number: 42, title: completed.title.toString(), body: completed.body.toString(),
+          headBranchName: completed.headRefName, labels: ['autorelease: tagged'] };
+      },
+      async createPullRequest(pr) { return { ...pr, number: 43 }; },
+    },
+    lifecycle: new Proxy({}, { get() { assert.fail('tagged history must not require pending identity verification'); } }),
+  });
+  const [next] = await manifest.createPullRequests();
+  assert.match(next.title, /0\.1\.2/);
+  assert.match(next.body.toString(), /follow-up after completed release/);
 });
