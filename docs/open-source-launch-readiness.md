@@ -1,11 +1,13 @@
 # Open-source launch readiness
 
-As of November 18, 2026, the reviewed runtime fixes are integrated and checked
-locally at `bced8aa74ebb6bbf7d8ebcbec75fbc15ead6f110`. Typecheck and all 423 unit
-tests pass; the single final browser run has 256 passes, one failure, and three
-skips. The bookmark focus-restoration failure remains unresolved. This record
-does **not** validate a deployable release candidate. Local preparation, GitHub
-configuration, publication, and installation verification are separate outcomes.
+As of November 18, 2026, local candidate verification is green at integrated
+source `d222534ccbb8b09265c01632da700caab0ff62fb`: the complete browser suite has
+**263 passes, zero failures, and three skips**. Existing typecheck, 423-unit-test,
+and fake production-build evidence remains valid for the unchanged runtime at
+`4c082061add0faf5b3e0c8638c9be657e19e9709`. Native TV acceptance, real release
+configuration, exposure review, hosted validation, publication, and public-download
+installation remain pending. Local fixture checks don't validate a deployable
+public release.
 
 The [launch spec](specs/open-source-launch.md) says, “This spec authorizes
 planning.” The user's subsequent explicit implementation and evidence requests
@@ -22,6 +24,69 @@ they aren't pending decisions. Device acceptance remains separate.
 
 ### Reviewed runtime integration
 
+The final verified integrated **source HEAD** is
+`d222534ccbb8b09265c01632da700caab0ff62fb`, with source tree
+`fc8a182ef0cf77f1e44bbc1e7eb423b4e2c6bd67`. The documentation-only commit that
+records these results is a separate **documentation HEAD**, obtainable with
+`git log -1 --format=%H -- docs/open-source-launch-readiness.md`. It doesn't
+identify a new tested runtime.
+
+The final browser command is exactly:
+
+```sh
+E2E_PORT=5404 npm run e2e -- --workers=1 --retries=0
+```
+
+This pass invokes that full suite once, through the Bash tool with an explicit
+**600,000 ms** timeout. The complete 266-test listing and terminal summary are
+captured in the command-tool response: **263 passed, three skipped, zero failed,
+5.4 minutes**. There are no retries or follow-up browser runs in this pass.
+`test-results/.last-run.json` records `status: passed` and an empty `failedTests`
+array. The default list reporter doesn't produce a separate full JSON report.
+The three skips are the opt-in artwork preparation, browsing, and playback
+performance benchmarks; they aren't passes.
+
+The final source contains the reviewed bookmark restoration fix
+`8bc21b7f5bec6737121cb639130c4c7896caa1f7`, merged as
+`4c082061add0faf5b3e0c8638c9be657e19e9709`. It resolves removed saved-card
+membership separately from artwork readiness, chooses a surviving card, and
+preserves cancellation and empty-state behavior. The formerly failing bookmark
+case and the added external-removal cases all pass in the final suite.
+
+Subsequent commits change only four browser test files:
+
+- `7b53f09793aff9c00c0f0542605beceeb8f658d4`: wait for I Watch destination
+  artwork before Right/OK; add delayed-artwork coverage.
+- `6bbb8af059f07d416dfa6e7add00bf1e7dad49cb`: observe ready row entry after
+  reload before controlling refresh timing; gate catalog/refresh delivery and
+  retain decoded-layer ownership and release assertions.
+- `47aad5fa179c49265f24d0ee8ee8baadc9afb5dd`: wait for exact title/season focus
+  and enabled episode destinations before further input; add a held-artwork
+  watched-toggle case while retaining focus, playback, and single-write checks.
+
+These are corrected test-sequencing preconditions, distinct from the runtime
+bookmark fix. Direct diff review confirms that `4c082061..d222534` changes only
+`e2e/image-navigation.spec.ts`, `e2e/iwatch.spec.ts`, `e2e/title.spec.ts`, and
+`e2e/watched.spec.ts`. Runtime, tooling, dependencies, and production configuration
+are identical. Existing evidence in the temporary directory
+`kinotv-final-integration-5397-evidence/` under the temporary evidence root below
+therefore remains applicable:
+
+| Check at runtime source `4c082061` | Retained result |
+| --- | --- |
+| `npm run typecheck` | Pass; 0.747 seconds. |
+| `npm test -- --maxWorkers=1` | 423 passed, zero failed, 28 files; one invocation, 88.275 seconds wall time. |
+| `npm run build` | Pass with explicit fake production configuration; 1.111 seconds. |
+| Release assembly, payload checksums, archive/license inspection, shell syntax | Pass; source-specific logs and artifact identities remain in `summary.json`. |
+
+No new unit, typecheck, production build, or release assembly is invoked in this
+pass. The browser suite builds its separate fixture-only `dist-e2e/`.
+
+### Historical integration identities
+
+The following identities describe the earlier integration, before the final
+bookmark fix and test-sequencing corrections.
+
 The integration worktree is
 `/Users/dartsiukhou/dev/personal/kinotv.launch-integration`, on
 `integration/kinotv-u1s`. Both diffs were reviewed before conflict-free local
@@ -33,9 +98,8 @@ merges from the initial source `0bc3956e138af1532b246c74bbcbe621051770b4`:
   `bced8aa74ebb6bbf7d8ebcbec75fbc15ead6f110`.
 - Exact tested source tree: `45f726c6a78202082c232e3242e5330c88945eb9`.
 
-The final merge SHA is the **source HEAD** for every check and artifact below.
-The subsequent documentation-only commit records these results; it doesn't
-identify a separately tested runtime. No remote or TV operation occurs in this
+The historical merge `bced8aa` is the source for the port-5395 checks and
+artifacts below. No remote or TV operation occurs in the final verification
 pass, and no worktree is removed.
 
 The original primary worktree remains at
@@ -55,7 +119,12 @@ Preservation identities are:
 adfabcbb73ce332b3469bc1d0158376e55463142d9b7691f9962b6baca192e59  sorted dirty-file hash map
 ```
 
-### First failures, fixes, and final checks
+The final port-5404 pass compares the primary worktree against the saved
+`kinotv-final-integration-5397-evidence/primary-before.json` snapshot. HEAD,
+branch, full porcelain status, working/index diff hashes, and all 49 dirty-file
+hashes match exactly, including the three preservation identities above.
+
+### First failures and historical checks
 
 The earlier first-run evidence remains in this temporary directory:
 
@@ -82,7 +151,8 @@ for ready episode/card focus before subsequent input and uses a response gate
 instead of freezing artwork scheduling. Playback, saved-focus, and single-write
 assertions remain; delayed-artwork cases add two browser tests.
 
-The fresh final-check evidence is stored separately (abbreviated as `$E` below):
+The historical port-5395 evidence is stored separately (abbreviated as `$E`
+below):
 
 ```text
 /var/folders/nr/0qk2bwcd7vxbk9wj6rc735wr0000gp/T/opencode/kinotv-reviewed-integration-5395-evidence/
@@ -103,8 +173,9 @@ remaining failure is `e2e/bookmarks.spec.ts:54:3`, “shows changes made on anot
 device when the tab is shown again.” After opening `Остров`, removing that item
 externally, and pressing Back, the remaining row correctly contains
 `Долгая дорога`, but the assertion at line 78 expects focus there and observes
-the `Закладки` tab for 5,000 ms. The cause remains unresolved; no focused rerun,
-timeout override, assertion change, or additional runtime fix follows this run.
+the `Закладки` tab for 5,000 ms. That pass ends without a focused rerun, timeout
+override, assertion change, or additional runtime fix. The later reviewed
+`8bc21b7` runtime fix above resolves the removed-card restoration defect.
 The preserved failure files under `$E/browser-first-results/` are:
 
 ```text
@@ -114,9 +185,27 @@ bookmarks-the-Bookmarks-ta-1097a-when-the-tab-is-shown-again-chromium/trace.zip
 
 The three skips remain opt-in performance benchmarks, not passes. Fixture HTTP,
 FakePlayer, and browser results don't establish real OAuth or native TV behavior.
-The final browser result is **failed**, despite the resolved earlier cases.
+The port-5395 browser result remains **failed**, despite the resolved earlier
+cases. Later full-suite results are separate evidence:
 
-### Final fake artifact verification
+| Port / source | Historical full result and disposition |
+| --- | --- |
+| 5397 / `4c082061` | 260 passed, one failed, three skipped, 264 total. I Watch sent Right/OK before the destination artwork was ready; corrected by `7b53f09`. |
+| 5399 / `ccfe8ff` | 261 passed, one failed, three skipped, 265 total. `image-navigation.spec.ts:27`, abandoning an undecoded same-source refresh, failed at line 56; reload/refresh sequencing corrected in `6bbb8af`. |
+| 5401 / `8a8f461` | 261 passed, one failed, three skipped, 265 total. `title.spec.ts:219`, selected-episode watched toggle, required destination readiness sequencing corrected in `47aad5f`. |
+| 5403 / `d222534` | Interrupted by the command tool's default 120,000 ms timeout after 50 completed passes and one skip. No complete suite result or actual test failure; browser/context closure is interruption evidence. |
+| 5404 / `d222534` | New authorized full invocation with explicit 600,000 ms timeout: 263 passed, zero failed, three skipped, 266 total, 5.4 minutes. |
+
+Temporary evidence directories use the names
+`kinotv-final-integration-5397-evidence/`,
+`kinotv-final-integration-5399-evidence/`,
+`kinotv-final-integration-5401-evidence/`, and
+`kinotv-final-integration-5403-evidence/` under the same temporary evidence root.
+The title/watched focused port-5402 run has 110 passes over five repetitions;
+it is separate from the final full-suite count. Historical failures and the
+interrupted run aren't replaced by the green port-5404 result.
+
+### Historical port-5395 fake artifact verification
 
 The production build uses explicit fixture client values, a fixture API host,
 and FakePlayer. `build-configuration.json` records fake configuration and client
@@ -146,7 +235,7 @@ change or rebuild masks the inspector failure. The earlier `0bc3956` evidence
 also retains its separate installer-banner indentation comparison failure and
 normalized-text correction.
 
-These final fake-artifact identities are traceability only:
+These historical port-5395 fake-artifact identities are traceability only:
 
 ```text
 fed5d624abebc804ed49929cea267220c07e2fa6da7481cab7853abee49ecb6d  KinoTV.wgt
@@ -167,7 +256,7 @@ The following November 17 tooling evidence remains source-specific history.
 This older evidence covers the tooling source
 `c104cae19995fd27c72299745b7b118a46a24fa9` in the same integration worktree,
 before the runtime integration described above. It doesn't replace the final
-checks at `bced8aa`; release-candidate selection remains pending.
+checks at `d222534`; deployable release acceptance remains pending.
 
 The local evidence directory is:
 
@@ -299,7 +388,9 @@ Public-download installation verification remains pending. The
 [installation guide](installation.md) describes the route; it isn't a completed
 installation result. The [integrated TV checklist](integrated-tv-acceptance.md)
 contains historical source-specific evidence and pending device items, not
-acceptance of `bced8aa`, historical `c104cae`, or these fake-config artifacts.
+acceptance of `d222534`, historical sources, or these fake-config artifacts.
+Native AVPlay, audio/subtitle selection, live playback, artwork behavior,
+lifecycle, and crash acceptance remain open on the agreed TV baseline.
 
 After an approved publication, anonymously retrieve metadata and all four assets,
 verify their checksums and identity, and use those exact downloads for local
@@ -312,10 +403,10 @@ host, TV, firmware, source, and installed-package identities.
 
 The following gates remain open before launch completion:
 
-- Resolve the remaining bookmark focus-restoration failure at `bced8aa`, then
-  select and review an exact candidate and record candidate-specific checks and
-  artifacts with effective real OAuth release configuration. The reviewed
-  runtime merges above are complete; candidate acceptance remains pending.
+- Carry the locally verified `d222534` source into coordinated candidate and
+  artifact review with effective real OAuth release configuration. The bookmark
+  restoration defect is resolved and local fixture verification is green;
+  deployable candidate and native acceptance remain pending.
 - Run a maintained, redacting exposure scan over intended public history/current
   content, and review accessible hosted logs/artifacts and final deliverables.
   Record findings, exclusions, inaccessible surfaces, and dispositions.
