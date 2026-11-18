@@ -5,15 +5,16 @@ source `d222534ccbb8b09265c01632da700caab0ff62fb`: the complete browser suite ha
 **263 passes, zero failures, and three skips**. Existing typecheck, 423-unit-test,
 and fake production-build evidence remains valid for the unchanged runtime at
 `4c082061add0faf5b3e0c8638c9be657e19e9709`. Native TV acceptance, real release
-configuration, exposure review, hosted validation, publication, and public-download
-installation remain pending. Local fixture checks don't validate a deployable
-public release.
+configuration, final-deliverable exposure review, hosted validation, publication,
+and public-download installation remain pending. The scoped exposure scan and
+dependency advisory review at documentation candidate `75dbfaf` are complete as
+qualified below. Local fixture checks don't validate a deployable public release.
 
 The [launch spec](specs/open-source-launch.md) says, “This spec authorizes
 planning.” The user's subsequent explicit implementation and evidence requests
-supersede that planning-only scope. This final request authorizes documentation
-and local commits/merges, with no remote operations; it doesn't authorize release
-publication.
+supersede that planning-only scope. The current authorization includes commits,
+push, and PR work; the coordinator owns the push. It doesn't authorize tags,
+releases, or repository settings changes.
 
 ## Prepared locally
 
@@ -358,6 +359,70 @@ cb57b34b0dd59dbaa8ab835e433db7c0c0a428be0f7089e43badbf15b58a0960  kinotv-install
 00f28d21ee0012ff7ae55db0ecd1e3aaa74b6e3a80992b2775944f351f847cd9  SHA256SUMS
 ```
 
+### Scoped exposure review
+
+On November 18, 2026, Gitleaks **8.30.1** ran with `--redact=100` on every
+invocation against candidate `75dbfaf49d1deeaaeeb01ab9519bc4161e8cefeb`.
+Persisted findings contain location/rule metadata, not matches or secret values.
+Temporary evidence remains in `kinotv-75dbfaf-secret-scan/` under the temporary
+evidence root above; raw reports aren't tracked.
+
+The reviewed scope and results are:
+
+- **History and source:** zero findings across 113 unique reachable commits from
+  `refs/remotes/origin/main` at `f01df7555421b2bc358e4849c257150d41187dca` and
+  `refs/heads/integration/kinotv-u1s` at `75dbfaf`, plus the exact tracked candidate
+  snapshot exported from Git. Unrelated branch refs weren't included.
+- **Local artifacts:** scanned `dist/`, `dist-release/`, explicitly extracted
+  `KinoTV.wgt`, `kinotv-installer.mjs`, `install.sh`, and `SHA256SUMS`. Widget
+  bytes match `dist/`, and release checksums verify. These are fake-config builds,
+  not real OAuth release candidates. One `generic-api-key` false positive in
+  `assets/index-whyViQy0.js:8` appears twice, in the byte-identical `dist/` and
+  extracted widget bundles. Review identifies a JavaScript identifier assignment
+  to an object member, not credential material. No allowlist or exclusion was
+  added for it.
+- **Accessible hosted evidence:** scanned both log archive members from run
+  `42648811501` at remote-main SHA `f01df755`, through memory/stdin without saving
+  raw logs; zero findings. Read-only inspection found no accessible Actions
+  artifacts or releases and no inaccessible endpoints. No hosted candidate run
+  or artifact exists yet, so none was reviewed.
+
+Filesystem scope excludes `node_modules/`, `.git/`, `test-results/`, and
+`dist-e2e/`. The original primary worktree and ignored environment files weren't
+read. There are no custom rule, path, fingerprint, or fixture exclusions;
+maintained default rules and built-in allowlists remain active. Inline
+`gitleaks:allow` comments were ignored, and an empty external ignore file was
+forced. Archive and decoding recursion stop at depth five; explicit extraction
+was needed because the direct scan didn't traverse `.wgt` contents. Deleted,
+expired, or unlisted hosted history wasn't recovered. Static scanning doesn't
+prove the absence of all secrets; no credential validation or live authentication
+was performed. Final real-candidate bytes and newly hosted logs/artifacts still
+need review.
+
+### Dependency advisory disposition
+
+The November 18, 2026 review at `75dbfaf` records
+[GHSA-fc5q-39xc-vjpf / CVE-2026-112366](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+as withdrawn at **2026-11-18 15:38:56 UTC**. At the 16:09 UTC evidence capture,
+locked `picomatch` **4.0.7** is also the registry's latest version; no published
+patched version exists. npm still reports six high-severity entries: `picomatch`
+and five inherited findings in `fdir`, `tinyglobby`, `vite`, `vitest`, and
+`@vitejs/plugin-react`. These represent one withdrawn advisory, not six distinct
+vulnerabilities. The GitHub/npm discrepancy is recorded; propagation or caching
+lag is plausible but unproven.
+
+Tracked-source review identifies no route from TV inputs into `picomatch`, and
+the reviewed installer import graph doesn't reach the flagged packages. The
+tooling is present and may execute on development/CI hosts. No dynamic taint
+analysis, crafted-pattern reproduction, network-route audit, or artifact module
+inventory was performed; this is **not proof of non-exploitability**. The
+disposition is to disclose these entries without requiring a dependency change
+before opening the PR, and **recheck advisory/feed status before merge**. Keep
+the lockfile unchanged for this finding: npm's suggested major downgrades aren't
+a patched leaf or an independently validated compatible graph. Don't force a
+downgrade to clear the report. Temporary evidence is in
+`kinotv-75dbfaf-advisory-review/review.txt` under the same evidence root.
+
 ## GitHub configured
 
 The [spec's recorded observation](specs/open-source-launch.md#further-notes)
@@ -407,14 +472,14 @@ The following gates remain open before launch completion:
   artifact review with effective real OAuth release configuration. The bookmark
   restoration defect is resolved and local fixture verification is green;
   deployable candidate and native acceptance remain pending.
-- Run a maintained, redacting exposure scan over intended public history/current
-  content, and review accessible hosted logs/artifacts and final deliverables.
-  Record findings, exclusions, inaccessible surfaces, and dispositions.
-- Disposition the dependency advisories. Saved `npm-audit.json` reports six
-  high-severity dependency entries; no reachability, exploitability, remediation,
-  or acceptance conclusion is established here.
-- Obtain scoped hosted PR/settings and release-publication approvals, complete
-  hosted validation/readback, and record anonymous-download/device evidence.
+- Extend the completed scoped exposure review to final real-candidate bytes and
+  newly hosted logs/artifacts; record any new findings, exclusions, inaccessible
+  surfaces, and dispositions.
+- Recheck the withdrawn advisory and npm feed before merge, retaining the
+  qualified disposition above unless new evidence changes it.
+- Complete authorized hosted PR validation; obtain separate settings and
+  tag/release-publication approvals, complete hosted readback, and record
+  anonymous-download/device evidence.
 
 Reconcile the [existing issue context](specs/open-source-launch.md#further-notes):
 `kinotv-91o.19` owns release/installer history, `.20` the superseded own-client

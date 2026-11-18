@@ -15,6 +15,7 @@ native TV behavior, and include model/firmware/source when a TV was used.
 Describe compatibility, upgrade, documentation, or follow-up considerations.
 Confirm the diff contains no account tokens, passwords, authenticated stream
 URLs, private keys/certificates, or local configuration. Don't submit sensitive
-findings here; the private reporting destination awaits maintainer confirmation.
+findings here; email them privately to
+[darst94@gmail.com](mailto:darst94@gmail.com).
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup and contribution guidance.
