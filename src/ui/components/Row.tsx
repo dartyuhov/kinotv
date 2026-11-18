@@ -71,7 +71,14 @@ export function Row<T>({
     setRequested(true);
     onRowFocus?.(rowKey);
   }, [onRowFocus, rowKey]);
-  const { enter, request } = useArtworkFocus(rowKey, ready, preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)), prepareRestore);
+  const resolveRestore = useCallback((target: string) => {
+    if (items.some(item => rowCardKey(rowKey, itemKey(item)) === target)) return target;
+    // The deleted leaf's index must not redirect the fallback to a different
+    // card, or leave a virtualised row demanding artwork at the old offset.
+    remember(rowKey, 0);
+    return items[0] === undefined ? undefined : rowCardKey(rowKey, itemKey(items[0]));
+  }, [items, itemKey, rowKey, remember]);
+  const { enter, request } = useArtworkFocus(rowKey, ready, preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)), prepareRestore, resolveRestore);
   const [direction, setDirection] = useState(1);
   const previous = useRef(index);
   const latest = useRef({ items, itemKey, index, onItemFocus, onItemPress, ready });
