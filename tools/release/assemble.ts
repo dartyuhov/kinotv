@@ -21,8 +21,8 @@ const ROOT = resolve(TOOLS, '..');
 export const INSTALLER_FILE = 'kinotv-installer.mjs';
 
 async function bundleInstaller(outDir: string): Promise<void> {
-  const license = ['fflate-mit.txt', 'saxes-isc.txt', 'xmlchars-mit.txt']
-    .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8')).join('\n');
+  const license = [readFileSync(join(ROOT, 'LICENSE'), 'utf8'), ...['fflate-mit.txt', 'saxes-isc.txt', 'xmlchars-mit.txt']
+    .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8'))].join('\n');
   await build({
     configFile: false,
     root: TOOLS,
@@ -76,6 +76,7 @@ async function main(): Promise<void> {
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(appDir, 'LICENSE'), readFileSync(resolve('LICENSE')));
   const notices = readFileSync(resolve('THIRD_PARTY_NOTICES.md'), 'utf8');
   writeFileSync(join(appDir, 'THIRD_PARTY_NOTICES.md'), notices.replace(/\]\(public\/licenses\//g, '](licenses/'));
   createUnsignedWgt(appDir, join(outDir, `${APP_NAME}.wgt`));

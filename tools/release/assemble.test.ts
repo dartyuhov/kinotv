@@ -24,6 +24,7 @@ function writeProject({ version = '1.4.0', githubRepo = 'someone/kinotv' } = {})
   writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'kinotv', version, kinotv: { githubRepo } }));
   writeFileSync(join(project, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
   writeFileSync(join(project, 'THIRD_PARTY_NOTICES.md'), '# Fixture notices\n');
+  writeFileSync(join(project, 'LICENSE'), readFileSync(join(ROOT, 'LICENSE')));
 }
 
 /** A minimal production build in dist/ (the real build is covered by tools/tizen/package.test.ts). */
@@ -46,7 +47,7 @@ describe('the release assets', () => {
     expect(pkg.kinotv.githubRepo).toBe('dartyuhov/kinotv');
     expect(lock.version).toBe(pkg.version);
     expect(lock.packages['']?.version).toBe(pkg.version);
-    for (const name of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) {
+    for (const name of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md', 'LICENSE']) {
       writeFileSync(join(project, name), readFileSync(join(ROOT, name)));
     }
     // Ignore local env files and replace client configuration explicitly. These fixtures never make
@@ -71,6 +72,9 @@ describe('the release assets', () => {
     expect(manifest).toContain('id="KinoTV0001.KinoTV" package="KinoTV0001"');
     expect(Object.keys(files)).toEqual(expect.arrayContaining(['index.html', 'icon.png', 'config.xml']));
     expect(Object.keys(files).some((name) => /signature|\.map$|(^|\/)\./.test(name))).toBe(false);
+    const projectLicense = readFileSync(join(ROOT, 'LICENSE'), 'utf8');
+    expect(projectLicense.split('\n')[2]).toBe('Copyright (c) 2026 Dzmitry Artsiukhou');
+    expect(Buffer.from(files['LICENSE'] ?? []).toString('utf8')).toBe(projectLicense);
     const inventory = Buffer.from(files['THIRD_PARTY_NOTICES.md'] ?? []).toString('utf8');
     expect(inventory).toBe(readFileSync(join(ROOT, 'THIRD_PARTY_NOTICES.md'), 'utf8').replace(/\]\(public\/licenses\//g, '](licenses/'));
     expect(inventory).not.toContain('](public/licenses/');
@@ -100,7 +104,7 @@ describe('the release assets', () => {
     const staging = join(project, 'signing-staging');
     extractWgt(released('KinoTV.wgt'), unpacked);
     copyWidget(unpacked, staging);
-    for (const name of ['THIRD_PARTY_NOTICES.md', ...licenseNames.map((name) => `licenses/${name}`), ...fonts]) {
+    for (const name of ['LICENSE', 'THIRD_PARTY_NOTICES.md', ...licenseNames.map((name) => `licenses/${name}`), ...fonts]) {
       expect(readFileSync(join(staging, name))).toEqual(Buffer.from(files[name]!));
     }
     const script = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([, bytes]) => Buffer.from(bytes).toString('utf8')).join('\n');
@@ -108,6 +112,10 @@ describe('the release assets', () => {
     expect(script.match(/appVersion:["'`]([^"'`]+)["'`]/)?.[1]).toBe(pkg.version);
     expect(script).toContain('dartyuhov/kinotv');
     expect(readFileSync(released('install.sh'), 'utf8')).toContain('KINOTV_GITHUB_REPO:-dartyuhov/kinotv');
+    for (const file of [join(ROOT, 'tools/install.sh'), released('install.sh')]) {
+      const header = readFileSync(file, 'utf8').split('\n').slice(1, projectLicense.trimEnd().split('\n').length + 1);
+      expect(`${header.map((line) => line.replace(/^# ?/, '')).join('\n')}\n`).toBe(projectLicense);
+    }
     expect(readFileSync(join(ROOT, 'public/licenses/fflate-mit.txt'), 'utf8').trimEnd())
       .toBe(readFileSync(join(ROOT, 'node_modules/fflate/LICENSE'), 'utf8').trimEnd());
     const installer = readFileSync(released('kinotv-installer.mjs'), 'utf8');
@@ -116,7 +124,7 @@ describe('the release assets', () => {
       .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8')).join('\n');
     // Rolldown removes indentation inside banner comments; license wording must stay complete.
     const unindent = (text: string) => text.replace(/^ +/gm, '');
-    expect(unindent(installer.slice(installer.indexOf('/*!') + 4, installer.indexOf('*/')))).toBe(unindent(installerLicenses));
+    expect(unindent(installer.slice(installer.indexOf('/*!') + 4, installer.indexOf('*/')))).toBe(unindent(`${projectLicense}\n${installerLicenses}`));
     expect(readFileSync(join(ROOT, 'public/licenses/xmlchars-mit.txt'), 'utf8').trimEnd())
       .toBe(readFileSync(join(ROOT, 'node_modules/xmlchars/LICENSE'), 'utf8').trimEnd());
     expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']);
@@ -139,6 +147,7 @@ describe('the release assets', () => {
     expect(code, out).toBe(0);
     expect(readdirSync(join(project, 'dist-release')).sort()).toEqual(['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']);
     expect(Object.keys(unzipSync(readFileSync(released('KinoTV.wgt')))).sort()).toEqual([
+      'LICENSE',
       'THIRD_PARTY_NOTICES.md',
       'assets/index-abc.js',
       'config.xml',

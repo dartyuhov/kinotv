@@ -196,6 +196,7 @@ describe('install.sh', () => {
   });
 
   it('runs the generated bootstrap and bundled installer from one selected release through signing and installation', () => {
+    writeFileSync(join(project, 'LICENSE'), readFileSync(resolve(import.meta.dirname, '../../LICENSE')));
     writeFileSync(join(project, 'THIRD_PARTY_NOTICES.md'), '# Fixture notices\n');
     writeFileSync(join(project, 'package.json'), JSON.stringify({ name: 'kinotv', version: '1.4.0', kinotv: { githubRepo: 'someone/kinotv' } }));
     writeFileSync(join(project, 'package-lock.json'), JSON.stringify({ version: '1.4.0', packages: { '': { version: '1.4.0' } } }));

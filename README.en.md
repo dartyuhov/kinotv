@@ -120,6 +120,16 @@ Launch preparation has four separate evidence categories:
 | Published | No public release assets available yet |
 | Installation verified | Public-download signing, fresh install, native playback, and retained-session upgrade are pending |
 
+## License
+
+KinoTV's original code is licensed under the [MIT License](LICENSE), with
+`Copyright (c) 2026 Dzmitry Artsiukhou`. Preserve the full license when you
+redistribute it. Release assembly includes it in the widget and installer;
+the shell bootstrap carries the full text in its comment header.
+
+Third-party code, icons, and fonts retain their separate licenses. See
+[Third-party notices](THIRD_PARTY_NOTICES.md) for attribution and full texts.
+
 ## Contribute and report
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) for a credential-free setup and

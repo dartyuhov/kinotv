@@ -73,6 +73,49 @@ a02d4ce2b2d838ed0977ec83517c6176957afa9641bc42c0f4b6bd3c56576f74  kinotv-install
 542c998862caf26299a2098a177b1808ee2f197b12a2c85e0adf366985d8553f  SHA256SUMS
 ```
 
+## Confirmed original-code license
+
+On November 18, 2026, the maintainer confirmed the exact line
+`Copyright (c) 2026 Dzmitry Artsiukhou` for the previously selected MIT license.
+The root [LICENSE](../LICENSE) contains the full MIT text. `package.json` and
+the root package entry in `package-lock.json` declare `MIT`; dependency records
+are unchanged. [Third-party notices](../THIRD_PARTY_NOTICES.md) remain separate.
+The private reporting contact is also confirmed as
+[darst94@gmail.com](mailto:darst94@gmail.com). The host/TV support baseline still
+needs confirmation.
+
+Local verification on `integration/kinotv-u1s`, based on `28cb07e` plus this
+license change, produced these results:
+
+- `npm test -- tools/release/assemble.test.ts tools/release/installSh.test.ts
+  tools/release/workflows.test.ts`: 54 tests passed across three files. The
+  artifact test first failed on each missing project-license output, then passed
+  after implementation. An initial broader run found one missing fixture
+  `LICENSE`; the fixture was corrected before the final 54-test pass.
+- `npm run typecheck`: passed.
+- `npm run build` with explicit fake client configuration and a fixture API host,
+  followed by `npm run release:assets`: passed. These artifacts cannot
+  authenticate real users and aren't release candidates.
+- `shasum -a 256 -c SHA256SUMS` from `dist-release/`: all three payloads passed.
+  The first invocation from the repository root failed to locate the manifest;
+  the corrected invocation checked the assembled files.
+- Independent ZIP and file readback confirmed the complete project license in
+  `KinoTV.wgt`, the installer banner before the unchanged fflate/Saxes/xmlchars
+  texts, and the source and distributed shell comment headers. The artifact test
+  also verified preservation through signing staging and the four-asset contract.
+- `bash -n tools/install.sh`, `bash -n dist-release/install.sh`, and
+  `git diff --check`: passed.
+
+The fake-config artifact hashes for this license pass are separate from the
+historical `c104cae` evidence above:
+
+```text
+7562aa7ac7b8036c729ddfd927a8c38253e47160603d36a9fcc8b1dd3c14a977  KinoTV.wgt
+2b71675f2cf52af04f3bfdbd9e185a3a6aa11d4fdec924c7b2ee650cd67e34b7  install.sh
+cb57b34b0dd59dbaa8ab835e433db7c0c0a428be0f7089e43badbf15b58a0960  kinotv-installer.mjs
+00f28d21ee0012ff7ae55db0ecd1e3aaa74b6e3a80992b2775944f351f847cd9  SHA256SUMS
+```
+
 ## GitHub configured
 
 The [spec's recorded observation](specs/open-source-launch.md#further-notes)
@@ -116,10 +159,8 @@ host, TV, firmware, source, and installed-package identities.
 
 The following gates remain open before launch completion:
 
-- Confirm the exact MIT copyright holder/year and add the original-code license;
-  confirm the maintained host/TV support baseline. The maintainer confirmed
-  [darst94@gmail.com](mailto:darst94@gmail.com) for private reports; the English,
-  Russian, and contributor guides now list that contact.
+- Confirm the maintained host/TV support baseline. Original-code MIT licensing
+  and the private reporting contact are now recorded in the current guides.
 - Select and review final runtime integration and an exact candidate, then record
   candidate-specific checks and artifacts with effective release configuration.
 - Run a maintained, redacting exposure scan over intended public history/current

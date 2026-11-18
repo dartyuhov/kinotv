@@ -132,7 +132,8 @@ without requiring a fifth download:
    links from `public/licenses/` to `licenses/` in that distribution copy.
    `createUnsignedWgt` includes these ordinary files, and `copyWidget` retains
    them during local signing.
-2. Embed the complete texts of `public/licenses/fflate-mit.txt`,
+2. Embed the full project `LICENSE` followed by the complete texts of
+   `public/licenses/fflate-mit.txt`,
    `public/licenses/saxes-isc.txt`, and `public/licenses/xmlchars-mit.txt` in a
    leading comment in `kinotv-installer.mjs`. The assembler supplies them through
    `build.rolldownOptions.output.banner`, wrapped in `/*! ... */`. Preserve the
@@ -141,17 +142,19 @@ without requiring a fifth download:
    generated installer is downloaded or copied alone.
 3. Generate checksums after notice embedding and all other asset changes.
    Inspect the actual WGT archive for the inventory and all license texts,
-   and compare the installer comment with all three complete licenses. Verify
+   and compare the installer comment with the project and all three dependency
+   licenses. Verify
    that local signing preserves the WGT notice entries. Keep these checks in
    the release assembler's existing integration seam.
 
-The source resources are provided here. The inventory-copy and installer-banner
-steps require release-assembler integration; their description is not evidence
-that a published artifact contains them.
+The release assembler implements the inventory-copy and installer-banner steps.
+It also copies the project `LICENSE` into the widget. The source and distributed
+`install.sh` carry the full project MIT text in a comment header. Local artifact
+tests check these notices and signing staging; published-artifact verification
+remains separate.
 
 ## Original-code license
 
-These third-party notices do not license KinoTV's original code. Adding the
-project MIT `LICENSE` requires the maintainer's exact copyright-holder name and
-applicable year. Those inputs remain unconfirmed; they must not be inferred
-from Git authorship or third-party notices.
+KinoTV's original code uses the [MIT License](LICENSE), with the maintainer's
+confirmed line `Copyright (c) 2026 Dzmitry Artsiukhou`. These third-party notices
+remain separate from that license and retain their original holders and terms.

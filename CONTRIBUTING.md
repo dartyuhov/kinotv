@@ -179,6 +179,20 @@ private logs in public issues or PRs. Email sensitive findings privately to
 version, and reproduction steps, with credentials and account data redacted.
 Reports are handled on a best-effort basis, without a response-time promise.
 
+## License and redistribution
+
+KinoTV's original code uses the [MIT License](LICENSE), with the confirmed line
+`Copyright (c) 2026 Dzmitry Artsiukhou`. Preserve the complete copyright,
+permission, and warranty text when redistributing copies or substantial portions.
+Third-party code, icons, and fonts keep their separate licenses; preserve the
+attributions and full texts listed in [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+Release assembly copies `LICENSE` into `KinoTV.wgt` and embeds it before the
+fflate, Saxes, and xmlchars notices in `kinotv-installer.mjs`. The source and
+distributed `install.sh` include the full MIT text in a comment header. Keep these
+notices inside the existing four-asset release contract and generate checksums
+after all asset changes.
+
 ## Documentation and release scope
 
 The [Russian README](README.md), [English entry point](README.en.md), and
@@ -204,8 +218,7 @@ Use this sequence when the launch coordinator authorizes remote release work:
    source, package/lock metadata, and the built widget, the intended repository,
    and effective release client configuration (presence only). Finish relevant
    candidate checks, notices, exposure review, and agreed pre-publication device
-   checks. Exact copyright-holder name/year and the host/TV support baseline
-   still require maintainer confirmation.
+   checks. The host/TV support baseline still requires maintainer confirmation.
 2. Create and push a matching `vX.Y.Z` tag manually only with scoped approval.
    The tag-driven workflow runs the release gate and CI, builds the unsigned WGT,
    assembles the four assets, and stages or repairs a **draft**. It doesn't
