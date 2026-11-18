@@ -39,15 +39,6 @@ function server() {
     moved: false, failPublish: false };
   const gh = (args, input) => {
     state.calls.push(args);
-    if (args[0] === 'release') {
-      assert.equal(args[1], 'create');
-      assert.ok(args.includes('--verify-tag'));
-      assert.ok(args.includes('--draft'));
-      state.mutations.push('create draft');
-      state.release = { id: 7, tag_name: 'v0.1.0', draft: true, published_at: null, immutable: false,
-        target_commitish: args[args.indexOf('--target') + 1], body: args[args.indexOf('--notes') + 1], prerelease: false };
-      return Buffer.from('');
-    }
     assert.equal(args[0], 'api');
     const endpoint = args[1].replace(`repos/${repo}`, '');
     const method = args.includes('--method') ? args[args.indexOf('--method') + 1] : 'GET';
@@ -74,7 +65,15 @@ function server() {
       assert.equal(body.sha, sha); assert.equal(body.ref, 'refs/tags/v0.1.0'); assert.equal(state.tag, undefined);
       state.tag = sha; data = {};
     } else if (endpoint.startsWith('/git/ref/tags/')) data = { object: { type: 'commit', sha: state.moved ? 'c'.repeat(40) : state.tag } };
-    else if (endpoint.startsWith('/releases?') || endpoint === '/releases') data = [state.release, state.newer && { tag_name: 'v0.2.0', draft: false, prerelease: false }].filter(Boolean);
+    else if (endpoint === '/releases' && method === 'POST') {
+      assert.equal(body.draft, true);
+      assert.equal(body.tag_name, 'v0.1.0');
+      assert.equal(body.target_commitish, sha);
+      assert.equal(state.tag, sha);
+      assert.equal(state.release, undefined);
+      state.release = { id: 7, ...body, published_at: null, immutable: false, prerelease: false };
+      data = state.release;
+    } else if (endpoint.startsWith('/releases?') || endpoint === '/releases') data = [state.release, state.newer && { tag_name: 'v0.2.0', draft: false, prerelease: false }].filter(Boolean);
     else if (endpoint === '/releases/7') {
       if (method === 'PATCH') {
         if (state.failPublish) throw new Error('publication interrupted');
@@ -117,6 +116,23 @@ test('exact merge creates tag, validates all hosted draft bytes, and automatical
     s.state.mutations.length = 0;
     assert.equal((await publish(s.api, await s.approval(), { root: s.root })).status, 'already-published');
     assert.ok(s.state.mutations.every(m => m.includes('/labels')));
+  } finally { s.close(); }
+});
+
+test('new draft omitted from lists until direct ID read still completes validated publication', async () => {
+  const s = server();
+  let readCreatedId = false;
+  const api = new GitHub({ repo, gh(args, input) {
+    if (args[1] === `repos/${repo}/releases/7`) readCreatedId = true;
+    if (s.state.release && !readCreatedId && args[1]?.startsWith(`repos/${repo}/releases?`)) return Buffer.from('[[]]');
+    return s.api.gh(args, input);
+  } });
+  try {
+    assert.equal((await publish(api, await s.approval(), { root: s.root })).status, 'published');
+    assert.equal(readCreatedId, true);
+    assert.equal(s.state.release.id, 7);
+    assert.equal(s.state.mutations.filter(m => m === 'POST /releases').length, 1);
+    assert.equal(s.state.assets.length, 4);
   } finally { s.close(); }
 });
 
