@@ -33,7 +33,7 @@ export function fallbackChoices(files: readonly VideoFile[], capabilities: Playe
       .map((source) => ({ ...source, fixed: false }));
     return [...[...adaptive, ...pinned].slice(0, 14), ...unverified, ...tail];
   }
-  if (capabilities.adaptiveBitrate && streamCandidates(files, capabilities).some((source) => source.type !== 'http')) {
+  if (capabilities.adaptiveBitrate && (manifests.length || streamCandidates(files, capabilities).some((source) => source.type !== 'http'))) {
     // A blocked metadata fetch cannot turn an unverified master into a fixed quality or force the
     // reproducibly stalled progressive path. Auto can still let AVPlay fetch the HLS stream itself.
     return [...unverified, ...tail];
