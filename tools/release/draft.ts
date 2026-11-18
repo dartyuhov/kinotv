@@ -77,11 +77,14 @@ export async function stageDraft({ root = process.cwd(), env = process.env, gh =
   if (local.get('SHA256SUMS')!.toString() !== manifest) throw new Error('Local SHA256SUMS does not match the complete payload set.');
 
   if (!release) {
-    gh(['release', 'create', tag!, '--repo', RELEASE_REPOSITORY, '--draft', '--verify-tag', '--title', `KinoTV ${tag}`,
-      ...(approval ? ['--target', sha!, '--notes', `${approval.notes}\n\n${approval.marker}`] : ['--generate-notes'])]);
-    const created = pages<Release>(`${base}/releases?per_page=100`).filter((item) => item.tag_name === tag);
-    if (created.length !== 1) throw new Error('Could not uniquely resolve the created draft; retry after inspection.');
-    release = draft(created[0]!);
+    // Keep the create response: a successful write need not be visible in the
+    // releases list immediately. Never rediscover or retry an ambiguous create.
+    const created = draft(JSON.parse(api(`${base}/releases`, ['--method', 'POST', '--input', '-'],
+      Buffer.from(JSON.stringify({ tag_name: tag, target_commitish: sha, name: `KinoTV ${tag}`, draft: true,
+        ...(approval ? { body: `${approval.notes}\n\n${approval.marker}` } : { generate_release_notes: true }) }))).toString()));
+    if (created.draft !== true) throw new Error('Created release is not a draft.');
+    release = draft(json<Release>(`${base}/releases/${created.id}`));
+    if (release.id !== created.id || release.draft !== true) throw new Error('Created draft identity or visibility changed.');
   }
   const id = release.id;
   const published = release.draft === false;

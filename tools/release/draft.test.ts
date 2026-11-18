@@ -30,10 +30,11 @@ function github() {
   let release: { id: number; tag_name: string; draft: boolean; published_at: string | null; immutable: boolean } | null = null;
   const gh: Gh = (args, input) => {
     calls.push(args);
-    if (args[0] === 'release') {
-      expect(args).toEqual(['release', 'create', 'v1.4.0', '--repo', repo, '--draft', '--verify-tag', '--title', 'KinoTV v1.4.0', '--generate-notes']);
+    if (args[1] === `repos/${repo}/releases` && args.includes('POST')) {
+      expect(args).toEqual(['api', `repos/${repo}/releases`, '--method', 'POST', '--input', '-']);
+      expect(JSON.parse(input!.toString())).toEqual({ tag_name: 'v1.4.0', target_commitish: sha, name: 'KinoTV v1.4.0', draft: true, generate_release_notes: true });
       release = { id: 7, tag_name: 'v1.4.0', draft: true, published_at: null, immutable: false };
-      return Buffer.from('');
+      return Buffer.from(JSON.stringify(release));
     }
     const endpoint = args[1]!;
     const method = args[args.indexOf('--method') + 1];
@@ -73,6 +74,47 @@ it('creates only a draft for an existing tag and verifies the entire downloaded 
 it('returns the exact validated draft identity for the automatic publisher', async () => {
   const server = github();
   expect(await stageDraft({ root, env, gh: server.gh })).toEqual({ id: 7, tag: 'v1.4.0', sha, published: false });
+});
+
+it('resolves the created draft by its returned identity even when release lists omit it', async () => {
+  const server = github();
+  const gh: Gh = (args, input) => {
+    if (args[1] === `repos/${repo}/releases?per_page=100`) return Buffer.from('[[]]');
+    return server.gh(args, input);
+  };
+  expect(await stageDraft({ root, env, gh })).toEqual({ id: 7, tag: 'v1.4.0', sha, published: false });
+  expect(server.assets).toHaveLength(4);
+});
+
+it.each([
+  null, { id: undefined }, { id: -1 }, { id: '7' }, { id: 8, tag_name: 'v9.9.9' },
+  { id: 7, draft: false, published_at: '2026-11-18T00:00:00Z' }, { id: 7, immutable: true },
+])('rejects malformed or unsafe create identity before any asset mutation: %j', async (changes) => {
+  const server = github();
+  const gh: Gh = (args, input) => {
+    const result = server.gh(args, input);
+    if (args[1] === `repos/${repo}/releases` && args.includes('POST')) {
+      return Buffer.from(JSON.stringify(changes === null ? null : { ...server.release, ...changes }));
+    }
+    return result;
+  };
+  await expect(stageDraft({ root, env, gh })).rejects.toThrow();
+  expect(server.assets).toEqual([]);
+  expect(server.calls.filter((args) => args.includes('--method'))).toHaveLength(1);
+});
+
+it.each(['id', 'visibility', 'unavailable'])('rejects changed or unreadable created draft %s before asset writes', async (kind) => {
+  const server = github();
+  const gh: Gh = (args, input) => {
+    if (args[1] === `repos/${repo}/releases/7`) {
+      if (kind === 'unavailable') throw new Error('HTTP 404');
+      return Buffer.from(JSON.stringify({ ...server.release, ...(kind === 'id' ? { id: 8 } : { draft: false, published_at: '2026-11-18T00:00:00Z' }) }));
+    }
+    return server.gh(args, input);
+  };
+  await expect(stageDraft({ root, env, gh })).rejects.toThrow();
+  expect(server.assets).toEqual([]);
+  expect(server.calls.filter((args) => args.includes('--method'))).toHaveLength(1);
 });
 
 it('retries an interrupted upload, retains correct assets, repairs a corrupt draft asset and is then a read-only no-op', async () => {
@@ -237,7 +279,7 @@ it('leaves a recoverable draft when replacement upload fails after deleting a ba
 it('does not recover a competing create failure by modifying the other release', async () => {
   const server = github();
   const gh: Gh = (args, input) => {
-    if (args[0] === 'release') throw new Error('already exists');
+    if (args[1] === `repos/${repo}/releases` && args.includes('POST')) throw new Error('already exists');
     return server.gh(args, input);
   };
   await expect(stageDraft({ root, env, gh })).rejects.toThrow('already exists');
