@@ -12,7 +12,7 @@
 
 ![Главная KinoTV: «Клан Сопрано» и ряд постеров](docs/screenshots/home.webp)
 
-| Поиск | Клан Сопрано |
+| Поиск | Сериалы/Фильмы |
 | --- | --- |
 | [![Русская экранная клавиатура и результат поиска «Клан Сопрано»](docs/screenshots/search.webp)](docs/screenshots/search.webp) | [![Карточка «Клана Сопрано» с сезонами и кадрами из серий](docs/screenshots/the-sopranos.webp)](docs/screenshots/the-sopranos.webp) |
 
