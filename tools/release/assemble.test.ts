@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { accessSync, constants, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { build } from 'vite';
@@ -158,10 +158,17 @@ describe('the release assets', () => {
     expect(() => accessSync(released('install.sh'), constants.X_OK)).not.toThrow();
   }, 60_000);
 
-  it('install a release on the TV through install.sh alone, with nothing else from the project', () => {
+  it('install a release on the TV through install.sh alone, with nothing else from the project or assembly directory', () => {
     writeProject();
     fakeBuild('1.4.0');
     expect(assemble().code).toBe(0);
+    // Model the published payloads only: an installer must not resolve an unshipped sibling chunk
+    // from dist-release/ (e.g. Vite pulled in by checkout-only TV rebuild code).
+    const published = join(project, 'published');
+    mkdirSync(published);
+    for (const name of ['KinoTV.wgt', 'SHA256SUMS', 'install.sh', 'kinotv-installer.mjs']) {
+      copyFileSync(released(name), join(published, name));
+    }
     // GitHub resolves latest once, then serves only this tag's actual generated assets.
     stub(
       'curl',
@@ -172,7 +179,7 @@ if (url === 'https://api.github.com/repos/someone/kinotv/releases/latest') {
   process.exit(0);
 }
 if (!url.startsWith('https://github.com/someone/kinotv/releases/download/v1.4.0/')) process.exit(22);
-fs.copyFileSync(path.join(${JSON.stringify(join(project, 'dist-release'))}, path.basename(url)), out);`,
+fs.copyFileSync(path.join(${JSON.stringify(published)}, path.basename(url)), out);`,
     );
     symlinkSync('/bin/mkdir', join(sandbox.paths.bin, 'mkdir'));
     tizenStub(INSTALL_OK);
