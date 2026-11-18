@@ -41,6 +41,35 @@ function river(api: FakeApi, stoppedAt?: number) {
 
 const marks = (api: FakeApi) => api.requestsTo('GET', '/v1/watching/marktime').map((r) => r.query);
 
+const audioMaster = (index: number) => `#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nindex-v1a${index}.m3u8\n`;
+const audioMedia = '#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nsegment.ts\n';
+
+/** Real coordinator journeys; only the service responses and PlayerAdapter boundary are scripted. */
+async function reviewAudio(api: FakeApi, page: Page, alternate = false) {
+  const series = fakeSeries(31, 'Аудио', [['Первая', 'Вторая']]);
+  for (const [episode, video] of series.seasons![0]!.episodes.entries()) {
+    video.audios = [
+      { id: 101, index: episode === 0 ? 1 : 7, lang: 'rus', codec: 'aac', channels: 2, type: null,
+        author: { id: 1, title: 'Prior', short_title: null } },
+      { id: 102, index: 2, lang: 'eng', codec: 'aac', channels: 2, type: null,
+        author: { id: 2, title: 'Requested', short_title: null } },
+    ];
+  }
+  fakeHome(api, { hot: [series], movies: [], serials: [] });
+  api.on('GET', `/v1/items/${series.id}`, { json: { item: series } });
+  const base = 'https://cdn.test/audio/';
+  const backup = 'https://backup.test/audio/';
+  api.on('GET', '/v1/items/media-links', req => ({ json: { files: [base, ...(alternate ? [backup] : [])].map(host => ({
+    codec: 'h264', quality: '1080p', quality_id: 3, w: 1920, h: 1080,
+    urls: { hls2: `${host}${req.query.mid}/hls2.m3u8`, hls: `${host}${req.query.mid}/master-v1a1.m3u8` },
+  })), subtitles: [] } }));
+  for (const host of [base, backup]) await page.route(`${host}**`, route => {
+    const index = Number(/master-v1a(\d+)/.exec(route.request().url())?.[1] ?? 1);
+    return route.fulfill({ contentType: 'application/vnd.apple.mpegurl', body: audioMaster(index) });
+  });
+  return { base: `${base}310101/`, backup: `${backup}310101/`, next: `${base}310102/` };
+}
+
 test.describe('starting playback', () => {
   test('Play starts the film from the beginning, on the Auto stream', async ({ app, api, page, remote, player }) => {
     river(api);
@@ -208,6 +237,100 @@ test.describe('starting playback', () => {
 });
 
 test.describe('controls', () => {
+  for (const explicit of [false, true]) for (const paused of [true, false]) test(`failed audio prepare restores the exact ${explicit ? 'explicit' : 'identified'} fallback source and ${paused ? 'paused' : 'playing'} intent`, async ({ app, api, page, remote, player, clock }) => {
+    const { base } = await reviewAudio(api, page);
+    // The preferred general source identifies another dub; the working fallback identifies Prior.
+    await page.route(`${base}hls2.m3u8`, route => route.fulfill({ body: audioMaster(2) }));
+    await page.route(`${base}master-v1a2.m3u8`, route => route.fulfill({ body: audioMedia }));
+    await clock.pause();
+    await app.open();
+    await player.script({ adaptiveBitrate: true });
+    await playFromHero(page, remote);
+    await player.fail();
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.url).toBe(`${base}master-v1a1.m3u8`);
+    await expect.poll(() => player.state()).toBe('playing');
+    await player.time(145);
+    if (paused) await remote.press('pause');
+    await remote.press('up');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: /Prior/ })).toHaveAttribute('aria-pressed', 'true');
+    if (explicit) await dialog.getByRole('button', { name: /Prior/ }).click();
+    const preference = await page.evaluate(() => localStorage.getItem('kinotv:playback:series:31'));
+    const before = await player.loads();
+    await player.script({ loadError: 'unsupported' });
+    await dialog.getByRole('button', { name: /Requested/ }).click();
+    await expect(dialog.getByRole('status')).toContainText('Не удалось');
+    expect((await player.loads()).slice(before.length)).toEqual([
+      { url: `${base}master-v1a2.m3u8`, startAt: 145 },
+      { url: `${base}master-v1a1.m3u8`, startAt: 145 },
+    ]);
+    await expect.poll(() => player.state()).toBe(paused ? 'paused' : 'playing');
+    await expect(dialog.getByRole('button', { name: /Prior/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(dialog.getByRole('button', { name: /Requested/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(() => localStorage.getItem('kinotv:playback:series:31'))).toBe(preference);
+  });
+
+  test('service audio recovery reaches the remaining candidate when revalidation filters out the active source', async ({ app, api, page, remote, player, clock }) => {
+    const { base, backup } = await reviewAudio(api, page, true);
+    let expired = false;
+    await page.route(`${base}master-v1a2.m3u8`, route => route.fulfill({ body: expired ? '<html>expired</html>' : audioMedia }));
+    await page.route(`${backup}master-v1a2.m3u8`, route => route.fulfill({ body: audioMedia }));
+    await clock.pause();
+    await app.open();
+    await player.script({ adaptiveBitrate: true });
+    await playFromHero(page, remote);
+    await player.time(145);
+    await remote.press('pause', 'up');
+    const requested = page.getByRole('dialog').getByRole('button', { name: /Requested/ });
+    await requested.click();
+    await expect(requested).toHaveAttribute('aria-pressed', 'true');
+    expect((await player.loads()).slice(-1)[0]).toEqual({ url: `${base}master-v1a2.m3u8`, startAt: 145 });
+    expired = true;
+    await player.fail();
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]).toEqual({ url: `${backup}master-v1a2.m3u8`, startAt: 145 });
+    await expect.poll(() => player.state()).toBe('paused');
+    await expect(requested).toHaveAttribute('aria-pressed', 'true');
+    // The failed source and already-consumed candidates must not loop on later errors.
+    const before = await player.loads();
+    await player.fail();
+    await expect(page.getByRole('alert')).toBeVisible();
+    expect(await player.loads()).toEqual(before);
+  });
+
+  test('explicitly choosing identified current audio remembers it for the next episode without reloading', async ({ app, api, page, remote, player, clock }) => {
+    const { next } = await reviewAudio(api, page);
+    await clock.pause();
+    await app.open();
+    await player.script({ adaptiveBitrate: true });
+    await playFromHero(page, remote);
+    const before = await player.loads();
+    await remote.press('up');
+    const prior = page.getByRole('dialog').getByRole('button', { name: /Prior/ });
+    await expect(prior).toHaveAttribute('aria-pressed', 'true');
+    await prior.click();
+    expect(await player.loads()).toEqual(before);
+    await remote.press('back', 'channelUp');
+    await expect.poll(async () => (await player.loads()).slice(-1)[0]?.url).toBe(`${next}master-v1a7.m3u8`);
+    await expect(page.locator('.playback-pills')).toContainText('Prior');
+  });
+
+  test('service audio rejects an explicit contradictory playlist identity without loading or remembering it', async ({ app, api, page, remote, player, clock }) => {
+    const { base } = await reviewAudio(api, page);
+    await page.route(`${base}master-v1a2.m3u8`, route => route.fulfill({ body: audioMaster(1) }));
+    await clock.pause();
+    await app.open();
+    await player.script({ adaptiveBitrate: true });
+    await playFromHero(page, remote);
+    const before = await player.loads();
+    await remote.press('up');
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: /Requested/ }).click();
+    await expect(dialog.getByRole('status')).toContainText('Не удалось');
+    expect(await player.loads()).toEqual(before);
+    await expect(dialog.getByRole('button', { name: /Prior/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => localStorage.getItem('kinotv:playback:series:31'))).toBeNull();
+  });
+
   test('initial HLS2 selection comes from its actual variant selector despite misleading native English metadata', async ({ app, api, page, remote, player }) => {
     river(api);
     const item = { ...RIVER, videos: RIVER.videos!.map(video => ({ ...video, audios: [
@@ -297,7 +420,9 @@ test.describe('controls', () => {
     const russian = page.getByRole('dialog').getByRole('button', { name: /Гаврилов/ });
     await russian.click();
     await expect(page.getByRole('dialog').getByRole('status')).toContainText('Не удалось');
-    expect((await player.loads()).slice(-1)[0]?.url).toBe(`${base}hls2.m3u8`);
+    expect((await player.loads()).slice(-2).map(load => load.url)).toEqual([
+      `${base}master-v1a4.m3u8`, `${base}hls2.m3u8`,
+    ]);
     await expect.poll(() => player.state()).toBe('paused');
     const before = await player.loads();
     let release!: () => void;

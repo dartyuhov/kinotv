@@ -8,6 +8,14 @@ const files: VideoFile[] = [2160, 1080, 720].map((h, i) => ({ codec: 'h264', w: 
 const capabilities = { streams: ['hls4', 'hls2', 'http'] as const, hevc: true, uhd: true };
 
 describe('playback choices', () => {
+  it('keeps a validated direct media playlist playable in Auto without inventing a fixed rung', () => {
+    const source = { url: 'https://cdn.test/master-v1a2.m3u8', type: 'hls' as const, quality: '1080p',
+      manifest: parseManifest('#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nsegment.ts\n') };
+    const native = { ...capabilities, adaptiveBitrate: true };
+    expect(fallbackChoices([], native, 'auto', [source])).toEqual([{ ...source, fixed: false }]);
+    expect(fallbackChoices([], native, '1080p', [source])).toEqual([]);
+    expect(fixedQualities([], native, [source])).toEqual([]);
+  });
   it('identifies muxed HLS audio only from unanimous explicit variant URI selectors', () => {
     expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nhttps://cdn.test/signed/index-v1a4.m3u8?loc=de\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nlow/index-v1a4.m3u8').muxedAudioIndex).toBe(4);
     expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nindex-v1-a12.m3u8').muxedAudioIndex).toBe(12);

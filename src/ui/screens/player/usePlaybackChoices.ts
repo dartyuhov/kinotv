@@ -85,7 +85,9 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     // Independent of loading/native pause events. Returning never restores autoplay intent.
     if (!visible) { transport.playing = false; visibilityPauseIntent = true; }
   });
-  let activeChoice = -1;
+  let activeSource: SourceChoice | undefined;
+  const attemptedSources = new Set<string>();
+  const sourceKey = (source: SourceChoice) => JSON.stringify([source.url, source.type, source.fixed, source.fixedBandwidth]);
   let activeQuality = desiredQuality;
   let selectedServiceAudio: string | undefined;
   let identifiedSourceAudio: string | undefined;
@@ -207,10 +209,10 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
   const offError = player.on('error', () => {
     if (busy || disposed) return;
     chainStarted = Date.now(); // a later runtime failure gets its own bounded recovery window
-    void load(activeQuality, transport.position, transport.playing, activeChoice + 1);
+    void load(activeQuality, transport.position, transport.playing, true);
   });
 
-  async function load(quality: string, position: number, playing: boolean, from = 0, explicit?: SourceChoice[]) {
+  async function load(quality: string, position: number, playing: boolean, recovering = false, explicit?: SourceChoice[]) {
     const request = ++version;
     ++sourceVersion;
     subtitleAbort?.abort();
@@ -223,7 +225,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     update.externalPending(null);
     submittedExternal = null;
     update.notice('none');
-    if (from === 0) chainStarted = Date.now();
+    if (!recovering) { chainStarted = Date.now(); attemptedSources.clear(); }
     activeQuality = quality;
     nativeLaneUnsafe = false;
     transport = { position, playing: playing && !backgrounded && !visibilityPauseIntent };
@@ -235,10 +237,11 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       // Never silently switch to a different dub during quality/recovery.
       choices = verified;
     }
-    for (let index = from; index < choices.length; index++) {
+    for (let index = 0; index < choices.length; index++) {
       if (disposed || request !== version) return;
       if (Date.now() - chainStarted > 60_000) break;
       let source = choices[index]!;
+      if (attemptedSources.has(sourceKey(source))) continue;
       try {
         const abort = new AbortController();
         manifestAbort = abort;
@@ -252,6 +255,7 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
           --index;
           continue;
         }
+        attemptedSources.add(sourceKey(source));
         await player.load({ ...source, duration: video.duration, audios: video.audios, subtitles: links.subtitles, manifest }, { startAt: position });
         if (disposed || request !== version) return;
         // The muxed playlist explicitly selects container audio N. Service IDs
@@ -259,11 +263,11 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
         // uniquely, never array order or the firmware's fabricated language.
         const matches = manifest.muxedAudioIndex === undefined ? [] : video.audios.filter(audio => audio.index === manifest.muxedAudioIndex);
         identifiedSourceAudio = matches.length === 1 ? serviceOptions().find(option => option.id === `service-audio:${matches[0]!.id}:${matches[0]!.index}`)?.id : undefined;
-        activeChoice = index;
+        activeSource = { ...source, manifest };
         busy = false;
         update.busy(false);
         update.quality(source.fixed ? source.quality : 'auto');
-        if (index > 0) update.notice('fallback');
+        if (index > 0 || recovering) update.notice('fallback');
         if (transport.playing && !visibilityPauseIntent && !backgrounded && !document.hidden) player.play();
         refreshTracks();
         return true;
@@ -289,7 +293,9 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
     })));
     // A successful HTTP status alone can be an HTML error page. Require a real
     // HLS ladder/media playlist before disturbing the current native source.
-    const valid = inspected.filter(source => source.manifest.variants.length || source.manifest.mediaPlaylist);
+    const audio = video.audios.find(audio => `service-audio:${audio.id}:${audio.index}` === id)!;
+    const valid = inspected.filter(source => (source.manifest.variants.length || source.manifest.mediaPlaylist) &&
+      (source.manifest.muxedAudioIndex === undefined || source.manifest.muxedAudioIndex === audio.index));
     return fallbackChoices([], player.capabilities, quality, valid);
   }
 
@@ -303,9 +309,14 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       player.selectAudio(id);
       return;
     }
-    if ((selectedServiceAudio ?? identifiedSourceAudio) === id) return;
+    if ((selectedServiceAudio ?? identifiedSourceAudio) === id) {
+      selectedServiceAudio = id;
+      if (remember) { preference = { ...preference, audio: option.preferenceKey }; restoredAudio = `${sourceVersion}:${preference.audio}`; save(); }
+      return;
+    }
     const request = ++audioRequest;
-    const previous = selectedServiceAudio;
+    const previous = { selected: selectedServiceAudio, identified: identifiedSourceAudio, source: activeSource,
+      quality: activeQuality, attempted: new Set(attemptedSources) };
     pendingServiceAudio = id;
     audioValidating = true;
     busy = true;
@@ -321,15 +332,22 @@ function coordinator(player: PlayerAdapter, video: Video, links: MediaLinks, ser
       }
       const position = transport.position;
       const playing = transport.playing;
-      const success = await load(desiredQuality, position, playing, 0, choices);
+      const success = await load(desiredQuality, position, playing, false, choices);
       if (disposed || request !== audioRequest) return;
       pendingServiceAudio = undefined;
       if (success) {
         selectedServiceAudio = id;
         if (remember) { preference = { ...preference, audio: option.preferenceKey }; restoredAudio = `${sourceVersion}:${preference.audio}`; save(); }
       } else {
-        selectedServiceAudio = previous;
-        if (!nativeLaneUnsafe) await load(desiredQuality, position, playing);
+        selectedServiceAudio = previous.selected;
+        identifiedSourceAudio = previous.identified;
+        // A failed prepare has replaced the native source. Restore the exact working
+        // delivery/rung, not the general ladder (which may identify a different dub).
+        if (!nativeLaneUnsafe && previous.source) {
+          await load(previous.quality, position, playing, false, [previous.source]);
+          attemptedSources.clear();
+          for (const key of previous.attempted) attemptedSources.add(key);
+        }
         if (disposed || request !== audioRequest) return;
         update.notice('audioFailed');
       }
