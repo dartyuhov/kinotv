@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -8,20 +7,14 @@ import { PullRequestTitle } from 'release-please/build/src/util/pull-request-tit
 import { releaseVersionProblems } from '../project.ts';
 import { stageDraft } from '../draft.ts';
 import { kinoTvManifestVersion } from '../../tizen/configXml.ts';
+export { ghCli } from '../gh.ts';
+import { ghCli } from '../gh.ts';
 
 export const check = (condition, message) => { if (!condition) throw new Error(message); };
 const fullSha = /^[0-9a-f]{40}$/;
 const branch = 'release-please--branches--main--components--kinotv';
 const quiet = { warn() {}, info() {}, debug() {}, error() {}, trace() {} };
 
-// Every remote read/write crosses this boundary. Tests use an in-memory gh,
-// never a token or a live mutation. No automatic retries of ambiguous writes.
-export function ghCli(args, input) {
-  const result = spawnSync('gh', args, { input, maxBuffer: 128 * 1024 * 1024,
-    env: { ...process.env, GH_HOST: 'github.com', GH_PROMPT_DISABLED: '1' } });
-  if (result.error || result.status !== 0) throw new Error(`GitHub operation failed; inspect before retrying: ${result.error?.message ?? result.stderr?.toString()}`);
-  return result.stdout;
-}
 export class GitHub {
   constructor({ repo, gh = ghCli }) {
     check(repo === 'dartyuhov/kinotv', 'Expected dartyuhov/kinotv repository');

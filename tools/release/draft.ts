@@ -2,25 +2,14 @@
 // Run from the checked-out tagged project after release:assets. No OAuth secrets needed here.
 // The automatic publisher supplies validated approval identity and consumes the
 // returned release ID; standalone invocation remains strict draft-only.
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readProject, RELEASE_REPOSITORY, releaseProjectProblems } from './project.ts';
-
-/** GitHub CLI boundary. Binary bodies in both directions; tests inject an in-memory server. */
-export type Gh = (args: string[], input?: Buffer) => Buffer;
-const ghCli: Gh = (args, input) => {
-  const result = spawnSync('gh', args, {
-    input, maxBuffer: 128 * 1024 * 1024,
-    env: { ...process.env, GH_HOST: 'github.com', GH_PROMPT_DISABLED: '1' },
-  });
-  if (result.error || result.status !== 0) {
-    throw new Error(`gh failed; draft may be incomplete. Re-run after resolving the failure. ${result.error?.message ?? result.stderr?.toString()}`);
-  }
-  return result.stdout;
-};
+import { ghCli } from './gh.ts';
+export type { Gh } from './gh.ts';
+import type { Gh } from './gh.ts';
 
 const names = ['KinoTV.wgt', 'install.sh', 'kinotv-installer.mjs', 'SHA256SUMS'] as const;
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
