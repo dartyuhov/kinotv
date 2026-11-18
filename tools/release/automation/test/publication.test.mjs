@@ -63,7 +63,12 @@ function server() {
     else if (endpoint.startsWith('/commits/')) data = [pr];
     else if (endpoint.startsWith('/compare/')) data = { status: 'ahead' };
     else if (endpoint.startsWith('/actions/workflows/ci.yml/runs')) data = { workflow_runs: [{ id: 1, head_sha: head,
-      event: 'push', head_branch: pr.head.ref, head_repository: { full_name: repo }, path: '.github/workflows/ci.yml', status: 'completed', conclusion: 'success' }] };
+      event: 'pull_request', run_attempt: 1, head_branch: pr.head.ref,
+      repository: { full_name: repo }, head_repository: { full_name: repo },
+      pull_requests: [{ number: pr.number, url: `https://api.github.com/repos/${repo}/pulls/${pr.number}`,
+        head: { ref: pr.head.ref, sha: head, repo: { id: 1451566604, name: 'kinotv', url: `https://api.github.com/repos/${repo}` } },
+        base: { ref: 'main', sha: 'c'.repeat(40), repo: { id: 1451566604, name: 'kinotv', url: `https://api.github.com/repos/${repo}` } } }],
+      path: '.github/workflows/ci.yml', status: 'completed', conclusion: 'success' }] };
     else if (endpoint.startsWith('/git/matching-refs/')) data = state.tag ? [{ ref: 'refs/tags/v0.1.0', object: { type: 'commit', sha: state.tag } }] : [];
     else if (endpoint === '/git/refs') {
       assert.equal(body.sha, sha); assert.equal(body.ref, 'refs/tags/v0.1.0'); assert.equal(state.tag, undefined);

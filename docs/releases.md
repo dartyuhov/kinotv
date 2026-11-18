@@ -74,10 +74,25 @@ Release Please uses its locked Node strategy from the isolated
   label, and parseable generated release title/body matching package, lock,
   manifest, and changelog at its exact merge SHA. Titles/labels alone aren't
   sufficient. The merge must still belong to `main` history.
-- The latest trusted `CI` workflow push run at the exact release PR head must
-  succeed, or, if absent, the exact main merge run must succeed. A similar check
-  name from another workflow doesn't qualify. The publication workflow then
-  runs the full CI workflow again at the exact approved merge SHA before building.
+- Normal `CI` runs on pull requests and pushes to `main`, avoiding duplicate
+  feature-branch push checks. The `pull_request` trigger keeps its default events.
+  The publication workflow still calls the full CI workflow at the exact approved
+  merge SHA before building.
+- Approval first checks the latest trusted `pull_request` CI run at the merged
+  release PR's exact head SHA. The run must belong to this repository, use
+  `.github/workflows/ci.yml`, and link to that PR number with this repository as
+  both head and base, targeting `main`. The latest run and its latest attempt must
+  finish successfully; a queued, failed, cancelled, or skipped run blocks approval
+  even if main CI succeeds. Similar check names and feature-branch push runs
+  don't qualify.
+  If no matching PR run exists, only a successful latest `push` CI run on `main`
+  at the exact approved merge SHA qualifies. Missing PR associations don't prove
+  PR identity, so those runs require this fallback too.
+  The REST workflow-run `head_sha` identifies the PR head, distinct from the
+  synthetic merge `github.sha` checked out during PR CI. PR association head
+  metadata can change after branch updates; approval uses the immutable run SHA
+  and original PR identity, so reusing the managed release branch doesn't change
+  an earlier merged PR's approved source.
 - Packaging checks OAuth presence and source versions, builds that merge, and
   assembles exactly `KinoTV.wgt` (unsigned), `install.sh`,
   `kinotv-installer.mjs`, and `SHA256SUMS`. An internal source record binds the

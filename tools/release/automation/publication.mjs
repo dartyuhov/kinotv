@@ -110,14 +110,20 @@ export async function approve(api, { sourceSha, prNumber, bot }) {
 }
 
 async function trustedChecks(api, pr) {
-  // Latest run wins, including queued/failed reruns. Never accept a similarly
-  // named check produced by another App or another workflow.
-  for (const [sha, expectedBranch] of [[pr.head.sha, branch], [pr.merge_commit_sha, 'main']]) {
-    const runs = (await api.list(`/actions/workflows/ci.yml/runs?head_sha=${sha}`))
+  // REST head_sha is the PR head, not the synthetic merge github.sha tested by
+  // checkout. PR associations use minimal repo objects (url, not full_name).
+  const repoUrl = `https://api.github.com/repos/${api.repo}`;
+  for (const [sha, event, expectedBranch] of [[pr.head.sha, 'pull_request', branch], [pr.merge_commit_sha, 'push', 'main']]) {
+    const runs = (await api.list(`/actions/workflows/ci.yml/runs?event=${event}&head_sha=${sha}`))
       .filter(r => r.head_sha === sha && r.path === '.github/workflows/ci.yml' &&
-        r.event === 'push' && r.head_branch === expectedBranch && r.head_repository?.full_name === api.repo)
+        r.event === event && r.head_branch === expectedBranch && r.repository?.full_name === api.repo &&
+        r.head_repository?.full_name === api.repo && (event === 'push' || r.pull_requests?.some(p =>
+          p.number === pr.number && p.url === `${repoUrl}/pulls/${pr.number}` &&
+          p.head?.repo?.url === repoUrl && p.base?.repo?.url === repoUrl && p.base.ref === 'main')))
       .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt);
     if (runs.length) {
+      // Latest run/attempt wins, even when queued or failed. Main is only a
+      // fallback for absent trusted PR CI, never a bypass of a known failure.
       check(runs[0].status === 'completed' && runs[0].conclusion === 'success', 'Latest trusted CI is not successful; wait for CI and retry this merged release PR');
       return;
     }

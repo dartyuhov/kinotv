@@ -87,8 +87,12 @@ test('publisher accepts the actual Node strategy title, body, and updated files 
   }
   const api = { repo,
     async request(path) { return path.startsWith('/compare/') ? { status: 'ahead' } : merged; },
-    async list() { return [{ id: 1, head_sha: head, head_branch: pr.headRefName, event: 'push', path: '.github/workflows/ci.yml',
-      head_repository: { full_name: repo }, status: 'completed', conclusion: 'success' }]; },
+    async list() { return [{ id: 1, run_attempt: 1, head_sha: head, head_branch: pr.headRefName,
+      event: 'pull_request', path: '.github/workflows/ci.yml', repository: { full_name: repo },
+      head_repository: { full_name: repo }, status: 'completed', conclusion: 'success',
+      pull_requests: [{ number: 42, url: `https://api.github.com/repos/${repo}/pulls/42`,
+        head: { ref: pr.headRefName, sha: head, repo: { id: 1451566604, name: 'kinotv', url: `https://api.github.com/repos/${repo}` } },
+        base: { ref: 'main', sha: 'c'.repeat(40), repo: { id: 1451566604, name: 'kinotv', url: `https://api.github.com/repos/${repo}` } } }] }]; },
     async file(path, ref) { assert.equal(ref, sha); return Buffer.from(files[path]); },
   };
   const approval = await approve(api, { prNumber: 42, bot });
