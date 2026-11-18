@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { fakeFilm, fakeHome, fakeSerialProgress, fakeSeries, fakeTitle, filmProgress, seriesProgress } from './harness/catalog';
+import { solidPng } from './harness/fakeCdn';
 import type { Remote } from './harness/remote';
 import { expect, test } from './harness/test';
 
@@ -11,7 +12,9 @@ const heading = (page: Page) => page.getByRole('heading', { level: 1 });
  */
 async function openFromHero(page: Page, remote: Remote, { loads = true }: { loads?: boolean } = {}) {
   await expect(page.getByRole('button', { name: 'Смотреть' })).toBeVisible();
-  await remote.press('down', 'ok');
+  await remote.press('down');
+  await expect(page.locator('[data-focused="true"]')).toHaveAccessibleName('Смотреть');
+  await remote.press('ok');
   const titlePage = page.locator('[data-screen="title"]');
   await expect(titlePage).toBeVisible();
   if (loads) await expect(titlePage.locator('[role="button"][data-focused="true"]')).toHaveCount(1);
@@ -186,12 +189,16 @@ test.describe('a series', () => {
 
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await expect(episodes(page, 1).getByRole('button', { name: '3. Старые письма', exact: true })).toBeEnabled();
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('3. Старые письма'); // where the viewer is
+    await expect(episodes(page, 1).getByRole('button', { name: '4. Шторм', exact: true })).toBeEnabled();
     await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('4. Шторм');
 
-    await remote.press('up', 'right');
+    await remote.press('up');
+    await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('Сезон 2');
     await expect(page.getByRole('tab', { name: 'Сезон 2' })).toHaveAttribute('aria-selected', 'true');
     await expect(episodes(page, 2)).toMatchAriaSnapshot(`
@@ -200,63 +207,105 @@ test.describe('a series', () => {
         - button "2. Маяк"
     `);
     await expect(episodes(page, 1)).toHaveCount(0);
+    await expect(episodes(page, 2).getByRole('button', { name: '1. Отлив', exact: true })).toBeEnabled();
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('1. Отлив');
+    await expect(episodes(page, 2).getByRole('button', { name: '2. Маяк', exact: true })).toBeEnabled();
     await remote.press('right');
     await expect(app.focused).toHaveAccessibleName('2. Маяк');
 
     // Each season's row remembers its episode.
-    await remote.press('up', 'left', 'down');
+    await remote.press('up');
+    await expect(app.focused).toHaveAccessibleName('Сезон 2');
+    await remote.press('left');
+    await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await expect(episodes(page, 1).getByRole('button', { name: '4. Шторм', exact: true })).toBeEnabled();
+    await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('4. Шторм');
-    await remote.press('up', 'right', 'down');
+    await remote.press('up');
+    await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await remote.press('right');
+    await expect(app.focused).toHaveAccessibleName('Сезон 2');
+    await expect(episodes(page, 2).getByRole('button', { name: '2. Маяк', exact: true })).toBeEnabled();
+    await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('2. Маяк');
 
     // Up from the seasons goes back to Play/Resume.
-    await remote.press('up', 'up');
+    await remote.press('up');
+    await expect(app.focused).toHaveAccessibleName('Сезон 2');
+    await remote.press('up');
     await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
   });
 
-  test('toggles the selected episode watched and unwatched, keeping remote focus', async ({ app, api, page, remote }) => {
-    const marks: Parameters<typeof seriesProgress>[1] = [];
-    const home = fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: seriesProgress(HARBOUR, marks) } });
-    let release!: () => void;
-    const saved = new Promise<void>((resolve) => { release = resolve; });
-    api.on('GET', '/v1/watching/toggle', async (req) => {
-      await saved;
-      const season = Number(req.query.season);
-      const episode = Number(req.query.video);
-      const index = marks.findIndex(([s, e]) => s === season && e === episode);
-      if (index < 0) marks.push([season, episode, 'watched']);
-      else marks.splice(index, 1);
-      home.progress[HARBOUR.id] = seriesProgress(HARBOUR, marks);
-      return { json: { status: 200, watched: index < 0 ? 1 : 0 } };
+  for (const heldArtwork of [false, true]) {
+    test(`toggles the selected episode watched and unwatched, keeping remote focus${heldArtwork ? ' with delayed episode 2 artwork' : ''}`, async ({ app, api, page, remote }) => {
+      let releaseArtwork!: () => void;
+      const artworkHeld = new Promise<void>(resolve => { releaseArtwork = resolve; });
+      if (heldArtwork) {
+        // Hold later neighbours too so Right cannot skip the pending destination.
+        for (const episode of HARBOUR.seasons![0]!.episodes.slice(1)) {
+          await page.route(episode.thumbnail, async route => {
+            await artworkHeld;
+            await route.fulfill({ contentType: 'image/png', body: solidPng([1, 2, 3]) });
+          });
+        }
+      }
+      const marks: Parameters<typeof seriesProgress>[1] = [];
+      const home = fakeHome(api, { hot: [HARBOUR], movies: [], serials: [], progress: { [HARBOUR.id]: seriesProgress(HARBOUR, marks) } });
+      let release!: () => void;
+      const saved = new Promise<void>((resolve) => { release = resolve; });
+      api.on('GET', '/v1/watching/toggle', async (req) => {
+        await saved;
+        const season = Number(req.query.season);
+        const episode = Number(req.query.video);
+        const index = marks.findIndex(([s, e]) => s === season && e === episode);
+        if (index < 0) marks.push([season, episode, 'watched']);
+        else marks.splice(index, 1);
+        home.progress[HARBOUR.id] = seriesProgress(HARBOUR, marks);
+        return { json: { status: 200, watched: index < 0 ? 1 : 0 } };
+      });
+      await app.open();
+      await openFromHero(page, remote);
+      await remote.press('down');
+      await expect(app.focused).toHaveAccessibleName('Сезон 1');
+      await expect(episodes(page, 1).getByRole('button', { name: '1. Возвращение', exact: true })).toBeEnabled();
+      await remote.press('down');
+      await expect(app.focused).toHaveAccessibleName('1. Возвращение');
+      const destination = episodes(page, 1).getByRole('button', { name: '2. Причал', exact: true });
+      if (heldArtwork) {
+        try {
+          await expect(destination).toHaveAttribute('data-artwork', 'loading');
+          await expect(destination).toBeDisabled();
+          await remote.press('right');
+          await expect(app.focused).toHaveAccessibleName('1. Возвращение');
+        } finally {
+          releaseArtwork();
+        }
+      }
+      // A ready source card does not imply its destination has decoded.
+      await expect(destination).toBeEnabled();
+      await remote.press('right');
+      await expect(app.focused).toHaveAccessibleName('2. Причал');
+      await remote.press('down');
+      await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+      await remote.press('ok');
+      await expect(app.focused).toHaveAttribute('aria-disabled', 'true');
+      await expect(page.locator('.season-watched-actions').getByRole('status')).toHaveText('Сохранение…');
+      await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+      await remote.press('ok');
+      await expect.poll(() => api.requestsTo('GET', '/v1/watching/toggle').length).toBe(1);
+      release();
+      await expect(app.focused).toHaveAccessibleName('Отметить серию 2 непросмотренной');
+      await expect(app.focused).toHaveAttribute('aria-pressed', 'true');
+      await expect(app.focused).toHaveAttribute('aria-disabled', 'false');
+      await expect(episodes(page, 1).getByRole('button', { name: '2. Причал, просмотрено', exact: true })).toBeVisible();
+      await remote.press('ok');
+      await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
+      await expect(app.focused).toHaveAttribute('aria-pressed', 'false');
+      await expect(episodes(page, 1).getByRole('button', { name: '2. Причал', exact: true })).toBeVisible();
+      expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '2']);
     });
-    await app.open();
-    await openFromHero(page, remote);
-    await remote.press('down');
-    await expect(app.focused).toHaveAccessibleName('Сезон 1');
-    await remote.press('down');
-    await expect(app.focused).toHaveAccessibleName('1. Возвращение');
-    await remote.press('right');
-    await expect(app.focused).toHaveAccessibleName('2. Причал');
-    await remote.press('down');
-    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
-    await remote.press('ok');
-    await expect(app.focused).toHaveAttribute('aria-disabled', 'true');
-    await expect(page.locator('.season-watched-actions').getByRole('status')).toHaveText('Сохранение…');
-    await remote.press('ok');
-    await expect.poll(() => api.requestsTo('GET', '/v1/watching/toggle').length).toBe(1);
-    release();
-    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 непросмотренной');
-    await expect(app.focused).toHaveAttribute('aria-pressed', 'true');
-    await expect(app.focused).toHaveAttribute('aria-disabled', 'false');
-    await expect(episodes(page, 1).getByRole('button', { name: '2. Причал, просмотрено', exact: true })).toBeVisible();
-    await remote.press('ok');
-    await expect(app.focused).toHaveAccessibleName('Отметить серию 2 просмотренной');
-    await expect(app.focused).toHaveAttribute('aria-pressed', 'false');
-    await expect(episodes(page, 1).getByRole('button', { name: '2. Причал', exact: true })).toBeVisible();
-    expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '2']);
-  });
+  }
 
   test('marks a partial season fully watched, then toggles the whole season unwatched', async ({ app, api, page, remote }, testInfo) => {
     const marks: Parameters<typeof seriesProgress>[1] = [[1, 1, 'watched']];
@@ -274,6 +323,7 @@ test.describe('a series', () => {
     await openFromHero(page, remote);
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('Сезон 1');
+    await expect(episodes(page, 1).getByRole('button', { name: '2. Причал', exact: true })).toBeEnabled();
     await remote.press('down');
     await expect(app.focused).toHaveAccessibleName('2. Причал');
     await remote.press('down');
@@ -286,6 +336,7 @@ test.describe('a series', () => {
     await expect(episodes(page, 1).getByRole('button', { name: /просмотрено/ })).toHaveCount(4);
     expect(api.requestsTo('GET', '/v1/watching/toggle').map((req) => req.query.video)).toEqual(['2', '3', '4']);
     await testInfo.attach('season-watched-actions', { body: await page.screenshot(), contentType: 'image/png' });
+    await expect(app.focused).toHaveAccessibleName('Отметить сезон 1 непросмотренным');
     await remote.press('ok');
     await expect(app.focused).toHaveAccessibleName('Отметить сезон 1 просмотренным');
     await expect(episodes(page, 1).getByRole('button', { name: /просмотрено/ })).toHaveCount(0);
@@ -328,8 +379,12 @@ test.describe('a series', () => {
       await remote.press('back', 'back'); // hide the controls, then leave
       await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
 
-      // Wait for row entry before Right, which would otherwise switch the season tab.
-      await remote.press('down', 'right', 'down');
+      await remote.press('down');
+      await expect(app.focused).toHaveAccessibleName('Сезон 1');
+      await remote.press('right');
+      await expect(app.focused).toHaveAccessibleName('Сезон 2');
+      await expect(episodes(page, 2).getByRole('button', { name: '1. Отлив', exact: true })).toBeEnabled();
+      await remote.press('down');
       await expect(app.focused).toHaveAccessibleName('1. Отлив');
       await expect(episodes(page, 2).getByRole('button', { name: '2. Маяк', exact: true })).toBeEnabled();
       await remote.press('right');
@@ -361,7 +416,11 @@ test('Home card → title → episode → player, and Back all the way returns t
   fakeTitle(api, HARBOUR);
   await app.open();
   await expect(page.getByRole('button', { name: 'Смотреть', exact: true })).toBeVisible();
-  await remote.press('down', 'down'); // hero, Continue watching
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Смотреть');
+  await expect(page.getByRole('region', { name: 'Продолжить просмотр' })
+    .getByRole('button', { name: 'Дождь', exact: true })).toBeEnabled();
+  await remote.press('down');
   await expect(app.focused).toHaveAccessibleName('Дождь');
   await expect(page.getByRole('region', { name: 'Продолжить просмотр' })
     .getByRole('button', { name: 'Тихая гавань, S1 · E3', exact: true })).toBeEnabled();
@@ -371,7 +430,10 @@ test('Home card → title → episode → player, and Back all the way returns t
   await remote.press('ok');
   await expect(heading(page)).toHaveText('Тихая гавань');
   await expect(app.focused).toHaveAccessibleName('Продолжить S1 · E3');
-  await remote.press('down', 'down');
+  await remote.press('down');
+  await expect(app.focused).toHaveAccessibleName('Сезон 1');
+  await expect(page.getByRole('button', { name: '3. Старые письма', exact: true })).toBeEnabled();
+  await remote.press('down');
   await expect(app.focused).toHaveAccessibleName('3. Старые письма');
   await expect(page.getByRole('button', { name: '4. Шторм', exact: true })).toBeEnabled();
   await remote.press('right');
