@@ -56,10 +56,13 @@ describe('the CI workflow', () => {
   const ci = workflow('ci.yml');
   const lines = runLines(ci);
 
-  it('runs on every push to a branch and every pull request, and can be called by the release workflow', () => {
+  it('runs on main pushes and every pull request, and preserves exact-source release calls', () => {
     expect(Object.keys(ci.on).sort()).toEqual(['pull_request', 'push', 'workflow_call']);
-    // Every branch. Tags are left to the release workflow, which runs this one itself.
-    expect(ci.on.push).toEqual({ branches: ['**'] });
+    expect(ci.on.push).toEqual({ branches: ['main'] });
+    expect(ci.on.pull_request).toBeNull();
+    expect(ci.on.workflow_call).toEqual({ inputs: {
+      source_sha: { description: 'Exact approved main merge to test', required: true, type: 'string' },
+    } });
   });
 
   it('runs the typecheck, the unit tests, the e2e tests and the build', () => {
