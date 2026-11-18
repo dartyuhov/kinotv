@@ -37,8 +37,8 @@ export function restoreArtworkFocus(target: string, fallback: string): boolean {
 }
 
 /** Scroll/load an incoming container without leaving focus on an invisible leaf. */
-export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferred?: string, prepareRestore?: () => void) {
-  const pending = useRef<{ from?: string; navigation: number; target?: string }>();
+export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferred?: string, prepareRestore?: () => void, resolveRestore?: (target: string) => string | undefined) {
+  const pending = useRef<{ from?: string; navigation: number; target?: string; restore?: boolean }>();
   const [revision, retry] = useState(0);
   useEffect(() => {
     if (!observers++) window.addEventListener('keydown', beforeNavigation, true);
@@ -61,10 +61,19 @@ export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferr
       pending.current = undefined;
       return;
     }
+    // Readiness alone cannot distinguish an undecoded leaf from one removed by
+    // a refetch. The owner knows its complete list, including virtualised cards.
+    if (request?.restore && request.target && resolveRestore) {
+      request.target = resolveRestore(request.target);
+      if (!request.target) {
+        pending.current = undefined;
+        return;
+      }
+    }
     if (!request || !(request.target ? ready.has(request.target) : ready.size)) return;
     pending.current = undefined;
     if (request.navigation === navigation && (request.from === undefined || getCurrentFocusKey() === request.from)) void setFocus(request.target ?? key);
-  }, [key, ready, revision]);
+  }, [key, ready, revision, resolveRestore]);
   const request = useCallback((target: string) => {
     pending.current = { from: getCurrentFocusKey(), navigation, target };
     retry(value => value + 1);
@@ -74,7 +83,7 @@ export function useArtworkFocus(key: string, ready: ReadonlySet<string>, preferr
       prepareRestore?.();
       // The old screen's key can still be current while Norigin schedules the
       // fallback. Restoration is owned by this navigation until another key.
-      pending.current = { navigation, target };
+      pending.current = { navigation, target, restore: true };
       retry(value => value + 1);
     });
     return () => { artworkRestorers.delete(key); };

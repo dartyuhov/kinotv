@@ -3,7 +3,7 @@ import { fakeBookmarks } from './harness/bookmarks';
 import { fakeFilm, fakeHome, fakeItem, fakeTitle } from './harness/catalog';
 import type { FakeResponse } from './harness/fakeApi';
 import type { Remote } from './harness/remote';
-import { expect, browsingTest as test } from './harness/test';
+import { expect, browsingTest as test, test as readinessTest } from './harness/test';
 
 const LATER = fakeItem(401, 'Долгая дорога / The Long Road', { year: 2020 });
 const ISLAND = fakeItem(402, 'Остров / The Island', { type: 'serial', year: 2023 });
@@ -76,7 +76,91 @@ test.describe('the Bookmarks tab', () => {
     await remote.press('back');
     await expect(folderRow(page, 'Посмотреть позже').getByRole('button')).toHaveText(['Долгая дорога']);
     await expect(app.focused).toHaveAccessibleName('Долгая дорога');
+    await remote.press('ok');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Долгая дорога');
+    await remote.press('back');
+    await expect(app.focused).toHaveAccessibleName('Долгая дорога');
   });
+
+  for (const outcome of ['remaining', 'canceled', 'empty folder', 'empty bookmarks'] as const) {
+    readinessTest(`Back after external removal handles ${outcome} without reviving the deleted card`, async ({ app, api, page, remote }) => {
+      const bookmarks = fakeBookmarks(api, [
+        { id: 1, title: 'Посмотреть позже', items: [LATER, ISLAND] },
+        { id: 2, title: 'Любимое', items: [LIGHTHOUSE] },
+      ]);
+      for (const item of [ISLAND, LATER, LIGHTHOUSE]) fakeTitle(api, item);
+      await page.addInitScript(() => {
+        const decode = HTMLImageElement.prototype.decode;
+        const control = { hold: false, releases: [] as (() => void)[] };
+        Object.assign(window, { bookmarkDecode: control });
+        HTMLImageElement.prototype.decode = async function () {
+          await decode.call(this);
+          if (control.hold && this.classList.contains('card__image')) {
+            await new Promise<void>(resolve => control.releases.push(resolve));
+          }
+        };
+      });
+      await app.open();
+      await openBookmarksTab(page, remote);
+      await expect(folderRow(page, 'Посмотреть позже').getByRole('button', { name: 'Остров', exact: true })).toHaveAttribute('data-artwork', 'ready');
+      await remote.press('down', 'down', 'right');
+      await expect(app.focused).toHaveAccessibleName('Остров');
+      await remote.press('ok');
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText('Остров');
+
+      const empty = outcome.startsWith('empty');
+      bookmarks.folder(1).items = empty ? [] : [LATER, LIGHTHOUSE];
+      if (outcome === 'empty bookmarks') bookmarks.folder(2).items = [];
+      const refresh = heldAnswer();
+      api.on('GET', '/v1/bookmarks/1', refresh.handler);
+      await page.evaluate(() => { window.bookmarkDecode.hold = true; });
+      await remote.press('back');
+      await expect(app.focused).toHaveAccessibleName('Закладки');
+      refresh.answer({ json: {
+        status: 200, items: bookmarks.folder(1).items,
+        pagination: { total: 1, current: 1, perpage: 10, total_items: bookmarks.folder(1).items.length },
+      } });
+
+      if (outcome === 'empty bookmarks') {
+        await expect(page.getByText('Закладок пока нет')).toBeVisible();
+      } else if (empty) {
+        await expect(folderRow(page, 'Посмотреть позже').getByRole('button')).toHaveCount(0);
+      } else {
+        const remaining = folderRow(page, 'Посмотреть позже').getByRole('button', { name: 'Долгая дорога', exact: true });
+        await expect(folderRow(page, 'Посмотреть позже').getByRole('button')).toHaveText(['Долгая дорога', 'Маяк']);
+        await expect(remaining).toHaveAttribute('data-artwork', 'loading');
+        await expect.poll(() => page.evaluate(() => window.bookmarkDecode.releases.length)).toBeGreaterThan(0);
+        await expect(app.focused).toHaveAccessibleName('Закладки');
+      }
+      if (outcome === 'canceled') await remote.press('up');
+      await page.evaluate(() => {
+        const control = window.bookmarkDecode;
+        control.hold = false;
+        control.releases.forEach(release => release());
+      });
+      if (outcome === 'remaining') {
+        await expect(app.focused).toHaveAccessibleName('Долгая дорога');
+        await expect(app.focused).toHaveAttribute('data-artwork', 'ready');
+        await remote.press('right');
+        await expect(app.focused).toHaveAccessibleName('Маяк');
+        await remote.press('ok');
+        await expect(page.getByRole('heading', { level: 1 })).toHaveText('Маяк');
+        await remote.press('back');
+        await expect(app.focused).toHaveAccessibleName('Маяк');
+      } else {
+        if (!empty) await expect(page.getByRole('button', { name: 'Долгая дорога', exact: true })).toHaveAttribute('data-artwork', 'ready');
+        await expect(app.focused).toHaveAccessibleName('Закладки');
+        await remote.press('down');
+        await expect(app.focused).toHaveAccessibleName(outcome === 'empty bookmarks' ? 'Город без света' : 'Посмотреть позже');
+        if (outcome === 'empty folder') {
+          await remote.press('right');
+          await expect(page.getByRole('button', { name: 'Маяк', exact: true })).toHaveAttribute('data-artwork', 'ready');
+          await remote.press('down');
+          await expect(app.focused).toHaveAccessibleName('Маяк');
+        }
+      }
+    });
+  }
 
   test('with no bookmarks, says so and suggests what is popular', async ({ app, page, remote }) => {
     await app.open(); // every test starts with no folders
@@ -100,6 +184,12 @@ test.describe('the Bookmarks tab', () => {
     await expect(folderTab(page, 'Посмотреть позже')).toHaveCount(0);
   });
 });
+
+declare global {
+  interface Window {
+    bookmarkDecode: { hold: boolean; releases: (() => void)[] };
+  }
+}
 
 const RIVER = fakeFilm(21, 'Медленная река / Slow River', { year: 2019 });
 
@@ -179,12 +269,13 @@ test.describe('the Bookmark button on a title page', () => {
     await remote.press('back', 'back');
     await expect(folderRow(page, 'Посмотреть позже').getByRole('button')).toHaveText(['Долгая дорога']);
     await expect(folderTab(page, 'Посмотреть позже')).toContainText('1');
-    // The title the viewer opened has left the folder, so focus goes back to the tab.
-    await expect(app.focused).toHaveAccessibleName('Закладки');
+    // The opened title has left the folder: restore the first surviving card,
+    // even when the optimistic cache already omitted the saved leaf on mount.
+    await expect(app.focused).toHaveAccessibleName('Долгая дорога');
     // And it stays that way: the tab's refresh can't bring back the server's state from before the write.
     await page.waitForTimeout(500);
     await expect(folderRow(page, 'Посмотреть позже').getByRole('button')).toHaveText(['Долгая дорога']);
-    await remote.press('down', 'right');
+    await remote.press('up', 'right');
     await expect(folderTab(page, 'Любимое')).toHaveAttribute('aria-selected', 'true');
     await expect(folderRow(page, 'Любимое').getByRole('button')).toHaveText(['Медленная река', 'Маяк']);
     await expect(folderTab(page, 'Любимое')).toContainText('2');
