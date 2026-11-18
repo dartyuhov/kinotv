@@ -16,6 +16,7 @@ export type FakePlayerCall =
   | { op: 'seek'; to: number }
   | { op: 'selectAudio'; id: string }
   | { op: 'selectSubtitle'; id: string | null }
+  | { op: 'setExternalSubtitle' }
   | { op: 'selectQuality'; id: string }
   | { op: 'suspend' }
   | { op: 'restore' }
@@ -23,6 +24,8 @@ export type FakePlayerCall =
 
 /** Set by tests before the player opens. Applies to every later load; `loadError` to the next one only. */
 export interface FakePlayerScript {
+  loadDelayMs?: number;
+  adaptiveBitrate?: boolean;
   duration?: number;
   loadError?: PlayerErrorKind;
   tracks?: Partial<Tracks>;
@@ -42,6 +45,7 @@ export interface FakePlayerControl {
   end(): void;
   /** The stream fails. */
   fail(kind: PlayerErrorKind): void;
+  confirmExternal(): void;
 }
 
 const TICK_MS = 250;
@@ -53,12 +57,13 @@ let script: FakePlayerScript = {};
 let current: FakePlayer | null = null;
 
 class FakePlayer implements PlayerAdapter {
-  readonly capabilities = { streams: ['hls4', 'hls2', 'hls', 'http'] as const, hevc: true };
+  get capabilities() { return { streams: ['hls4', 'hls2', 'hls', 'http'] as const, hevc: true, adaptiveBitrate: script.adaptiveBitrate }; }
   state: PlaybackState = 'idle';
   position = 0;
   duration = 0;
   private buffering = false;
   private tracks: Tracks = NO_TRACKS;
+  private externalPath?: string;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private readonly events = createEmitter();
   readonly on = this.events.on;
@@ -67,7 +72,8 @@ class FakePlayer implements PlayerAdapter {
     calls.push({ op: 'load', url: source.url, startAt });
     this.stopTicking();
     this.setState('loading');
-    await Promise.resolve();
+    if (script.loadDelayMs) await new Promise((resolve) => setTimeout(resolve, script.loadDelayMs));
+    else await Promise.resolve();
     const { loadError } = script;
     if (loadError) {
       script = { ...script, loadError: undefined };
@@ -116,6 +122,16 @@ class FakePlayer implements PlayerAdapter {
 
   selectSubtitle(id: string | null): void {
     calls.push({ op: 'selectSubtitle', id });
+  }
+
+  async setExternalSubtitle(path: string): Promise<void> {
+    this.externalPath = path;
+    calls.push({ op: 'setExternalSubtitle' });
+  }
+
+  confirmExternal(): void {
+    this.tracks = { ...this.tracks, externalSubtitle: { selected: true, pending: false, path: this.externalPath }, subtitlesOff: false };
+    this.events.emit('tracks', undefined);
   }
 
   async selectQuality(id: string): Promise<void> {
@@ -217,6 +233,7 @@ export function installFakePlayerControl(): void {
     buffering: (on) => current?.cueBuffering(on),
     end: () => current?.finish(),
     fail: (kind) => current?.fail(kind),
+    confirmExternal: () => current?.confirmExternal(),
   };
   (window as unknown as { __kinotvFakePlayer: FakePlayerControl }).__kinotvFakePlayer = control;
 }

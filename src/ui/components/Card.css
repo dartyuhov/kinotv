@@ -13,6 +13,12 @@
   height: var(--card-landscape-height);
 }
 
+/* Preserve layout/visibility observation while revealing the whole card atomically. */
+.card[data-artwork='loading'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .card--poster {
   width: var(--card-poster-width);
   height: var(--card-poster-height);

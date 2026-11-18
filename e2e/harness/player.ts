@@ -13,6 +13,7 @@ export type PlayerCall =
   | { op: 'seek'; to: number }
   | { op: 'selectAudio'; id: string }
   | { op: 'selectSubtitle'; id: string | null }
+  | { op: 'setExternalSubtitle' }
   | { op: 'selectQuality'; id: string }
   | { op: 'suspend' }
   | { op: 'restore' }
@@ -22,14 +23,19 @@ export type PlayerState = 'idle' | 'loading' | 'paused' | 'playing' | 'ended' | 
 
 /** What the next `load` finds. Set it before the player screen opens. */
 export interface PlayerScript {
+  /** Deferred prepare boundary for cancellation/race journeys. */
+  loadDelayMs?: number;
+  /** Exercise native-style adaptive source coordination without simulating decoding. */
+  adaptiveBitrate?: boolean;
   /** Seconds. Default: the duration kino.watch gives for the video. */
   duration?: number;
   /** Make the next load fail with this error kind. */
   loadError?: 'network' | 'media' | 'unsupported';
   /** Scripted tracks the stream reports once loaded. */
   tracks?: {
-    audio?: Array<{ id: string; label: string; lang: string }>;
-    subtitles?: Array<{ id: string; label: string; lang: string }>;
+    audio?: Array<{ id: string; label: string; lang: string; selected?: boolean; pending?: boolean }>;
+    subtitles?: Array<{ id: string; label: string; lang: string; selected?: boolean; pending?: boolean }>;
+    subtitlesOff?: boolean;
     qualities?: Array<{ id: string; label: string }>;
   };
 }
@@ -44,6 +50,7 @@ interface FakePlayerControl {
   buffering(on: boolean): void;
   end(): void;
   fail(kind: string): void;
+  confirmExternal(): void;
 }
 
 type FakeWindow = Window & { __kinotvFakePlayer: FakePlayerControl };
@@ -51,6 +58,10 @@ type FakeWindow = Window & { __kinotvFakePlayer: FakePlayerControl };
 /** Reads what the FakePlayer was asked to do and gives it cues (time, buffering, end, errors). */
 export class FakePlayerRemote {
   constructor(private readonly page: Page) {}
+
+  async confirmExternal(): Promise<void> {
+    await this.page.evaluate(() => (window as unknown as FakeWindow).__kinotvFakePlayer.confirmExternal());
+  }
 
   /** Every call the app made to the player, in order. */
   calls(): Promise<PlayerCall[]> {

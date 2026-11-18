@@ -1,52 +1,42 @@
+import { fakeCatalog, fakeFilm, fakeHome } from './harness/catalog';
 import { expect, test } from './harness/test';
 
-test('Back from pushed screens returns to each previous screen with the same element focused', async ({ app, remote, page }) => {
-  const heading = page.getByRole('heading', { level: 1 });
+test('Back through catalog, title and player restores each original focused element', async ({ app, api, remote, page, player }) => {
+  const films = [fakeFilm(801, 'First film'), fakeFilm(802, 'Second film')];
+  fakeHome(api, { hot: films });
+  fakeCatalog(api, { items: () => films });
   await app.open();
-  await remote.repeat('right', 4); // ТВ, still a placeholder with demo actions
-  await remote.press('ok', 'down'); // its screen → second action
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 2');
-
+  await remote.press('right', 'ok');
+  await expect(app.focused).toHaveAccessibleName('First film');
+  await remote.press('right', 'ok');
+  await expect(page.locator('[data-screen="title"]')).toBeVisible();
+  await expect(app.focused).toHaveAccessibleName('Смотреть');
   await remote.press('ok');
-  await expect(heading).toHaveText('Демо-экран 2');
+  await expect.poll(() => player.state()).toBe('playing');
   await expect(page.getByRole('tablist')).toBeHidden();
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 3');
-
-  await remote.press('ok');
-  await expect(heading).toHaveText('Демо-экран 3');
-
+  await remote.press('back', 'back');
+  await expect(app.focused).toHaveAccessibleName('Смотреть');
   await remote.press('back');
-  await expect(heading).toHaveText('Демо-экран 2');
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 3');
-
-  await remote.press('back');
-  await expect(heading).toHaveText('ТВ');
-  await expect(page.getByRole('tab', { name: 'ТВ' })).toHaveAttribute('aria-selected', 'true');
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 2');
+  await expect(app.focused).toHaveAccessibleName('Second film');
+  await expect(page.getByRole('tab', { name: 'Фильмы' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('focus scrolls the screen, and Back restores the scroll position', async ({ app, remote, page }) => {
-  const heading = page.getByRole('heading', { level: 1 });
+test('Back from a live channel restores the virtualized grid page and original focus', async ({ app, api, remote, page, player }) => {
+  api.on('GET', '/v1/tv', { json: { channels: Array.from({ length: 60 }, (_, i) => ({ id: i + 1, title: `Channel ${i + 1}`, stream: `https://live.test/${i + 1}` })) } });
   await app.open();
-  await remote.repeat('right', 4); // ТВ, still a placeholder with demo actions
-  await remote.press('ok'); // its screen
-  await expect(heading).toHaveText('ТВ');
-  const unscrolled = await heading.boundingBox();
-
-  await remote.repeat('down', 7);
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 8');
+  await remote.press('right', 'right', 'right', 'right', 'ok');
+  await expect(app.focused).toHaveAccessibleName('Channel 1, Прямой эфир');
+  await remote.press('channelDown', 'channelDown', 'down');
+  await expect(app.focused).toHaveAccessibleName('Channel 21, Прямой эфир');
   await expect(app.focused).toBeInViewport({ ratio: 1 });
-  // Back up a little: the screen stays scrolled, which focusing this action from the top wouldn't do.
-  await remote.repeat('up', 2);
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 6');
-  // The heading isn't transformed by focus effects, so its position shows how far the screen scrolled.
-  const scrolled = await heading.boundingBox();
-  expect(scrolled!.y).toBeLessThan(unscrolled!.y);
-
+  const track = page.locator('[data-grid="tv:grid"] .grid__track');
+  // Compare the destination, not an intermediate animation frame.
+  const before = await track.evaluate((el) => (el as HTMLElement).style.transform);
   await remote.press('ok');
-  await expect(heading).toHaveText('Демо-экран 6');
-  await remote.press('back');
-
-  await expect(app.focused).toHaveAccessibleName('Открыть демо-экран 6');
-  expect(await heading.boundingBox()).toEqual(scrolled);
+  await expect.poll(() => player.state()).toBe('playing');
+  await remote.press('channelUp');
+  await expect(page.locator('[data-screen="livePlayer"] h1')).toHaveText('Channel 22');
+  await remote.press('back', 'back');
+  await expect(app.focused).toHaveAccessibleName('Channel 21, Прямой эфир');
+  expect(await track.evaluate((el) => (el as HTMLElement).style.transform)).toBe(before);
 });

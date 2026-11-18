@@ -3,7 +3,7 @@ import { networkInterfaces } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { unzipSync } from 'fflate';
 import { APP_ID, APP_NAME } from './configXml.ts';
-import { findTool, loadSettings, ok, print, run, runAttached, setupCommand, UserError, warn } from './host.ts';
+import { findTool, loadSettings, ok, print, run, setupCommand, UserError, warn } from './host.ts';
 import { copyWidget, createUnsignedWgt } from './wgt.ts';
 
 export interface TizenTools {
@@ -71,7 +71,7 @@ export function connectTv(sdb: string, address: string): ConnectedTv {
   ]);
 }
 
-function requireTv(sdb: string): ConnectedTv {
+export function requireTv(sdb: string): ConnectedTv {
   const { tv } = loadSettings();
   if (!tv) {
     throw new UserError('No TV address saved.', [`Run ${setupCommand()} to connect a TV, or set KINOTV_TV=<tv-ip>.`]);
@@ -101,14 +101,15 @@ export function signWidget(tizen: string, profile: string, appDir: string, outDi
   const stage = join(outDir, 'widget');
   rmSync(stage, { recursive: true, force: true });
   copyWidget(appDir, stage); // tizen package writes its signature files into the folder it signs
+  const file = join(outDir, WGT_NAME);
+  rmSync(file, { force: true }); // a successful CLI exit is not proof it produced a new package
   const result = run(tizen, ['package', '-t', 'wgt', '-s', profile, '-o', outDir, '--', stage]);
   rmSync(stage, { recursive: true, force: true });
-  const file = join(outDir, WGT_NAME);
   const signed = existsSync(file) && 'author-signature.xml' in unzipSync(readFileSync(file));
   if (result.code !== 0 || !signed) {
     throw new UserError(`tizen package could not sign the app with profile "${profile}".`, [
       ...result.output.trim().split('\n').map((line) => `| ${line}`),
-      `Check the certificate passwords with \`tizen security-profiles list\`, or recreate the profile with ${setupCommand()}.`,
+      `Check the profile with \`tizen security-profiles list\` and the certificate passwords in Certificate Manager. Run ${setupCommand()} to select or restore it; updates must keep the original author certificate.`,
     ]);
   }
   return file;
@@ -140,7 +141,7 @@ export function packageWidget(appDir: string, outDir: string, signing: { require
   if (signing.required) {
     throw new UserError(`Can't make a signed package: ${whyUnsigned}.`, [
       'A TV only installs packages signed with a Samsung certificate for that TV.',
-      `Run ${setupCommand()} to create or select the certificate profile.`,
+      `Run ${setupCommand()} to select or restore the original author certificate/profile for an update, or create one for a first installation.`,
     ]);
   }
   const file = join(outDir, WGT_NAME);
@@ -148,7 +149,7 @@ export function packageWidget(appDir: string, outDir: string, signing: { require
   return { file, signedWith: null };
 }
 
-function describePackage({ file, signedWith }: Packaged): void {
+export function describePackage({ file, signedWith }: Packaged): void {
   const where = relative(process.cwd(), file);
   if (signedWith) {
     ok(`Signed package: ${where} (profile "${signedWith}")`);
@@ -165,17 +166,18 @@ export async function packageCommand(options: { from?: string; out?: string }): 
   describePackage(packageWidget(appDir, outDir, { required: false }));
 }
 
-function requireProfile(tizen: string): string {
+export function requireProfile(tizen: string): string {
   const { profile } = loadSettings();
   if (!profile) {
     throw new UserError('No security profile saved.', [
       'The TV only installs apps signed with a Samsung certificate made for it.',
-      `Run ${setupCommand()} to create one, or set KINOTV_TIZEN_PROFILE=<profile name>.`,
+      `Run ${setupCommand()} to select or restore the original author certificate/profile for an update, or create one for a first installation. You can also set KINOTV_TIZEN_PROFILE=<profile name>.`,
     ]);
   }
   if (!listProfiles(tizen).includes(profile)) {
     throw new UserError(`Security profile "${profile}" was not found in the Tizen CLI.`, [
       `See the profiles you have with \`tizen security-profiles list\`, then run ${setupCommand()} again.`,
+      'For an update, recover or import the original author certificate; a new certificate with the same profile name cannot update the installed copy.',
     ]);
   }
   return profile;
@@ -185,19 +187,23 @@ function requireProfile(tizen: string): string {
 function installFailureSteps(output: string): string[] {
   if (/118,\s*-11|author certificate not match/i.test(output)) {
     return [
-      'KinoTV is already on the TV, signed with a different author certificate. Remove it first:',
-      `  tizen uninstall -p ${APP_ID} -s <tv-ip>:26101   (or delete it from Apps on the TV), then run this again.`,
+      'KinoTV is already on the TV, signed with a different author certificate.',
+      'Recover or import the original author.p12 and its password in Certificate Manager, then select that profile and sign again.',
+      'A new certificate under the same Samsung account or profile name does not preserve the author identity.',
+      `Check \`tizen security-profiles list\`, then run ${setupCommand()} or set KINOTV_TIZEN_PROFILE=<original profile name>.`,
+      'Uninstalling removes local session/settings and requires sign-in again. Consider it only as a deliberate last resort if the original author certificate cannot be recovered.',
     ];
   }
   if (/118,\s*-12|invalid certificate chain|1010/i.test(output)) {
     return [
       "The certificate doesn't allow this TV. Its distributor certificate must list this TV's DUID.",
-      `Run ${setupCommand()} to read the DUID and recreate the Samsung certificate.`,
+      `Run ${setupCommand()} to read the DUID. Renew or replace the distributor certificate in Certificate Manager while keeping the original author certificate.`,
     ];
   }
   return [
-    'Read the log above for the reason. Removing the old app first can help:',
-    `  tizen uninstall -p ${APP_ID} -s <tv-ip>:26101`,
+    'Read the log above for the reason. Check the TV connection, installation permission, certificate validity and distributor DUID before retrying.',
+    'For an update, recover or import the original author certificate/profile and sign again; do not create a new author identity.',
+    'Uninstalling removes local session/settings and requires sign-in again. Consider it only as a deliberate last resort after diagnosis and certificate recovery attempts.',
   ];
 }
 
@@ -221,7 +227,7 @@ export function launch(tizen: string, tv: ConnectedTv): void {
 }
 
 /** Starts the app with the Web Inspector enabled and forwards its port to this Mac. */
-function launchForDebugging(sdb: string, tv: ConnectedTv): void {
+export function launchForDebugging(sdb: string, tv: ConnectedTv): void {
   const result = run(sdb, ['-s', tv.serial, 'shell', '0', 'debug', APP_ID]);
   const port = /port:\s*(\d+)/.exec(result.output)?.[1];
   if (!port) {
@@ -235,21 +241,4 @@ function launchForDebugging(sdb: string, tv: ConnectedTv): void {
   print(`  Or open chrome://inspect in Chrome → Configure… → add localhost:${port}.`);
   print('  Samsung notes that recent Chrome versions may not work with the TV inspector; an older Chromium helps.');
   print('  The connection closes when the app exits.');
-}
-
-export async function tvCommand(options: { debug: boolean; build: boolean }): Promise<void> {
-  // Check everything that needs the user first, so a missing TV doesn't cost a build.
-  const tools = requireTools();
-  const tv = requireTv(tools.sdb);
-  requireProfile(tools.tizen);
-
-  if (options.build) {
-    print('\nBuilding…');
-    if ((await runAttached('npm', ['run', 'build'])) !== 0) throw new UserError('The build failed (see above).');
-  }
-  const packaged = packageWidget(resolve('dist'), resolve('dist-tizen'), { required: true });
-  describePackage(packaged);
-  install(tools.tizen, tv, packaged.file);
-  if (options.debug) launchForDebugging(tools.sdb, tv);
-  else launch(tools.tizen, tv);
 }

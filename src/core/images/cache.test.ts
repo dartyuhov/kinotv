@@ -115,6 +115,60 @@ it('publishes validated artwork before a slow disk write finishes', async () => 
   lease.release();
 });
 
+it('downloads and displays unrelated uncached artwork while a previous admission write is blocked', async () => {
+  const inner = createBrowserImageStore();
+  let finishWrite!: () => void;
+  let blocked = true;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    if (blocked) {
+      blocked = false;
+      await new Promise<void>((resolve) => { finishWrite = resolve; });
+    }
+    await inner.writeTemporary(key, blob);
+  } };
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const cache = createImageCache({ store, transport, validate });
+  await cache.usage();
+  const first = cache.acquire(source);
+  await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+  const others = [cache.acquire(`${source}2`), cache.acquire(`${source}3`)];
+  const shown = others.map(() => vi.fn());
+  others.forEach((lease, i) => lease.subscribe(shown[i]!));
+  try {
+    await vi.waitFor(() => shown.forEach(show => expect(show).toHaveBeenCalled()));
+    expect(transport).toHaveBeenCalledTimes(3);
+  } finally {
+    finishWrite();
+    await Promise.all([first, ...others].map(lease => lease.settled));
+    [first, ...others].forEach(lease => lease.release());
+  }
+});
+
+it('bounds completed downloads waiting for slow persistent admission', async () => {
+  const inner = createBrowserImageStore();
+  let finishWrite!: () => void;
+  let blocked = true;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    if (blocked) {
+      blocked = false;
+      await new Promise<void>(resolve => { finishWrite = resolve; });
+    }
+    await inner.writeTemporary(key, blob);
+  } };
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const cache = createImageCache({ store, transport, validate });
+  const leases = Array.from({ length: 20 }, (_, i) => cache.acquire(`${source}${i}`));
+  try {
+    await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(5));
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(transport).toHaveBeenCalledTimes(5);
+  } finally {
+    finishWrite();
+    await Promise.all(leases.map(lease => lease.settled));
+    leases.forEach(lease => lease.release());
+  }
+});
+
 it('promotes a prefetched lease in place without replacing its display URL', async () => {
   const transport = vi.fn<ImageTransport>(async () => response());
   const cache = createImageCache({ store: createBrowserImageStore(), transport, validate });
@@ -147,19 +201,23 @@ it('persists prepared artwork and keeps HTTP validators for the original source'
   restored.release();
 });
 
-it('serializes decodes and skips abandoned requests waiting for the decode lane', async () => {
+it('prepares two independent images concurrently and skips abandoned queued preparation', async () => {
   const finishes: Array<() => void> = [];
   const prepare = vi.fn(() => new Promise<void>((resolve) => finishes.push(resolve)));
   const cache = createImageCache({ store: createBrowserImageStore(), transport: async () => response(), validate: prepare });
   const first = cache.acquire(source);
+  const second = cache.acquire(`${source}second`);
   const abandoned = cache.acquire(`${source}abandoned`);
-  await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
   abandoned.release();
   finishes[0]!();
+  finishes[1]!();
   await first.ready;
+  await second.ready;
   await abandoned.ready;
-  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(prepare).toHaveBeenCalledTimes(2);
   first.release();
+  second.release();
 });
 
 it('migrates an existing oversized representation without a network transfer or losing freshness', async () => {
@@ -177,6 +235,73 @@ it('migrates an existing oversized representation without a network transfer or 
   const restarted = createImageCache({ store, transport, validate });
   const restored = restarted.acquire(source);
   expect((await (await fetch((await restored.ready)!)).blob()).type).toBe('image/webp');
+  expect(transport).toHaveBeenCalledTimes(1);
+  restored.release();
+});
+
+it('presents prepared persistent artwork before its replacement write, while settlement still waits for admission', async () => {
+  const inner = createBrowserImageStore();
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const seed = createImageCache({ store: inner, transport, validate });
+  const initial = seed.acquire(source);
+  await initial.ready;
+  initial.release();
+  let finishWrite!: () => void;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    await new Promise<void>((resolve) => { finishWrite = resolve; });
+    await inner.writeTemporary(key, blob);
+  } };
+  const restarted = createImageCache({ store, transport,
+    validate: async () => new Blob([new Uint8Array(20)], { type: 'image/webp' }) });
+  const lease = restarted.acquire(source);
+  const show = vi.fn();
+  lease.subscribe(show);
+  let settled = false;
+  void lease.settled.then(() => { settled = true; });
+  try {
+    await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+    expect(show).toHaveBeenCalledWith(expect.stringMatching(/^blob:/));
+    expect((await (await fetch(show.mock.calls[0]![0])).blob()).size).toBe(20);
+    expect(settled).toBe(false);
+    expect(transport).toHaveBeenCalledTimes(1);
+  } finally {
+    finishWrite();
+    await lease.settled;
+    lease.release();
+  }
+  const restored = createImageCache({ store: inner, transport, validate }).acquire(source);
+  expect((await (await fetch((await restored.ready)!)).blob()).type).toBe('image/webp');
+  expect(transport).toHaveBeenCalledTimes(1);
+  restored.release();
+});
+
+it('releases a prepared persistent display during admission and fences its cancelled replacement', async () => {
+  const inner = createBrowserImageStore();
+  const transport = vi.fn<ImageTransport>(async () => response());
+  const seed = createImageCache({ store: inner, transport, validate });
+  const initial = seed.acquire(source);
+  await initial.ready;
+  initial.release();
+  let finishWrite!: () => void;
+  const store: ImageStore = { ...inner, async writeTemporary(key, blob) {
+    await new Promise<void>((resolve) => { finishWrite = resolve; });
+    await inner.writeTemporary(key, blob);
+  } };
+  const restarted = createImageCache({ store, transport,
+    validate: async () => new Blob([new Uint8Array(20)], { type: 'image/webp' }) });
+  const lease = restarted.acquire(source);
+  const show = vi.fn();
+  lease.subscribe(show);
+  await vi.waitFor(() => expect(finishWrite).toBeTypeOf('function'));
+  const url = show.mock.calls[0]![0] as string;
+  lease.release();
+  await expect(fetch(url)).rejects.toThrow();
+  finishWrite();
+  await lease.settled;
+  expect(await lease.ready).toBeUndefined();
+  expect((await inner.list()).some((file) => file.key.startsWith('tmp-'))).toBe(false);
+  const restored = createImageCache({ store: inner, transport, validate }).acquire(source);
+  expect((await (await fetch((await restored.ready)!)).blob()).size).toBe(100);
   expect(transport).toHaveBeenCalledTimes(1);
   restored.release();
 });
@@ -293,13 +418,16 @@ it('falls back transiently on write failure and fences old in-flight writes when
 });
 
 it('limits shared transport to two downloads and cancels work with no consumers', async () => {
-  const answers: ((response: Response) => void)[] = [];
-  const transport = vi.fn<ImageTransport>(() => new Promise((resolve) => { answers.push(resolve); }));
+  const answers = new Map<string, (response: Response) => void>();
+  const transport = vi.fn<ImageTransport>((url) => new Promise((resolve) => { answers.set(url, resolve); }));
   const cache = createImageCache({ store: createBrowserImageStore(), transport, validate });
-  const leases = Array.from({ length: 5 }, (_, i) => cache.acquire(`${source}${i}`));
+  // Hash/storage completion order is independent of acquire order. Occupy both
+  // slots before queueing work, and answer the source whose lease we await.
+  const leases = [cache.acquire(`${source}0`), cache.acquire(`${source}1`)];
   await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(2));
+  leases.push(...Array.from({ length: 3 }, (_, i) => cache.acquire(`${source}${i + 2}`)));
   leases[2]!.release();
-  answers[0]!(response());
+  answers.get(`${source}0`)!(response());
   await leases[0]!.ready;
   await vi.waitFor(() => expect(transport).toHaveBeenCalledTimes(3));
   expect(transport.mock.calls.map(([url]) => url)).not.toContain(`${source}2`);

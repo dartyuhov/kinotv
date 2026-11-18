@@ -46,6 +46,15 @@ export interface Page<T> {
   pagination: Pagination;
 }
 
+/** Latest historical media for a title, after all-page ordering and deduplication. */
+export interface HistoryEntry {
+  item: ItemSummary;
+  mediaId: number | null;
+  duration: number;
+  time: number;
+  lastSeen: number;
+}
+
 /** An item in catalog lists (`/v1/items`, fresh, hot, popular, search, bookmarks). Lists carry no files. */
 export interface ItemSummary {
   id: number;
@@ -244,4 +253,12 @@ export interface Collection {
 /** GET /v1/collections/view?id=: one page of a collection's titles, with the collection itself. */
 export interface CollectionPage extends Page<ItemSummary> {
   collection: Collection;
+}
+/** Live identities are independent of catalog item/media ids. URLs stay in memory only. */
+export interface LiveChannel {
+  id: string;
+  title: string;
+  name?: string;
+  logoUrl?: string;
+  playback: { kind: 'hls'; url: string } | { kind: 'unavailable'; reason: 'missing-stream' | 'unsupported-stream' };
 }

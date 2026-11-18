@@ -9,6 +9,8 @@ import { deviceInfo } from './platform/device';
 import { storage } from './platform/storage';
 import { loadWebapis } from './platform/tizenGlobals';
 import { nativeAvPlay, nativeVideoCapabilities } from './platform/avplay';
+import { createWatchedActions, markEpisodesWatched } from './catalog/markWatched';
+import type { WatchedVideo } from './api/client';
 
 // The app's single instances of the core services, wired once. UI code imports these.
 
@@ -18,6 +20,29 @@ export const oauth = createOAuth(http, config.client);
 export const session = createSession({ storage, oauth });
 /** The kino.watch API, authenticated with the current session. */
 export const api = createApiClient(withAuth(http, session));
+let accountGeneration = 0;
+session.subscribe(() => { accountGeneration++; });
+const watchedOwner = () => {
+  const generation = accountGeneration;
+  const current = () => generation === accountGeneration && session.status() === 'signedIn';
+  const check = () => { if (!current()) throw new Error('Watched account changed'); };
+  const scopedApi = createApiClient(withAuth(http, {
+    async accessToken() { check(); const token = await session.accessToken(); check(); return token; },
+    async renewAfterRejection(token) { check(); const renewed = await session.renewAfterRejection(token); check(); return renewed; },
+    expire() { check(); session.expire(); },
+  }));
+  return createWatchedActions(scopedApi, current);
+};
+let watched = watchedOwner();
+session.subscribe(() => { watched = watchedOwner(); });
+/** Capture the account owner before any asynchronous work can outlive it. */
+export const watchedActions = () => {
+  const owner = watched;
+  return {
+    mark: (where: WatchedVideo) => owner.mark(where),
+    episodes: (id: number, season: number, episodes: number[], watched = true) => markEpisodesWatched(api, id, season, episodes, owner.mark, watched),
+  };
+};
 
 /** Prepare server-side link generation before requesting playback links. One attempt per session. */
 let playbackSettings: Promise<void> | undefined;

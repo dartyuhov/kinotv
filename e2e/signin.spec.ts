@@ -13,6 +13,9 @@ import type { FakeResponse } from './harness/fakeApi';
 import { expect, test } from './harness/test';
 
 const homeTab = (page: Page) => page.getByRole('tab', { name: 'Главная' });
+const AUTH_REJECTED = 'Вход недоступен: сервис отклонил авторизацию приложения KinoTV. Попробуйте позже или сообщите разработчику.';
+const NETWORK_FAILED = 'Не удалось получить код для входа. Проверьте подключение к интернету и попробуйте ещё раз.';
+const CODE_FAILED = 'Не удалось получить код для входа. Попробуйте ещё раз позже.';
 
 test('a fresh launch shows the code, address and QR code; approving it leads to Home without key presses', async ({
   app,
@@ -115,6 +118,64 @@ test('if no code can be had, the screen says so and OK retries', async ({ app, a
   await expect(page.getByText('CODE1')).toBeVisible();
   await expect(app.focused).toHaveAccessibleName('Получить новый код');
 });
+
+test('a delayed failed Retry shows busy feedback, keeps focus and ignores repeated OK', async ({ app, api, page, remote }) => {
+  const failure: FakeResponse = { status: 400, json: { error: 'incorrect_client_credentials' } };
+  api.on('POST', '/oauth2/device', failure);
+  await app.open({ signedIn: false });
+  await expect(app.focused).toHaveAccessibleName('Повторить');
+
+  let release!: (response: FakeResponse) => void;
+  const pending = new Promise<FakeResponse>((resolve) => { release = resolve; });
+  api.on('POST', '/oauth2/device', () => pending);
+  const status = page.locator('[data-screen="signin"]').getByRole('status');
+  try {
+    await remote.press('ok');
+    await expect.poll(() => api.requestsTo('POST', '/oauth2/device').length).toBe(2);
+    await expect(status).toHaveText('Получаем код для входа…');
+    await expect(app.focused).toHaveAccessibleName('Получаем код для входа…');
+    await expect(app.focused).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('[data-screen="signin"]')).toHaveAttribute('aria-busy', 'true');
+    await remote.repeat('ok', 4);
+    // A round trip through the browser ensures the key handlers have finished.
+    await expect(status).toBeVisible();
+    expect(api.requestsTo('POST', '/oauth2/device')).toHaveLength(2);
+  } finally {
+    release(failure);
+  }
+
+  await expect(app.focused).toHaveAccessibleName('Повторить');
+  await expect(app.focused).toHaveAttribute('aria-disabled', 'false');
+  await expect(page.locator('[data-screen="signin"]')).toHaveAttribute('aria-busy', 'false');
+  await expect(status).toBeHidden();
+  await expect(page.locator('.signin__message')).toHaveText(AUTH_REJECTED);
+
+  fakeDeviceFlow(api);
+  await remote.press('ok');
+  await expect(page.getByText('CODE1')).toBeVisible();
+  await expect(app.focused).toHaveAccessibleName('Получить новый код');
+});
+
+for (const { name, response, message } of [
+  { name: 'incorrect client credentials', response: { status: 400, json: { error: 'incorrect_client_credentials' } }, message: AUTH_REJECTED },
+  { name: 'invalid OAuth client', response: { status: 400, json: { error: 'invalid_client' } }, message: AUTH_REJECTED },
+  { name: 'HTTP unauthorized', response: { status: 401, json: {} }, message: AUTH_REJECTED },
+  { name: 'HTTP forbidden', response: { status: 403, json: {} }, message: AUTH_REJECTED },
+  { name: 'connection loss', response: { networkError: true }, message: NETWORK_FAILED },
+  { name: 'service unavailable', response: { status: 503, json: {} }, message: CODE_FAILED },
+] satisfies Array<{ name: string; response: FakeResponse; message: string }>) {
+  test(`sign-in explains ${name} truthfully and can retry`, async ({ app, api, page, remote }) => {
+    api.on('POST', '/oauth2/device', response);
+    await app.open({ signedIn: false });
+    await expect(page.locator('.signin__message')).toHaveText(message);
+    await expect(app.focused).toHaveAccessibleName('Повторить');
+
+    fakeDeviceFlow(api);
+    await remote.press('ok');
+    await expect(page.getByText('CODE1')).toBeVisible();
+    await expect(app.focused).toHaveAccessibleName('Получить новый код');
+  });
+}
 
 test('after sign-in the TV registers itself once, as "KinoTV · <model>" with its versions', async ({ app, api, clock, page }) => {
   await signInWithCode(app, api, clock, page);

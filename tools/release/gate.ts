@@ -3,34 +3,36 @@
 //   node tools/release/gate.ts
 //
 // It refuses to publish unless:
-// - the project's OWN kino.watch API credentials are set as the repository secrets KP_CLIENT_ID and
-//   KP_CLIENT_SECRET (development uses borrowed ones from .env.local, which must never ship). The
-//   release build passes them to the app as VITE_KP_CLIENT_ID and VITE_KP_CLIENT_SECRET;
+// - app client configuration is present in KP_CLIENT_ID and KP_CLIENT_SECRET. The release build
+//   passes these to VITE_KP_CLIENT_ID and VITE_KP_CLIENT_SECRET. Presence does not establish client
+//   ownership or upstream authorization; per-user sessions are never build inputs;
 // - the tag (GITHUB_REF_NAME) is v<package.json version>, so the release, config.xml and the version the
 //   app reports for its update check are all the same;
 // - package.json's "kinotv": { "githubRepo" } names this repository (GITHUB_REPOSITORY), because the
 //   app's update check and the installer download from it.
 //
 // Problems are printed as GitHub error annotations, so they show on the run's summary page.
-import { readProject } from './project.ts';
+import { readProject, RELEASE_REPOSITORY, releaseProjectProblems } from './project.ts';
 
 const SECRETS = ['KP_CLIENT_ID', 'KP_CLIENT_SECRET'] as const;
 
 function problems(env: NodeJS.ProcessEnv): Array<{ title: string; lines: string[] }> {
   const found: Array<{ title: string; lines: string[] }> = [];
-  const { version, githubRepo } = readProject();
+  const project = readProject();
+  const { version, githubRepo } = project;
   const tag = env.GITHUB_REF_NAME ?? '';
   const repository = env.GITHUB_REPOSITORY ?? '';
+
+  for (const title of releaseProjectProblems(project)) found.push({ title, lines: [] });
 
   const missing = SECRETS.filter((name) => !env[name]?.trim());
   if (missing.length) {
     found.push({
-      title: "The project's own kino.watch API credentials are missing.",
+      title: 'kino.watch app client configuration is missing.',
       lines: [
         `Missing: ${missing.join(', ')}.`,
-        'Releases must ship with KinoTV\'s own API client, never the borrowed development one.',
         `Add ${SECRETS.join(' and ')} as repository secrets on GitHub: Settings → Secrets and variables → Actions → New repository secret.`,
-        'Then delete the tag and push it again, or re-run this workflow.',
+        'Then re-run this workflow. This check verifies presence only.',
       ],
     });
   }
@@ -52,13 +54,18 @@ function problems(env: NodeJS.ProcessEnv): Array<{ title: string; lines: string[
       title: `package.json points the app and installer at ${githubRepo}, but this release is for ${repository}.`,
       lines: [`Set "kinotv": { "githubRepo" } in package.json to ${repository}.`],
     });
+  } else if (githubRepo.toLowerCase() !== RELEASE_REPOSITORY || repository.toLowerCase() !== RELEASE_REPOSITORY) {
+    found.push({
+      title: `Release repository must be ${RELEASE_REPOSITORY}.`,
+      lines: ['Set GITHUB_REPOSITORY and package.json kinotv.githubRepo to the intended publishing repository.'],
+    });
   }
   return found;
 }
 
 const found = problems(process.env);
 if (found.length === 0) {
-  console.log(`✓ Release ${process.env.GITHUB_REF_NAME} can be published: own API credentials are set and versions match.`);
+  console.log(`✓ Release ${process.env.GITHUB_REF_NAME} can be published: app client configuration is present and source versions match. Presence does not verify client ownership or upstream authorization.`);
 } else {
   for (const { title, lines } of found) {
     // An annotation's message must be one line; %0A is GitHub's escaped newline.

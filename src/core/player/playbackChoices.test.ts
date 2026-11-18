@@ -8,6 +8,43 @@ const files: VideoFile[] = [2160, 1080, 720].map((h, i) => ({ codec: 'h264', w: 
 const capabilities = { streams: ['hls4', 'hls2', 'http'] as const, hevc: true, uhd: true };
 
 describe('playback choices', () => {
+  it('keeps a validated direct media playlist playable in Auto without inventing a fixed rung', () => {
+    const source = { url: 'https://cdn.test/master-v1a2.m3u8', type: 'hls' as const, quality: '1080p',
+      manifest: parseManifest('#EXTM3U\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\nsegment.ts\n') };
+    const native = { ...capabilities, adaptiveBitrate: true };
+    expect(fallbackChoices([], native, 'auto', [source])).toEqual([{ ...source, fixed: false }]);
+    expect(fallbackChoices([], native, '1080p', [source])).toEqual([]);
+    expect(fixedQualities([], native, [source])).toEqual([]);
+  });
+  it('identifies muxed HLS audio only from unanimous explicit variant URI selectors', () => {
+    expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nhttps://cdn.test/signed/index-v1a4.m3u8?loc=de\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nlow/index-v1a4.m3u8').muxedAudioIndex).toBe(4);
+    expect(parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nindex-v1-a12.m3u8').muxedAudioIndex).toBe(12);
+    for (const uri of ['video.m3u8', 'index-v1a0.m3u8', 'index-v1a1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nindex-v1a2.m3u8', 'index-v1a1.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=1280x720\nunknown.m3u8']) {
+      expect(parseManifest(`#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\n${uri}`).muxedAudioIndex).toBeUndefined();
+    }
+  });
+  it('keeps supplied HLS sources for Auto when every optional manifest inspection failed', () => {
+    const supplied = [{ ...files[0]!, urls: { hls4: 'https://cdn.test/master', hls2: 'https://cdn.test/alternate' } }];
+    const inspected = [
+      { url: 'https://cdn.test/master', type: 'hls4' as const, quality: '2160p', manifest: parseManifest('') },
+      { url: 'https://cdn.test/alternate', type: 'hls2' as const, quality: '2160p', manifest: parseManifest('') },
+    ];
+    const native = { ...capabilities, adaptiveBitrate: true };
+    expect(fallbackChoices(supplied, native, 'auto', inspected).map(({ url, fixed, fixedBandwidth }) => ({ url, fixed, fixedBandwidth }))).toEqual([
+      { url: 'https://cdn.test/master', fixed: false, fixedBandwidth: undefined },
+      { url: 'https://cdn.test/alternate', fixed: false, fixedBandwidth: undefined },
+    ]);
+    expect(fixedQualities(supplied, native, inspected)).toEqual([]);
+    expect(fallbackChoices(supplied, native, '1080p', inspected)).toEqual([]);
+  });
+  it('retains an uninspected ladder as an Auto fallback after a verified ladder', () => {
+    const sources = [
+      { url: 'https://cdn.test/master', type: 'hls4' as const, quality: '1080p', manifest: parseManifest('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x1080\nv.m3u8') },
+      { url: 'https://cdn.test/alternate', type: 'hls2' as const, quality: '1080p', manifest: parseManifest('') },
+    ];
+    expect(fallbackChoices([], { ...capabilities, adaptiveBitrate: true }, 'auto', sources))
+      .toContainEqual({ ...sources[1], fixed: false });
+  });
   it('keeps rendition groups and verifies independently distinguishable identities', () => {
     const manifest = parseManifest('#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio1080",NAME="01RedHead",LANGUAGE="ru",CHANNELS="2"\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio1080",NAME="02Original",LANGUAGE="en",CHANNELS="6"\n#EXT-X-STREAM-INF:BANDWIDTH=4000000,RESOLUTION=1920x800,AUDIO="audio1080"\nvideo.m3u8');
     expect(manifest.variants[0]).toMatchObject({ width: 1920, height: 800, bandwidth: 4000000, audioGroup: 'audio1080' });

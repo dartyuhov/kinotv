@@ -1,5 +1,6 @@
 // The Tizen widget manifest (config.xml), generated at build time so its version always matches
 // package.json. Reference: research notes §1 and spec §11.
+import { SaxesParser } from 'saxes';
 
 /** Exactly 10 characters [0-9a-zA-Z]. Never change it: updates must keep the same id. */
 export const PACKAGE_ID = 'KinoTV0001';
@@ -34,6 +35,43 @@ export function tizenVersion(packageVersion: string): string {
     );
   }
   return `${major}.${minor}.${patch}`;
+}
+
+/** Read a well-formed KinoTV manifest without rewriting the bytes used for signing. */
+export function kinoTvManifestVersion(xml: string): string {
+  const invalid = () => { throw new Error('Invalid KinoTV manifest.'); };
+  const parser = new SaxesParser({ xmlns: true });
+  let depth = 0;
+  let applications = 0;
+  let version: string | undefined;
+  // No DTDs: identity must not depend on entities or default attributes declared elsewhere.
+  parser.on('doctype', invalid);
+  parser.on('xmldecl', (declaration) => {
+    if (declaration.version !== '1.0' ||
+        (declaration.encoding && declaration.encoding.toUpperCase() !== 'UTF-8')) invalid();
+  });
+  parser.on('opentag', (tag) => {
+    depth++;
+    const attribute = (name: string) => {
+      const attr = tag.attributes[name];
+      return attr?.uri === '' ? attr.value : undefined;
+    };
+    if (depth === 1) {
+      if (tag.local !== 'widget' || tag.uri !== 'http://www.w3.org/ns/widgets') invalid();
+      version = attribute('version');
+    } else if (tag.local === 'widget') invalid();
+    if (tag.local === 'application') {
+      if (depth !== 2 || tag.uri !== 'http://tizen.org/ns/widgets' || ++applications !== 1 ||
+          attribute('id') !== APP_ID || attribute('package') !== PACKAGE_ID) invalid();
+    }
+  });
+  parser.on('closetag', () => { depth--; });
+  // With no error handler saxes throws on every well-formedness/namespace error, including
+  // duplicate attributes, undeclared prefixes, multiple roots and an incomplete document.
+  parser.write(xml).close();
+  if (applications !== 1 || !version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version) ||
+      tizenVersion(version) !== version) return invalid();
+  return version;
 }
 
 export function renderConfigXml({ version }: { version: string }): string {

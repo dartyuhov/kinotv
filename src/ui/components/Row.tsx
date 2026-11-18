@@ -1,8 +1,9 @@
-import { FocusContext, useFocusable, type NextFocusResolver } from '@noriginmedia/norigin-spatial-navigation';
-import { Fragment, useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { FocusContext, getCurrentFocusKey, setFocus, useFocusable, type FocusDetails, type FocusableComponentLayout, type NextFocusResolver } from '@noriginmedia/norigin-spatial-navigation';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CARD_SIZE, type CardSlot, type CardVariant } from './Card';
 import { useRowMemory } from './rowMemory';
 import './Row.css';
+import { artworkNavigationOrigin, CardReadiness, useArtworkFocus, useCardReadiness } from './cardReadiness';
 
 // Layout in 1080p logical pixels; keep in step with --card-gap and --screen-gutter in tokens.css.
 const STAGE_WIDTH = 1920;
@@ -55,25 +56,54 @@ export function Row<T>({
   message,
   hideTitle = false,
 }: RowProps<T>) {
+  const { ready, report } = useCardReadiness();
+  const [requested, setRequested] = useState(false);
+  useEffect(() => {
+    if (!requested) return;
+    const timer = setTimeout(() => setRequested(false), 500);
+    return () => clearTimeout(timer);
+  }, [requested]);
   const remembered = useRowMemory((s) => s.index[rowKey] ?? 0);
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
   const preferred = items[index];
+  const prepareRestore = useCallback(() => {
+    setRequested(true);
+    onRowFocus?.(rowKey);
+  }, [onRowFocus, rowKey]);
+  const resolveRestore = useCallback((target: string) => {
+    if (items.some(item => rowCardKey(rowKey, itemKey(item)) === target)) return target;
+    // The deleted leaf's index must not redirect the fallback to a different
+    // card, or leave a virtualised row demanding artwork at the old offset.
+    remember(rowKey, 0);
+    return items[0] === undefined ? undefined : rowCardKey(rowKey, itemKey(items[0]));
+  }, [items, itemKey, rowKey, remember]);
+  const { enter, request } = useArtworkFocus(rowKey, ready, preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred)), prepareRestore, resolveRestore);
   const [direction, setDirection] = useState(1);
   const previous = useRef(index);
-  const latest = useRef({ items, itemKey, index, onItemFocus, onItemPress });
-  latest.current = { items, itemKey, index, onItemFocus, onItemPress };
+  const latest = useRef({ items, itemKey, index, onItemFocus, onItemPress, ready });
+  latest.current = { items, itemKey, index, onItemFocus, onItemPress, ready };
   const nextFocusResolver = useCallback<NextFocusResolver>((direction, currentKey, siblings) => {
     if (direction !== 'left' && direction !== 'right') return null;
     const { items: all, itemKey: keyOf, index: at } = latest.current;
     const matches = (item: T | undefined) => item !== undefined && rowCardKey(rowKey, keyOf(item)) === currentKey;
     const from = matches(all[at]) ? at : all.findIndex(matches);
     if (from < 0) return null;
-    const next = all[from + (direction === 'right' ? 1 : -1)];
-    return next === undefined ? null : siblings.find((sibling) => sibling.focusKey === rowCardKey(rowKey, keyOf(next))) ?? null;
+    const stride = direction === 'right' ? 1 : -1;
+    for (let i = from + stride; i >= 0 && i < all.length; i += stride) {
+      const next = siblings.find(sibling => sibling.focusKey === rowCardKey(rowKey, keyOf(all[i]!)));
+      if (next) return next;
+    }
+    return null;
   }, [rowKey]);
 
-  const onFocus = useCallback(() => onRowFocus?.(rowKey), [onRowFocus, rowKey]);
+  const onFocus = useCallback((_layout: FocusableComponentLayout, _props: object, details: FocusDetails) => {
+    if (details.artworkRestore) return;
+    setRequested(true); onRowFocus?.(rowKey);
+    const target = preferred === undefined ? undefined : rowCardKey(rowKey, itemKey(preferred));
+    if (target && ready.has(target) && getCurrentFocusKey() !== target) void setFocus(target);
+    else enter();
+  }, [onRowFocus, rowKey, enter, preferred, itemKey, ready]);
   const { ref, focusKey, hasFocusedChild } = useFocusable<object, HTMLElement>({
     focusKey: rowKey,
     trackChildren: true,
@@ -88,13 +118,21 @@ export function Row<T>({
   // Card callbacks stay stable across renders (cards are memoised); the latest props are read from a ref.
   const onFocusIndex = useCallback(
     (i: number) => {
+      const state = latest.current;
+      const preferred = state.items[state.index];
+      const target = preferred === undefined ? undefined : rowCardKey(rowKey, state.itemKey(preferred));
+      if (!artworkNavigationOrigin().startsWith(`${rowKey}:`) && i !== state.index && target) {
+        if (state.ready.has(target)) void setFocus(target);
+        else request(target);
+        return;
+      }
       if (i !== previous.current) setDirection(i > previous.current ? 1 : -1);
       previous.current = i;
       remember(rowKey, i);
       const item = latest.current.items[i];
       if (item !== undefined) latest.current.onItemFocus?.(item, i);
     },
-    [remember, rowKey],
+    [remember, rowKey, request],
   );
   const onPressIndex = useCallback((i: number) => {
     const item = latest.current.items[i];
@@ -120,7 +158,7 @@ export function Row<T>({
       index: i,
       variant,
       style,
-      visibleHint: hasFocusedChild && i >= visibleFirst && i < visibleLast,
+      visibleHint: (hasFocusedChild || requested) && i >= visibleFirst && i < visibleLast,
       prefetch: hasFocusedChild && (direction > 0 ? i >= visibleLast && i < visibleLast + 2 : i < visibleFirst && i >= visibleFirst - 2)
         ? `${rowKey}:${index}:${direction}` : undefined,
       onFocusIndex,
@@ -131,6 +169,7 @@ export function Row<T>({
 
   return (
     <FocusContext.Provider value={focusKey}>
+      <CardReadiness.Provider value={report}>
       <section ref={ref} className="row" aria-label={title} data-row={rowKey}>
         {!hideTitle && <h2 className="row__title">{title}</h2>}
         <div
@@ -140,6 +179,7 @@ export function Row<T>({
           {message ? <p className="row__message">{message}</p> : cards}
         </div>
       </section>
+      </CardReadiness.Provider>
     </FocusContext.Provider>
   );
 }

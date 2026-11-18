@@ -6,6 +6,29 @@
   bottom: 8px;
 }
 
+.season-watched-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--screen-gutter) var(--space-2);
+  min-height: 72px;
+}
+
+.season-watched-actions .button {
+  flex-shrink: 0;
+}
+
+/* These outlined status icons stay legible in the shared button's pressed state. */
+.season-watched-actions .button__icon {
+  fill: none;
+}
+
+.season-watched-actions [role='status'] {
+  font-size: var(--font-size-body);
+  color: var(--color-text-secondary);
+  max-width: 560px;
+}
+
 /* Shifted left by a tab's inner space, so the first tab's text lines up with the details above. */
 .season-tabs {
   position: relative;

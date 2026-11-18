@@ -48,9 +48,13 @@ export interface Quality {
 
 export interface Tracks {
   audio: AudioTrack[];
+  /** Audio is playing, but its identity cannot be matched to the selectable service choices. */
+  audioUnidentified?: boolean;
   subtitles: SubtitleTrack[];
   qualities: Quality[];
   subtitlesOff?: boolean;
+  /** External activation commands applied by the adapter; not proof of rendered TV output. */
+  externalSubtitle?: { selected: boolean; pending: boolean; path?: string };
 }
 
 /**

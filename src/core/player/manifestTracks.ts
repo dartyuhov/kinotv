@@ -14,7 +14,14 @@ export interface ManifestVariant {
   audioGroup?: string;
   subtitleGroup?: string;
 }
-export interface ManifestInfo { tracks: ManifestTrack[]; variants: ManifestVariant[] }
+export interface ManifestInfo {
+  tracks: ManifestTrack[];
+  variants: ManifestVariant[];
+  mediaPlaylist?: boolean;
+  /** Explicit KinoPub muxed index-v1aN / index-v1-aN selector, unanimous across variants.
+   * Container source number only; never an AVPlay track index. */
+  muxedAudioIndex?: number;
+}
 export const emptyManifest = (): ManifestInfo => ({ tracks: [], variants: [] });
 function attributes(line: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -29,8 +36,23 @@ export function semanticRenditionName(name: string): string {
 export function parseManifest(text: string): ManifestInfo {
   const tracks = parseManifestTracks(text);
   const variants: ManifestVariant[] = [];
+  const selectors: Array<number | undefined> = [];
+  let awaitingVariant = false;
   for (const line of text.split(/\r?\n/)) {
+    if (awaitingVariant && line.trim() && !line.startsWith('#')) {
+      let index: number | undefined;
+      try {
+        const path = new URL(line.trim(), 'https://manifest.invalid/').pathname;
+        const match = /\/index-v1-?a([1-9]\d*)\.m3u8$/.exec(path);
+        const number = Number(match?.[1]);
+        if (match && Number.isSafeInteger(number)) index = number;
+      } catch { /* malformed URI cannot establish identity */ }
+      selectors.push(index);
+      awaitingVariant = false;
+    }
     if (!line.startsWith('#EXT-X-STREAM-INF:')) continue;
+    if (awaitingVariant) selectors.push(undefined);
+    awaitingVariant = true;
     const info = attributes(line.slice(18));
     const dimensions = /^(\d+)[xX](\d+)$/.exec(info.RESOLUTION ?? '');
     const bandwidth = Number(info.BANDWIDTH);
@@ -38,7 +60,11 @@ export function parseManifest(text: string): ManifestInfo {
     variants.push({ width: Number(dimensions[1]), height: Number(dimensions[2]), bandwidth,
       audioGroup: info.AUDIO, subtitleGroup: info.SUBTITLES });
   }
-  return { tracks, variants };
+  if (awaitingVariant) selectors.push(undefined);
+  const index = selectors[0];
+  const muxed = index !== undefined && selectors.every(selector => selector === index) && !tracks.some(track => track.type === 'AUDIO');
+  return { tracks, variants, ...(muxed ? { muxedAudioIndex: index } : {}),
+    ...(/^#EXT-X-TARGETDURATION:/m.test(text) && /^#EXTINF:/m.test(text) ? { mediaPlaylist: true } : {}) };
 }
 
 /** Group/count/order agreement is necessary but not sufficient: each native identity must also be

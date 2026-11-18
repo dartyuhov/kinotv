@@ -132,23 +132,37 @@ export function readDuid(sdb: string, tv: ConnectedTv): void {
 
 export async function setUpCertificate(tizen: string, tv: ConnectedTv): Promise<string> {
   const saved = loadSettings().profile;
-  if (saved && listProfiles(tizen).includes(saved)) {
+  const known = listProfiles(tizen);
+  if (saved && known.includes(saved)) {
     ok(`Using security profile "${saved}"`);
     return saved;
   }
-  print('A TV only installs apps signed with a Samsung certificate made for that TV. Create one in Certificate Manager:');
+  if (saved) {
+    warn(`Saved security profile "${saved}" was not found in the Tizen CLI.`);
+    print('  Check the same SDK installation is used by Certificate Manager and the CLI (PATH / TIZEN_HOME).');
+    print('  Recover or import the original author.p12 and its password from your backup, then restore or select its Samsung TV profile.');
+    print('  Do not replace the author identity for an update. The same Samsung account or profile name is not enough.');
+    print('  Uninstalling removes local session/settings and requires sign-in again; it is a deliberate last resort if recovery is impossible.');
+  }
+  print(`Profiles the Tizen CLI knows: ${known.length ? known.join(', ') : 'none'}.`);
+  print('A TV only installs apps signed with a Samsung certificate made for that TV. Select or restore a profile in Certificate Manager:');
   print('  - VS Code with the Samsung "Tizen TV" extension (tizensdk.tizentv): run "Tizen: Run Certificate Manager", or');
   print('  - Tizen Studio: Tools → Certificate Manager.');
   print(`  1. Click + and choose Samsung (not Tizen), then TV. Name the profile, e.g. ${DEFAULT_PROFILE}.`);
-  print('  2. Author certificate: create a new one (sign in with your Samsung account). Back up author.p12: updates must use it.');
+  if (saved) {
+    print('  2. Author certificate: import the original author.p12 with its password. Keep this identity for updates.');
+  } else {
+    print('  2. First installation only: create a new author certificate (sign in with your Samsung account). Back up author.p12 and its password.');
+    print('     For an update: import the original author.p12 and its password, or select the existing profile. Do not create a new author identity.');
+  }
   print('  3. Distributor certificate: privilege Public, and add the DUID shown above.');
   print('  4. Finish. Certificate Manager saves the profile where the Tizen CLI finds it.');
-  const name = await ask('Profile name, once it is created:', saved ?? DEFAULT_PROFILE);
+  const name = await ask('Profile name, once it is available (updates must use the original author):', saved ?? DEFAULT_PROFILE);
   const profiles = listProfiles(tizen);
   if (!name || !profiles.includes(name)) {
     throw new UserError(`Security profile "${name}" was not found.`, [
       `Profiles the Tizen CLI knows: ${profiles.length ? profiles.join(', ') : 'none'}.`,
-      `Finish creating the certificate in Certificate Manager, then run ${setupCommand()} again.`,
+      `Restore/import the original author certificate for an update, or finish the first-install profile in Certificate Manager, then run ${setupCommand()} again.`,
     ]);
   }
   saveSettings({ profile: name });

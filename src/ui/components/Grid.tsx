@@ -11,6 +11,7 @@ import { remoteBus } from '../../core/input/remoteBus';
 import { CARD_SIZE, type CardSlot, type CardVariant } from './Card';
 import { useRowMemory } from './rowMemory';
 import './Grid.css';
+import { CardReadiness, useArtworkFocus, useCardReadiness } from './cardReadiness';
 
 // Layout in 1080p logical pixels; keep in step with Grid.css and --card-gap / --screen-gutter in tokens.css.
 const STAGE_WIDTH = 1920;
@@ -79,6 +80,8 @@ export function Grid<T>({
   hasMore = false,
   onLoadMore,
 }: GridProps<T>) {
+  const { ready, report } = useCardReadiness();
+  const { enter, request } = useArtworkFocus(gridKey, ready);
   const remembered = useRowMemory((s) => s.index[gridKey] ?? 0);
   const remember = useRowMemory((s) => s.remember);
   const index = Math.min(remembered, Math.max(0, items.length - 1));
@@ -101,11 +104,15 @@ export function Grid<T>({
       // The focused card is normally the remembered one; search only if it isn't.
       const from = isCurrent(all[remembered]) ? remembered : all.findIndex(isCurrent);
       const to = from < 0 ? null : step(direction, from, cols, all.length);
-      if (to === null) return null; // leave the grid
-      const target = gridCardKey(gridKey, keyOf(all[to]!));
-      return siblings.find((s) => s.focusKey === target) ?? null;
+      if (to === null) return null;
+      const targetKey = gridCardKey(gridKey, keyOf(all[to]!));
+      const target = siblings.find(s => s.focusKey === targetKey);
+      if (target) return target;
+      remember(gridKey, to);
+      request(targetKey);
+      return siblings.find(s => s.focusKey === currentKey) ?? null;
     },
-    [gridKey],
+    [gridKey, remember, request],
   );
 
   const { ref, focusKey, hasFocusedChild } = useFocusable<object, HTMLElement>({
@@ -113,6 +120,7 @@ export function Grid<T>({
     trackChildren: true,
     // While the first items load, the grid takes focus itself (see below); with a message it is skipped.
     focusable: !message,
+    onFocus: enter,
     preferredChildFocusKey: preferred === undefined ? undefined : gridCardKey(gridKey, itemKey(preferred)),
     nextFocusResolver,
     measureChildrenLayout: false,
@@ -120,9 +128,14 @@ export function Grid<T>({
 
   const onFocusIndex = useCallback(
     (i: number) => {
-      if (i !== previous.current) setDirection(i - previous.current);
+      // The resolver retains current focus while an undecoded target loads.
+      // Norigin calls onFocus again for that same leaf; do not overwrite the
+      // requested scroll index and remove the incoming target's artwork demand.
+      if (i !== previous.current) {
+        setDirection(i - previous.current);
+        remember(gridKey, i);
+      }
       previous.current = i;
-      remember(gridKey, i);
       const item = latest.current.items[i];
       if (item !== undefined) latest.current.onItemFocus?.(item, i);
     },
@@ -152,10 +165,11 @@ export function Grid<T>({
         const to = key === 'channelDown' ? Math.min(all.length - 1, at + jump) : at >= jump ? at - jump : at % cols;
         if (to === at) return;
         remember(gridKey, to);
-        // The target may still be outside the rendered window; Norigin focuses it as soon as it mounts.
-        void setFocus(gridCardKey(gridKey, keyOf(all[to]!)));
+        // Scroll the target into demand first; never programmatically focus a
+        // registered but still invisible card (setFocus bypasses focusable).
+        request(gridCardKey(gridKey, keyOf(all[to]!)));
       }),
-    [gridKey, remember],
+    [gridKey, remember, request],
   );
 
   // Near the end: ask for the next page while there is still a screen of rows to move through.
@@ -205,6 +219,7 @@ export function Grid<T>({
 
   return (
     <FocusContext.Provider value={focusKey}>
+      <CardReadiness.Provider value={report}>
       <section ref={ref} className="grid" aria-label={title} data-grid={gridKey} style={{ height }}>
         {message ? (
           <p className="grid__message">{message}</p>
@@ -217,6 +232,7 @@ export function Grid<T>({
           </div>
         )}
       </section>
+      </CardReadiness.Provider>
     </FocusContext.Provider>
   );
 }

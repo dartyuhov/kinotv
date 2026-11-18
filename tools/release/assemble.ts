@@ -1,23 +1,28 @@
 // Makes the files a GitHub release carries, from a production build (`npm run build`):
 //
-//   npm run release:assets      dist/ → dist-release/{KinoTV.wgt, install.sh, kinotv-installer.mjs}
+//   npm run release:assets      dist/ → dist-release/{KinoTV.wgt, install.sh, kinotv-installer.mjs, SHA256SUMS}
 //
 // - KinoTV.wgt: the app, unsigned. Each user signs it with their own Samsung certificate.
 // - install.sh: tools/install.sh with the GitHub repo from package.json filled in.
 // - kinotv-installer.mjs: tools/tizen/installer.ts and everything it uses (fflate included) bundled into one
 //   plain JavaScript file, so users need only Node.js, not this repository or npm.
+// - SHA256SUMS: standard sha256sum records for the three completed payloads (not itself).
+import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { build } from 'vite';
-import { APP_NAME } from '../tizen/configXml.ts';
+import { APP_ID, APP_NAME, kinoTvManifestVersion, PACKAGE_ID } from '../tizen/configXml.ts';
 import { ok, runMain, UserError } from '../tizen/host.ts';
 import { createUnsignedWgt } from '../tizen/wgt.ts';
-import { readProject } from './project.ts';
+import { readProject, releaseProjectProblems } from './project.ts';
 
 const TOOLS = resolve(import.meta.dirname, '..');
+const ROOT = resolve(TOOLS, '..');
 export const INSTALLER_FILE = 'kinotv-installer.mjs';
 
 async function bundleInstaller(outDir: string): Promise<void> {
+  const license = [readFileSync(join(ROOT, 'LICENSE'), 'utf8'), ...['fflate-mit.txt', 'saxes-isc.txt', 'xmlchars-mit.txt']
+    .map((name) => readFileSync(join(ROOT, 'public/licenses', name), 'utf8'))].join('\n');
   await build({
     configFile: false,
     root: TOOLS,
@@ -29,7 +34,9 @@ async function bundleInstaller(outDir: string): Promise<void> {
       emptyOutDir: false,
       target: 'node22',
       minify: false, // readable, so anyone can check what they are about to run
-      rolldownOptions: { output: { format: 'es', entryFileNames: INSTALLER_FILE, codeSplitting: false } },
+      rolldownOptions: {
+        output: { format: 'es', entryFileNames: INSTALLER_FILE, codeSplitting: false, banner: `/*!\n${license}*/` },
+      },
     },
   });
 }
@@ -45,7 +52,10 @@ function stampInstallSh(githubRepo: string, outFile: string): void {
 async function main(): Promise<void> {
   const appDir = resolve('dist');
   const outDir = resolve('dist-release');
-  const { version, githubRepo } = readProject();
+  const project = readProject();
+  const { version, githubRepo } = project;
+  const problems = releaseProjectProblems(project);
+  if (problems.length) throw new UserError('Release source versions are invalid.', problems);
 
   if (!githubRepo) {
     throw new UserError('The GitHub repo for updates and the installer is not set.', [
@@ -53,17 +63,29 @@ async function main(): Promise<void> {
     ]);
   }
   if (!existsSync(join(appDir, 'config.xml'))) throw new UserError('No build in dist/.', ['Run `npm run build` first.']);
-  const built = /<widget\b[^>]*\sversion="([^"]+)"/.exec(readFileSync(join(appDir, 'config.xml'), 'utf8'))?.[1];
-  if (built !== version.replace(/[-+].*$/, '')) {
+  const manifest = readFileSync(join(appDir, 'config.xml'), 'utf8');
+  let built: string;
+  try {
+    built = kinoTvManifestVersion(manifest);
+  } catch {
+    throw new UserError(`Invalid KinoTV manifest in dist/: expected ${APP_ID} in package ${PACKAGE_ID} and a numeric Tizen version.`, ['Run `npm run build` again.']);
+  }
+  if (built !== version) {
     throw new UserError(`dist/ is version ${built} but package.json says ${version}.`, ['Run `npm run build` again.']);
   }
 
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(appDir, 'LICENSE'), readFileSync(resolve('LICENSE')));
+  const notices = readFileSync(resolve('THIRD_PARTY_NOTICES.md'), 'utf8');
+  writeFileSync(join(appDir, 'THIRD_PARTY_NOTICES.md'), notices.replace(/\]\(public\/licenses\//g, '](licenses/'));
   createUnsignedWgt(appDir, join(outDir, `${APP_NAME}.wgt`));
   stampInstallSh(githubRepo, join(outDir, 'install.sh'));
   await bundleInstaller(outDir);
-  ok(`Release ${version} assets for ${githubRepo} are in dist-release/: ${APP_NAME}.wgt, install.sh, ${INSTALLER_FILE}`);
+  const payloads = [`${APP_NAME}.wgt`, 'install.sh', INSTALLER_FILE];
+  const checksums = payloads.map((name) => `${createHash('sha256').update(readFileSync(join(outDir, name))).digest('hex')}  ${name}\n`).join('');
+  writeFileSync(join(outDir, 'SHA256SUMS'), checksums);
+  ok(`Release ${version} assets for ${githubRepo} are in dist-release/: ${payloads.join(', ')}, SHA256SUMS`);
 }
 
 await runMain(main);

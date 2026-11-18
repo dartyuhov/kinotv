@@ -14,7 +14,6 @@ test('the app opens on Home in a 1920×1080 frame with the tab bar', async ({ ap
       - tab "Сериалы"
       - tab "Я смотрю"
       - tab "ТВ"
-      - tab "Спорт"
       - tab "Закладки"
       - tab "История"
       - tab "Настройки"
@@ -45,7 +44,7 @@ test('arrows move focus along the tab bar and the focused tab shows its screen',
 
 test('OK or Down on a tab moves into its screen; Up comes back to the active tab', async ({ app, remote, page }) => {
   await app.open();
-  await remote.repeat('right', 6); // Закладки, far from the screen's left-aligned content
+  await remote.repeat('right', 5); // Закладки, far from the screen's left-aligned content
 
   // No bookmarks: the screen's first focusable is its first suggestion (Popular, from the default Home).
   await expect(page.getByRole('region', { name: 'Популярное сейчас' }).getByRole('button').first()).toBeVisible();

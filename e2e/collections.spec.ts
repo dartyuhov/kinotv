@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { fakeCollection, fakeHome, fakeItem, fakeItems, type FakeCollection } from './harness/catalog';
-import { expect, test } from './harness/test';
+import { expect, browsingTest as test } from './harness/test';
 
 const region = (page: Page, name: string) => page.getByRole('region', { name });
 

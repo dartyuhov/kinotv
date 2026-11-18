@@ -1,4 +1,7 @@
 import type { Http } from './http';
+import { errorFromResponse } from './errors';
+import { t } from '../i18n';
+import type { LiveChannel } from './types';
 import type {
   BookmarkFolder,
   ItemDetails,
@@ -24,6 +27,7 @@ import type {
   Subtitle,
   VideoFile,
   StreamUrls,
+  HistoryEntry,
 } from './types';
 
 export interface DevicePlaybackSettings {
@@ -74,6 +78,10 @@ export interface ItemsQuery {
  * network, timeout and 5xx errors) and POST with `form` for writes.
  */
 export interface ApiClient {
+  /** One documented, unpaged live-channel snapshot. Never persist its signed source URLs. */
+  tvChannels(): Promise<readonly LiveChannel[]>;
+  /** All history pages, ordered locally by documented last_seen, latest media per title. */
+  history(): Promise<HistoryEntry[]>;
   /** The signed-in account and its subscription. */
   user(): Promise<User>;
   /** Registers this device in the account's device list, or updates its entry. */
@@ -155,6 +163,61 @@ export interface WatchedVideo {
 
 export function createApiClient(http: Http): ApiClient {
   return {
+    async tvChannels() {
+      // Published API 1.3: https://kinoapi.com/api_tv.html#api-tv-list (source evidence: .26.11).
+      // This is a snapshot, not catalog pagination; stream is already the complete direct HLS URL.
+      const res = await http<{ status?: number; channels?: unknown }>({ method: 'GET', path: '/v1/tv' });
+      if (res?.status !== undefined && Number(res.status) !== 200) throw errorFromResponse(Number(res.status), {});
+      if (!Array.isArray(res?.channels)) throw new Error('TV channel contract unavailable');
+      const channels = new Map<string, LiveChannel>();
+      const url = (value: unknown): string | undefined => {
+        if (typeof value !== 'string' || value.trim() !== value) return;
+        try { const parsed = new URL(value); if (/^https?:$/.test(parsed.protocol) && !parsed.username && !parsed.password) return value; } catch { /* malformed URL */ }
+      };
+      for (const raw of res.channels) {
+        if (!raw || typeof raw !== 'object') continue;
+        const id = typeof raw.id === 'number' && Number.isFinite(raw.id) ? String(raw.id)
+          : typeof raw.id === 'string' ? raw.id.trim() : '';
+        if (!id || channels.has(id)) continue;
+        const stream = url(raw.stream);
+        channels.set(id, { id, title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : t('live.channel', { id }),
+          ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
+          logoUrl: url(raw.logos?.m) ?? url(raw.logos?.s),
+          playback: stream ? { kind: 'hls', url: stream } : { kind: 'unavailable', reason: raw.stream ? 'unsupported-stream' : 'missing-stream' } });
+      }
+      if (res.channels.length && !channels.size) throw new Error('TV channel identities unavailable');
+      return [...channels.values()];
+    },
+    async history() {
+      const latest = new Map<number, HistoryEntry>();
+      // No documented server ordering: never present a sorted prefix as global newest-first.
+      for (let page = 1; ; page++) {
+        const res = await http<{ history?: Array<{ item?: Partial<ItemSummary> | null; media?: { id?: unknown; duration?: unknown } | null; time?: unknown; last_seen?: unknown }>;
+          pagination?: Partial<Record<keyof Pagination, unknown>> }>({ method: 'GET', path: '/v1/history', query: { page, perpage: 50 } });
+        if (!Array.isArray(res.history)) throw new Error('History response unavailable');
+        const paging = pagination(res.pagination);
+        if (res.pagination?.total === undefined || !Number.isSafeInteger(paging.total) || paging.total < 0 || paging.total > 200
+          || (paging.total > 0 && paging.current !== page)) {
+          throw new Error('History pagination unsupported');
+        }
+        for (const raw of res.history) {
+          const id = num(raw.item?.id);
+          const lastSeen = Number(raw.last_seen);
+          if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(lastSeen) || lastSeen < 0) continue;
+          const mediaId = num(raw.media?.id);
+          const entry: HistoryEntry = {
+            item: { ...raw.item, id, type: raw.item?.type ?? '', subtype: raw.item?.subtype ?? '',
+              title: raw.item?.title || `#${id}`, posters: raw.item?.posters ?? NO_POSTERS },
+            mediaId: Number.isSafeInteger(mediaId) && mediaId > 0 ? mediaId : null,
+            duration: Math.max(0, num(raw.media?.duration)),
+            time: Math.max(0, num(raw.time)), lastSeen,
+          };
+          if (!latest.has(id) || latest.get(id)!.lastSeen < lastSeen) latest.set(id, entry);
+        }
+        if (page >= paging.total) break;
+      }
+      return [...latest.values()].sort((a, b) => b.lastSeen - a.lastSeen || a.item.id - b.item.id);
+    },
     async user() {
       const res = await http<{ user: User }>({ method: 'GET', path: '/v1/user' });
       return res.user;
