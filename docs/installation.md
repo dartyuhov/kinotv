@@ -25,7 +25,7 @@ your TV or establish those results.
 The agreed initial verification baseline is macOS plus Samsung Q60C on Tizen 9 /
 Chromium 120, matching the observed development environment. This selection
 doesn't validate all Q60C firmware or constitute launch acceptance.
-Tizen 6.5+ is a design target; Chrome 85 is the build target.
+Tizen 6.0+ (2021 models) is a design target; Chrome 76 is the build target.
 The manifest's `required_version="3.0"` is not a tested support floor. Linux is
 unverified; this guide doesn't establish a Windows installer route.
 

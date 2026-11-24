@@ -36,12 +36,12 @@ KinoTV is a fast, polished, remote-first app for watching kino.watch (formerly k
 - Samsung Seller Office / store submission.
 - Voice search, the Samsung Smart Hub preview tiles, and casting from a phone.
 - Downloading or offline playback.
-- Support for TVs older than Tizen 6.5 (2022 models). Tizen 7.0 is the tested target.
+- Support for TVs older than Tizen 6.0 (2021 models). Tizen 7.0 is the tested target.
 - Multiple profiles or account switching.
 
 ## 2. Platform constraints
 
-- **Runtime:** the Tizen 7.0 web runtime is Chromium-based (about Chrome 94). The build targets **Chrome 85** (`build.target: 'chrome85'`), so 2022 models (Tizen 6.5) should work, but they are not tested.
+- **Runtime:** the Tizen 7.0 web runtime is Chromium-based (about Chrome 94). The build targets **Chrome 76** (`build.target: 'chrome76'`), the engine of 2021 models (Tizen 6.0). The build lowers syntax only, so `src/core/platform/compat.ts` shims the newer runtime APIs the app uses (`crypto.randomUUID`, `AbortSignal.prototype.throwIfAborted`, and `crypto.subtle.digest` for SHA-256 when WebCrypto is unavailable), and `tools/postcss/flexGapFallback.ts` adds margin fallbacks for flexbox `gap` (Chrome 84), switched on by the `no-flex-gap` class that `compat.ts` sets when the engine lacks it.
 - **Video:** `webapis.avplay` plays on a native video layer behind the HTML. It supports HLS, HEVC, 2160p and HDR10/HDR10+, has multiple audio tracks (`getTotalTrackInfo` / `setSelectTrack`) and loads external subtitles (`setExternalSubtitlePath`). An HTML `<video>` element can't reliably switch audio tracks or play 4K HDR on the TV, so it is used only in the desktop development build.
 - **Remote keys:** arrows, Enter (OK) and Back (`10009`) arrive without any setup. Media and channel keys must be registered with `tizen.tvinputdevice.registerKey` (MediaPlayPause, MediaPlay, MediaPause, MediaRewind, MediaFastForward, MediaStop, ChannelUp, ChannelDown).
 - **App lifecycle:** the Home button and standby fire `visibilitychange`. Back on the root screen must offer to exit (`tizen.application.getCurrentApplication().exit()`).
