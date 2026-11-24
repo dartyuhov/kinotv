@@ -23,7 +23,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
-  // Tests run against the production build (chrome85 target), served by vite preview. The fake API
+  // Tests run against the production build (chrome76 target), served by vite preview. The fake API
   // host is baked in at build time, so the build goes to its own folder and never clobbers dist/.
   webServer: {
     command: `npx vite build --outDir dist-e2e --emptyOutDir --logLevel warn && npx vite preview --outDir dist-e2e --port ${port} --strictPort`,

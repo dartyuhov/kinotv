@@ -1,3 +1,5 @@
+// First: shims for older TV engines (Tizen 6.0 / Chromium 76) must be in place before other modules run.
+import './core/platform/compat';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fontsource/inter/latin-400.css';

@@ -46,7 +46,7 @@ reported Samsung TV crash is an out-of-memory termination.
 
 ## Method
 
-The opt-in Playwright benchmarks run against the production Chrome 85-targeted
+The opt-in Playwright benchmarks run against the production Chrome 76-targeted
 build in current local Chromium with 4× CPU throttling. Browsing uses 100 titles,
 3840×2160 backdrops, 500×750 large posters, and 250×375 medium posters. Each run
 performs 60 remote moves and three title-page round trips. Playback uses the
