@@ -25,7 +25,7 @@ test('remote clear reports managed usage, preserves saved session/preferences an
   });
   await remote.repeat('right', 8);
   await expect(app.focused).toHaveAccessibleName('Настройки');
-  await expect(page.getByText('Кэш изображений: 1,0 МиБ / 50 МиБ', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Кэш изображений: 1,0 МиБ \/ \d+ МиБ$/)).toBeVisible();
   await expect(page.getByText('Сохранение изображений доступно', { exact: true })).toBeVisible();
   await expect(page.getByText(/Попадания: \d+ · Промахи: \d+ · Загружено: 1,0 МиБ · Удалено: \d+/)).toBeVisible();
   await expect(page.locator('.settings-tab__cache')).not.toContainText('http');
@@ -34,7 +34,7 @@ test('remote clear reports managed usage, preserves saved session/preferences an
   await expect(app.focused).toHaveAccessibleName('Очистить кэш изображений');
   await remote.press('ok');
   await expect(page.getByRole('status').filter({ hasText: 'Кэш изображений очищен' })).toBeVisible();
-  await expect(page.getByText('Кэш изображений: 0,0 МиБ / 50 МиБ', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Кэш изображений: 0,0 МиБ \/ \d+ МиБ$/)).toBeVisible();
   await expect(app.focused).toHaveAccessibleName('Очистить кэш изображений');
   expect(await page.evaluate(() => localStorage.getItem('kinotv:session'))).toBe(saved);
   expect(await page.evaluate(() => localStorage.getItem('image-test:preferences'))).toBe('preserve');
@@ -62,10 +62,10 @@ test('remote clear during a delayed stale refresh fences its completion and perm
   await remote.repeat('right', 8);
   await remote.press('down', 'down', 'ok');
   await expect(page.getByText('Кэш изображений очищен', { exact: true })).toBeVisible();
-  await expect(page.getByText('Кэш изображений: 0,0 МиБ / 50 МиБ', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Кэш изображений: 0,0 МиБ \/ \d+ МиБ$/)).toBeVisible();
   // Wait for the delayed server answer, including a request cancelled when Home unmounts.
   await expect.poll(() => cdn.transfers.filter((r) => r.source === item.posters.wide).length).toBe(2);
-  await expect(page.getByText('Кэш изображений: 0,0 МиБ / 50 МиБ', { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Кэш изображений: 0,0 МиБ \/ \d+ МиБ$/)).toBeVisible();
   cdn.respond(item.posters.wide!, { headers: { 'cache-control': 'max-age=3600' } });
   await page.reload();
   await expect(page.getByTestId('backdrop').last()).toHaveJSProperty('naturalWidth', 16);

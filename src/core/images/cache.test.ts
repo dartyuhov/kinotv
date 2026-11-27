@@ -892,6 +892,25 @@ it('failed incremental growth releases its reservation and serves transient byte
   protectedLease.release(); incoming.release();
 });
 
+it('limits the cache to the budget, or to 80% of a reported storage quota when that is smaller', async () => {
+  expect(await createImageCache({ store: createBrowserImageStore('limit-a'), validate }).limit()).toBe(250 * 1024 * 1024);
+  expect(await createImageCache({ store: createBrowserImageStore('limit-b'), validate, quota: async () => 263 * 1024 * 1024 }).limit())
+    .toBe(Math.floor(263 * 1024 * 1024 * 0.8));
+  expect(await createImageCache({ store: createBrowserImageStore('limit-c'), validate, quota: async () => 10e9 }).limit()).toBe(250 * 1024 * 1024);
+  expect(await createImageCache({ store: createBrowserImageStore('limit-d'), validate, quota: async () => { throw new Error('no estimate'); } }).limit())
+    .toBe(250 * 1024 * 1024);
+});
+
+it('evicts down to the quota-capped limit, not the budget', async () => {
+  const store = createBrowserImageStore('quota-evict');
+  const cache = createImageCache({ store, transport: async () => response(400), validate, quota: async () => 1000 });
+  for (const n of [1, 2, 3, 4]) await cache.acquire(`${source}&n=${n}`).ready;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const { managedBytes } = await cache.usage();
+  expect(await cache.limit()).toBe(800);
+  expect(managedBytes).toBeLessThanOrEqual(800);
+});
+
 /** Stores three released images, then fails the next write once with `failure`. */
 async function cacheWithOneFailedWrite(name: string, failure: Error) {
   const inner = createBrowserImageStore(name);

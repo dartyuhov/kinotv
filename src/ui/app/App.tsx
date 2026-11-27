@@ -7,6 +7,7 @@ import { queryClient, userQuery } from './queries';
 import { SCREENS } from './screens';
 import { Stage } from './Stage';
 import { useSessionStatus } from './useSession';
+import { useSmartHubPreview } from './smartHubPreview';
 
 export function App() {
   const signedIn = useSessionStatus() === 'signedIn';
@@ -29,5 +30,7 @@ function SignedIn() {
   useEffect(() => {
     void queryClient.prefetchQuery(userQuery);
   }, []);
+  // On a TV: Smart Hub preview tiles from History, and opening a tapped tile's title.
+  useSmartHubPreview();
   return <ScreenStack screens={SCREENS} />;
 }

@@ -10,12 +10,17 @@ export function imageCache(): ImageCache {
   const fs = tizen()?.filesystem;
   const tv = fs ? tvImageStore(fs) : undefined;
   return cache = createImageCache({ store: tv ?? createBrowserImageStore(),
+    // IndexedDB has a quota (on a 2021 TV about 263 MiB); the TV's private files don't report one.
+    quota: async () => (tv && await tv.usesFiles() ? undefined : browserQuota()),
     // Local browser acceptance can inject a deterministic tiny logical budget.
     ...(import.meta.env.VITE_PLAYER === 'fake' ? (globalThis as typeof globalThis & {
       __kinotvImageOptions?: { budget?: number };
     }).__kinotvImageOptions : {}) });
 }
 
+async function browserQuota(): Promise<number | undefined> {
+  return (await navigator.storage?.estimate?.())?.quota;
+}
 
 /** Remembers, per web engine (user agent), whether the TV's private files can hold the cache. */
 export const IMAGE_STORE_KEY = 'kinotv:image-store';

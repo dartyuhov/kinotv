@@ -1,7 +1,8 @@
 # Bounded image cache for KinoTV
 
 KinoTV reuses downloaded artwork across browsing sessions while keeping its
-managed image-cache files within 50 MiB. The cache works entirely on the TV,
+managed image-cache files within 250 MiB (at most 80% of a reported storage
+quota). The cache works entirely on the TV,
 requires no configuration, and remains separate from the saved login session.
 This document records the approved policy and proposes the implementation
 design for review. Implementation has not started.
@@ -91,7 +92,12 @@ prevent admission, display the new image transiently rather than expanding the
 disk budget. Batch last-used metadata updates instead of writing on every
 focus movement. Never store image bytes as base64 in localStorage.
 
-The 50 MiB limit covers KinoTV-managed logical files, not filesystem allocation
+The limit is 250 MiB, capped at 80% of the storage quota when the backend
+reports one (IndexedDB; about 263 MiB on a 2021 TV, so about 210 MiB there):
+writes near a quota fail, and a failed write turns persistence off for the
+session. It was 50 MiB until November 2026, which held less than one screenful
+of History's 16:9 artwork (0.2–0.45 MiB each at 1080p). The limit covers
+KinoTV-managed logical files, not filesystem allocation
 overhead, browser-managed HTTP caches, the installed application, or decoded
 graphics memory. Settings must label it **Image cache**, not total app storage.
 
@@ -195,7 +201,7 @@ remain intact.
 ## Settings and diagnostics
 
 Provide a compact Settings section using the existing focus and localization
-patterns. It displays **Image cache: X MiB / 50 MiB** and **Clear image cache**.
+patterns. It displays **Image cache: X MiB / limit MiB** and **Clear image cache**.
 The clear action reports completion or an actionable storage failure without
 changing sign-in state. No size slider or advanced tuning is needed.
 
@@ -236,7 +242,7 @@ establish device performance; report that boundary explicitly.
 ## Review and next step
 
 Review this written design before implementation planning. The approved policy
-is a 50 MiB automatically managed image cache; the detailed module, storage,
+is an automatically managed image cache (now 250 MiB, quota-capped); the detailed module, storage,
 and acceptance design above remains subject to review. Implementation planning
 must account for the standalone HTTPS transport dependency without introducing
 a persistent external helper.
