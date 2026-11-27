@@ -76,7 +76,7 @@ export async function validateImage(blob: Blob): Promise<Blob> {
       context.drawImage(bitmap, 0, 0);
       bitmap.close();
       bitmap = undefined;
-      return await encodeCanvas(canvas);
+      return await encodeCanvas(canvas, blob.type);
     } finally {
       bitmap?.close();
       if (canvas) { canvas.width = 0; canvas.height = 0; }
@@ -102,7 +102,7 @@ export async function validateImage(blob: Blob): Promise<Blob> {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Artwork resize unavailable');
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return await encodeCanvas(canvas);
+    return await encodeCanvas(canvas, blob.type);
   } finally {
     image.onload = image.onerror = null;
     image.src = '';
@@ -112,7 +112,13 @@ export async function validateImage(blob: Blob): Promise<Blob> {
   }
 }
 
-function encodeCanvas(canvas: HTMLCanvasElement): Promise<Blob> {
+/**
+ * Re-encodes a resized image. A JPEG source stays JPEG: it has no alpha to keep, and on a 2021 TV
+ * (Tizen 6.0) encoding 1920×1080 took about 0.2 s as JPEG but 2 s as WebP, per image, while its card
+ * stays unfocusable. Other sources (PNG, WebP, GIF) may carry alpha, so they become WebP.
+ */
+function encodeCanvas(canvas: HTMLCanvasElement, sourceType: string): Promise<Blob> {
+  const type = sourceType === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
   return new Promise((resolve, reject) => canvas.toBlob(
-    (result) => result ? resolve(result) : reject(new Error('Artwork resize failed')), 'image/webp', .85));
+    (result) => result ? resolve(result) : reject(new Error('Artwork resize failed')), type, .85));
 }

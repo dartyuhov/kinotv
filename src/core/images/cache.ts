@@ -195,11 +195,15 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
     await exclusive(async () => {
       if (reservation) reservations.delete(reservation);
       if (!available || epoch !== generation || signal?.aborted || (expected && entries.get(key) !== expected)) return;
+      // A retry clears all unleased artwork first only when the store reported itself full. Any other
+      // failure (a TV under memory pressure fails the odd IndexedDB write) just retries: forcing the
+      // cleanup there wiped the whole cache, 176 records in one session on a 2021 TV.
+      let full = false;
       for (let attempt = 0; attempt < 2; attempt++) {
         if (epoch !== generation || signal?.aborted) return;
         const temporary = temporaryKey();
         try {
-          if (!await cleanup(record.size, key, attempt > 0)) return;
+          if (!await cleanup(record.size, key, full)) return;
           if (epoch !== generation || signal?.aborted) return;
           files.set(temporary, record.size);
           await store.writeTemporary(temporary, record);
@@ -214,7 +218,8 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
           if (!metadataOnly) validated.add(key); // Download was validated before admission.
           dirty.delete(key);
           return;
-        } catch {
+        } catch (error) {
+          full = (error as { name?: unknown } | null)?.name === 'QuotaExceededError';
           bases.delete(key);
           validated.delete(key);
           // A failed rollback can leave physical backups or a differently sized

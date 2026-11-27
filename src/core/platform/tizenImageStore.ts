@@ -15,6 +15,7 @@ export interface ImageFilesystem {
   moveFile(from: string, to: string, overwrite: boolean, success: (path: string) => void, failure: Failure): void;
   rename(path: string, newName: string, success: (path: string) => void, failure: Failure): void;
   deleteFile(path: string, success: (path: string) => void, failure: Failure): void;
+  deleteDirectory?(path: string, recursive: boolean, success: (path: string) => void, failure: Failure): void;
 }
 
 const ROOT = 'wgt-private/kinotv-images';
@@ -22,6 +23,48 @@ const validKey = (key: string) => /^(?:[a-f0-9]{64}(?:-meta)?|bak-[a-f0-9]{64}(?
 const notFound = (error: unknown) => (error as { name?: string })?.name === 'NotFoundError';
 function callback<T>(start: (success: (value: T) => void, failure: Failure) => void): Promise<T> {
   return new Promise((resolve, reject) => start(resolve, reject));
+}
+
+/**
+ * Whether this TV's filesystem API can hold the image cache. On a 2021 TV (Tizen 6.0) `listDirectory`
+ * returns names only up to about 512 bytes in total: later names come back empty or cut short, so the
+ * cache can neither find nor account for its own files (it showed 0 MiB and "unavailable" with 130
+ * files on disk). The probe writes a dozen hash-named records (over 512 bytes of names) to a scratch
+ * directory, lists them back and reads one, then removes them.
+ */
+export async function probeTizenImageStore(fs: ImageFilesystem): Promise<boolean> {
+  const directory = `${ROOT}-probe`;
+  const names = Array.from({ length: 12 }, (_, i) => i.toString(16).padStart(64, 'e'));
+  const record = new Blob([Uint8Array.from([0, 0, 0, 4]), new Blob([new Uint8Array(4096).fill(7)])]);
+  const written: string[] = [];
+  try {
+    try { await callback<string>((ok, fail) => fs.createDirectory(directory, false, ok, fail)); }
+    catch { /* Already there from an interrupted probe; listing below decides. */ }
+    for (const name of names) {
+      const handle = fs.openFile(`${directory}/${name}`, 'w');
+      written.push(name);
+      try { await callback<void>((ok, fail) => handle.writeBlobNonBlocking(record, ok, fail)); }
+      finally { await callback<void>((ok, fail) => handle.closeNonBlocking(ok, fail)); }
+    }
+    const listed = await callback<string[]>((ok, fail) => fs.listDirectory(directory, ok, fail));
+    if (!names.every((name) => listed.includes(name))) return false;
+    const handle = fs.openFile(`${directory}/${names[names.length - 1]}`, 'r');
+    try {
+      const read = await callback<Blob>((ok, fail) => handle.readBlobNonBlocking(ok, fail));
+      return read.size === record.size;
+    } finally { await callback<void>((ok, fail) => handle.closeNonBlocking(ok, fail)); }
+  } catch {
+    return false;
+  } finally {
+    for (const name of written) await callback<string>((ok, fail) => fs.deleteFile(`${directory}/${name}`, ok, fail)).catch(() => undefined);
+    if (fs.deleteDirectory) await callback<string>((ok, fail) => fs.deleteDirectory!(directory, true, ok, fail)).catch(() => undefined);
+  }
+}
+
+/** Best-effort removal of the file cache's directory, for a TV whose cache moved to IndexedDB. */
+export async function discardTizenImageFiles(fs: ImageFilesystem): Promise<void> {
+  // Listing is what's broken there, so remove the directory as a whole rather than file by file.
+  if (fs.deleteDirectory) await callback<string>((ok, fail) => fs.deleteDirectory!(ROOT, true, ok, fail)).catch(() => undefined);
 }
 
 export function createTizenImageStore(fs: ImageFilesystem): ImageStore {

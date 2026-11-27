@@ -12,6 +12,24 @@ export interface ImageStore {
   remove(key: string): Promise<void>;
 }
 
+/**
+ * A store that picks its backend on first use: `primary` when `usable()` resolves true, otherwise the
+ * store `fallback()` makes. Every operation waits for that one decision.
+ */
+export function createSelectedImageStore(primary: ImageStore, usable: () => Promise<boolean>, fallback: () => ImageStore): ImageStore {
+  let selected: Promise<ImageStore> | undefined;
+  const store = () => selected ??= usable().catch(() => false).then((ok) => ok ? primary : fallback());
+  return {
+    list: async () => (await store()).list(),
+    read: async (key) => (await store()).read(key),
+    writeTemporary: async (key, value) => (await store()).writeTemporary(key, value),
+    commit: async (temporary, key) => (await store()).commit(temporary, key),
+    readMetadata: async (key) => (await store()).readMetadata(key),
+    commitMetadata: async (temporary, key) => (await store()).commitMetadata(temporary, key),
+    remove: async (key) => (await store()).remove(key),
+  };
+}
+
 export function createBrowserImageStore(name = 'kinotv-images'): ImageStore {
   let connection: Promise<IDBDatabase> | undefined;
   function database(): Promise<IDBDatabase> {
@@ -42,10 +60,12 @@ export function createBrowserImageStore(name = 'kinotv-images'): ImageStore {
         return;
       }
       let value: T;
+      // Keep the cause (QuotaExceededError in particular): the cache only frees space for a full store.
+      let thrown: unknown;
       tx.oncomplete = () => resolve(value);
-      tx.onabort = tx.onerror = () => reject(new Error('Image storage transaction failed'));
+      tx.onabort = tx.onerror = () => reject(thrown ?? tx.error ?? new Error('Image storage transaction failed'));
       try { operation(tx.objectStore('files'), (result) => { value = result; }); }
-      catch { tx.abort(); }
+      catch (error) { thrown = error; tx.abort(); }
     });
   }
   const read = (key: string): Promise<Blob | undefined> => transaction('readonly', (store, result) => {
