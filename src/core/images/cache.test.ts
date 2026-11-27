@@ -1,4 +1,4 @@
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { createBrowserImageStore, type ImageStore } from '../platform/imageStore';
 import { createImageCache } from './cache';
@@ -890,4 +890,42 @@ it('failed incremental growth releases its reservation and serves transient byte
   expect(await cache.usage()).toEqual(before);
   expect((await store.list()).reduce((sum, file) => sum + file.size, 0)).toBe(before.managedBytes);
   protectedLease.release(); incoming.release();
+});
+
+/** Stores three released images, then fails the next write once with `failure`. */
+async function cacheWithOneFailedWrite(name: string, failure: Error) {
+  const inner = createBrowserImageStore(name);
+  let failNext = false;
+  const store: ImageStore = { ...inner, writeTemporary: async (key, value) => {
+    if (failNext) { failNext = false; throw failure; }
+    return inner.writeTemporary(key, value);
+  } };
+  const cache = createImageCache({ store, transport: async () => response(100), validate });
+  for (const n of [1, 2, 3]) { const lease = cache.acquire(`${source}&n=${n}`); await lease.settled; lease.release(); }
+  expect((await cache.usage()).entries).toBe(3);
+  failNext = true;
+  const lease = cache.acquire(`${source}&n=4`);
+  await lease.settled;
+  lease.release();
+  return cache;
+}
+
+it('a transient write failure retries without evicting the stored artwork', async () => {
+  const cache = await cacheWithOneFailedWrite('transient-write', new Error('Image storage transaction failed'));
+  expect(await cache.usage()).toEqual({ managedBytes: expect.any(Number), entries: 4, persistenceAvailable: true });
+  expect((await cache.diagnostics()).evictions).toBe(0);
+});
+
+it('a full store frees the unleased artwork before its one retry', async () => {
+  const cache = await cacheWithOneFailedWrite('full-write', new DOMException('Full', 'QuotaExceededError'));
+  expect((await cache.usage()).entries).toBe(1);
+  expect((await cache.diagnostics()).evictions).toBe(3);
+});
+
+it('IndexedDB reports the cause of a failed write, so a full store can be told apart', async () => {
+  const store = createBrowserImageStore('cause');
+  const original = IDBObjectStore.prototype.put;
+  IDBObjectStore.prototype.put = () => { throw new DOMException('Full', 'QuotaExceededError'); };
+  try { await expect(store.writeTemporary('tmp-x', new Blob(['x']))).rejects.toMatchObject({ name: 'QuotaExceededError' }); }
+  finally { IDBObjectStore.prototype.put = original; }
 });

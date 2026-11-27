@@ -105,6 +105,16 @@ For browser development, store blobs and metadata transactionally in IndexedDB.
 Apply the same logical accounting; browser quota failures trigger the same
 fallback behavior. This adapter does not prove Tizen filesystem behavior.
 
+On a TV, the private-file store is used only when the filesystem passes a probe
+(`probeTizenImageStore`): a dozen hash-named records are written, listed back
+and one is read. Tizen 6.0 (2021 models) fails it: `listDirectory` returns names
+only up to about 512 bytes in total, later ones empty or cut, so the cache could
+neither find nor account for its files (observed: 130 files on disk, Settings
+showing 0 MiB and "unavailable"). There the cache uses IndexedDB, which held and
+returned blobs intact on that TV (263 MiB quota), and the unusable directory is
+removed. The decision is remembered per user agent, so a firmware update probes
+again.
+
 ## Image identity and freshness
 
 Use the complete source URL as the logical source identity and a digest as the
@@ -161,10 +171,14 @@ cache, so an exact process-memory ceiling cannot be guaranteed by this module.
 
 ## Failures and cleanup
 
-The cache is an optimization, not a prerequisite for browsing. On storage
-errors, evict unleased entries and retry admission once. If persistence still
-fails, serve images transiently for the session and report persistence as
-unavailable. Never retry writes indefinitely or delete unrelated app data.
+The cache is an optimization, not a prerequisite for browsing. On a storage
+error, retry admission once; evict unleased entries before that retry only when
+the store reported itself full (`QuotaExceededError`). Other write failures
+happen on a TV under memory pressure, and evicting on them wiped the whole cache
+(176 records in one session on a 2021 TV) for a single failed write. If
+persistence still fails, serve images transiently for the session and report
+persistence as unavailable. Never retry writes indefinitely or delete unrelated
+app data.
 
 Remove corrupt payloads and recover through a fresh bounded download. Keep
 existing component title/placeholder fallbacks when the network also fails.

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createImageCache } from '../images/cache';
 import { encodeRecord, responseMetadata } from '../images/records';
 import { createBrowserImageStore, type ImageStore } from './imageStore';
-import { createTizenImageStore, type ImageFilesystem, type ImageFileHandle } from './tizenImageStore';
+import { createTizenImageStore, probeTizenImageStore, type ImageFilesystem, type ImageFileHandle } from './tizenImageStore';
+import { IMAGE_STORE_KEY, tvImageStore } from '../images';
 
 const KEY = 'a'.repeat(64);
 const TEMP = 'tmp-abcd';
@@ -384,4 +385,70 @@ it('IndexedDB reopens a connection that was explicitly closed', async () => {
   await store.list(); connection!.close();
   await store.writeTemporary(TEMP, new Blob(['ok']));
   expect(await (await store.read(TEMP))!.text()).toBe('ok');
+});
+
+/** Tizen 6.0's listDirectory: names only up to ~512 bytes in total; later ones come back cut or empty. */
+class Tizen60ImageFilesystem extends LocalImageFilesystem {
+  readonly deleted: string[] = [];
+  listDirectory(path: string, success: (names: string[]) => void, failure: (error: unknown) => void): void {
+    super.listDirectory(path, (names) => {
+      let budget = 512;
+      success(names.map((name) => { const kept = name.slice(0, Math.max(0, budget)); budget -= name.length; return kept; }));
+    }, failure);
+  }
+  deleteDirectory(path: string, _recursive: boolean, success: (path: string) => void): void {
+    queueMicrotask(() => {
+      for (const file of [...this.files.keys()]) if (file.startsWith(`${path}/`)) this.files.delete(file);
+      this.directories.delete(path);
+      this.deleted.push(path);
+      success(path);
+    });
+  }
+}
+
+const memoryKv = () => {
+  const values = new Map<string, unknown>();
+  return { values, get: <T,>(key: string) => (values.get(key) ?? null) as T | null, set: (key: string, value: unknown) => { values.set(key, value); }, remove: (key: string) => { values.delete(key); } };
+};
+
+describe('choosing the TV image store', () => {
+  beforeEach(() => { globalThis.indexedDB = new IDBFactory(); });
+
+  it('the probe accepts a working filesystem and rejects Tizen 6.0 listing, leaving no probe files', async () => {
+    const working = new LocalImageFilesystem();
+    expect(await probeTizenImageStore(working)).toBe(true);
+    expect(working.files.size).toBe(0);
+    const tizen60 = new Tizen60ImageFilesystem();
+    expect(await probeTizenImageStore(tizen60)).toBe(false);
+    expect([...tizen60.files.keys()].filter((path) => path.includes('-probe/'))).toEqual([]);
+  });
+
+  it('keeps records in private files where the probe passes', async () => {
+    const fs = new LocalImageFilesystem();
+    const kv = memoryKv();
+    const store = tvImageStore(fs, kv, 'engine-A');
+    await store.writeTemporary(TEMP, new Blob(['file']));
+    await store.commit(TEMP, KEY);
+    expect([...fs.files.keys()]).toEqual([`wgt-private/kinotv-images/${KEY}`]);
+    expect(kv.values.get(IMAGE_STORE_KEY)).toEqual({ engine: 'engine-A', files: true });
+  });
+
+  it('moves to IndexedDB on Tizen 6.0, removes the old directory, and decides once per engine', async () => {
+    const fs = new Tizen60ImageFilesystem();
+    fs.directories.add('wgt-private/kinotv-images');
+    fs.files.set(`wgt-private/kinotv-images/${'b'.repeat(64)}`, new Blob(['stale']));
+    const kv = memoryKv();
+    const store = tvImageStore(fs, kv, 'Tizen 6.0');
+    await store.writeTemporary(TEMP, new Blob(['idb']));
+    await store.commit(TEMP, KEY);
+    expect(await (await store.read(KEY))!.text()).toBe('idb');
+    expect(fs.files.size).toBe(0);
+    expect(fs.deleted).toEqual(['wgt-private/kinotv-images-probe', 'wgt-private/kinotv-images']);
+    expect(kv.values.get(IMAGE_STORE_KEY)).toEqual({ engine: 'Tizen 6.0', files: false });
+
+    const probing = vi.spyOn(fs, 'openFile');
+    const restarted = tvImageStore(fs, kv, 'Tizen 6.0');
+    expect(await (await restarted.read(KEY))!.text()).toBe('idb');
+    expect(probing).not.toHaveBeenCalled();
+  });
 });
