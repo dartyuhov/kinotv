@@ -137,6 +137,18 @@ test.describe('Sign out on Settings', () => {
     await expect(homeTab(page)).toBeHidden();
   });
 
+  test('forgets the saved History of the account', async ({ app, api, page, remote }) => {
+    fakeDeviceFlow(api);
+    await app.open();
+    await remote.repeat('right', 7);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('kinotv:history'))).not.toBeNull();
+    await remote.press('right', 'down');
+    await expect(app.focused).toHaveAccessibleName('Выйти из аккаунта');
+    await remote.press('ok');
+    await expect(signInHeading(page)).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('kinotv:history'))).toBeNull();
+  });
+
   test('signing in again starts on Home, not where the previous viewer left off', async ({ app, api, clock, page, remote }) => {
     let approved = false;
     fakeDeviceFlow(api, () => (approved ? tokens(1) : PENDING));

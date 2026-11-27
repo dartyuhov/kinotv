@@ -189,18 +189,28 @@ export function createApiClient(http: Http): ApiClient {
       return [...channels.values()];
     },
     async history() {
-      const latest = new Map<number, HistoryEntry>();
-      // No documented server ordering: never present a sorted prefix as global newest-first.
-      for (let page = 1; ; page++) {
-        const res = await http<{ history?: Array<{ item?: Partial<ItemSummary> | null; media?: { id?: unknown; duration?: unknown } | null; time?: unknown; last_seen?: unknown }>;
-          pagination?: Partial<Record<keyof Pagination, unknown>> }>({ method: 'GET', path: '/v1/history', query: { page, perpage: 50 } });
+      type RawHistory = { item?: Partial<ItemSummary> | null; media?: { id?: unknown; duration?: unknown } | null; time?: unknown; last_seen?: unknown };
+      const readPage = async (page: number) => {
+        const res = await http<{ history?: RawHistory[]; pagination?: Partial<Record<keyof Pagination, unknown>> }>(
+          { method: 'GET', path: '/v1/history', query: { page, perpage: 50 } });
         if (!Array.isArray(res.history)) throw new Error('History response unavailable');
         const paging = pagination(res.pagination);
-        if (res.pagination?.total === undefined || !Number.isSafeInteger(paging.total) || paging.total < 0 || paging.total > 200
-          || (paging.total > 0 && paging.current !== page)) {
+        if (res.pagination?.total === undefined || !Number.isSafeInteger(paging.total) || paging.total < 0 || paging.total > 200) {
           throw new Error('History pagination unsupported');
         }
-        for (const raw of res.history) {
+        // History can shrink while later pages are in flight: a page past the new end adds nothing.
+        if (page > 1 && page > paging.total) return { rows: [] as RawHistory[], total: paging.total };
+        if (paging.total > 0 && paging.current !== page) throw new Error('History pagination unsupported');
+        return { rows: res.history, total: paging.total };
+      };
+      // No documented server ordering: never present a sorted prefix as global newest-first. The first
+      // page tells how many there are; the rest are read in parallel (a long history is dozens of pages,
+      // which one after another took over 10 s on a TV) and merged in page order.
+      const first = await readPage(1);
+      const rest = await inPool(Array.from({ length: Math.max(0, first.total - 1) }, (_, i) => i + 2), HISTORY_PAGES_IN_FLIGHT, readPage);
+      const latest = new Map<number, HistoryEntry>();
+      for (const { rows } of [first, ...rest]) {
+        for (const raw of rows) {
           const id = num(raw.item?.id);
           const lastSeen = Number(raw.last_seen);
           if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(lastSeen) || lastSeen < 0) continue;
@@ -214,7 +224,6 @@ export function createApiClient(http: Http): ApiClient {
           };
           if (!latest.has(id) || latest.get(id)!.lastSeen < lastSeen) latest.set(id, entry);
         }
-        if (page >= paging.total) break;
       }
       return [...latest.values()].sort((a, b) => b.lastSeen - a.lastSeen || a.item.id - b.item.id);
     },
@@ -391,6 +400,31 @@ function collection(c: Collection): Collection {
 
 const BOOKMARK_PAGE_SIZE = 50;
 const MAX_BOOKMARK_PAGES = 20;
+/** History pages requested at once after the first; matches a browser's per-host HTTP/1.1 limit. */
+const HISTORY_PAGES_IN_FLIGHT = 6;
+
+/**
+ * Runs `task` over `inputs` with at most `limit` in flight. Results keep the input order. The first
+ * failure rejects the whole run, and no new task starts after it.
+ */
+async function inPool<T, R>(inputs: readonly T[], limit: number, task: (input: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(inputs.length);
+  let next = 0;
+  let failed = false;
+  const worker = async () => {
+    while (!failed && next < inputs.length) {
+      const index = next++;
+      try {
+        results[index] = await task(inputs[index]!);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, inputs.length) }, worker));
+  return results;
+}
 
 // Numbers sometimes arrive as strings ("128") or are missing.
 function num(value: unknown): number {
