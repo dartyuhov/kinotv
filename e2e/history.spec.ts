@@ -91,3 +91,24 @@ test('loading, failed-load retry and empty state remain remote navigable', async
   await remote.press('back');
   await expect(app.focused).toHaveAccessibleName('История');
 });
+
+test('a relaunch shows the saved history at once, and a failed refresh keeps it', async ({ app, api, page, remote }) => {
+  fakeHome(api, { hot: [film], movies: [], serials: [], progress: {} });
+  fakeHistory(api, [[historyEntry(film, film.videos![0]!, 300, 200)]]);
+  await app.open();
+  await history(remote);
+  await expect(page.getByRole('button', { name: 'Река, Сохранено: 5 мин' })).toBeVisible();
+  // Age the saved copy past freshness, and make the refresh fail.
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem('kinotv:history')!) as { savedAt: number };
+    localStorage.setItem('kinotv:history', JSON.stringify({ ...saved, savedAt: saved.savedAt - 10 * 60_000 }));
+  });
+  api.on('GET', '/v1/history', { status: 400, json: { error: 'unavailable' } });
+  const before = api.requestsTo('GET', '/v1/history').length;
+  await page.reload();
+  await history(remote);
+  await expect(page.getByRole('button', { name: 'Река, Сохранено: 5 мин' })).toBeVisible();
+  await expect.poll(() => api.requestsTo('GET', '/v1/history').length).toBeGreaterThan(before);
+  await expect(page.locator('.history').getByRole('status')).not.toHaveText('Не удалось загрузить историю');
+  await expect(page.getByRole('button', { name: 'Повторить загрузку истории' })).toHaveCount(0);
+});

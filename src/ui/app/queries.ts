@@ -1,5 +1,7 @@
 import { notifyManager, QueryClient, queryOptions } from '@tanstack/react-query';
 import { api, session } from '../../core/services';
+import { storage } from '../../core/platform/storage';
+import { HISTORY_STORAGE_KEY } from '../screens/history/historyQueries';
 
 // Deliver query updates in a microtask rather than TanStack's default setTimeout(0). React batches them
 // either way, and this keeps rendering independent of timers, which e2e tests pause and step.
@@ -21,7 +23,10 @@ export const queryClient = new QueryClient({
 });
 
 session.subscribe(() => {
-  if (session.status() === 'signedOut') queryClient.clear();
+  if (session.status() !== 'signedOut') return;
+  queryClient.clear();
+  // The saved History belongs to the account that just signed out.
+  storage.remove(HISTORY_STORAGE_KEY);
 });
 
 /** The signed-in account: name and subscription. Re-fetched whenever a screen showing it mounts. */

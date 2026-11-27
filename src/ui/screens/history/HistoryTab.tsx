@@ -39,15 +39,17 @@ export function HistoryTab() {
     } catch { if (request === generation.current) setMessage(t('history.openFailed')); }
     finally { busy.current = false; }
   };
-  const state = query.isError ? t('history.failed') : query.isPending ? t('history.loading')
-    : query.data.length === 0 ? t('history.empty') : undefined;
+  // A failed refresh keeps the list it already shows (saved or earlier); only a list never read fails.
+  const failed = query.isError && query.data === undefined;
+  const state = failed ? t('history.failed') : query.isPending ? t('history.loading')
+    : (query.data ?? []).length === 0 ? t('history.empty') : undefined;
   return (
     <div className="history">
       <h1>{t('tabs.history')}</h1>
       <p className="history__status" role="status">{message || state}</p>
-      {query.isError && <Button focusKey="history:retry" label={t('history.retry')} onPress={() => void query.refetch()} />}
+      {failed && <Button focusKey="history:retry" label={t('history.retry')} onPress={() => void query.refetch()} />}
       <Grid<HistoryEntry> focusKey="history:grid" title={t('tabs.history')} variant="landscape" height={760}
-        items={query.isError ? [] : query.data ?? []} itemKey={(entry) => entry.item.id}
+        items={failed ? [] : query.data ?? []} itemKey={(entry) => entry.item.id}
         renderCard={renderEntry} onItemFocus={(entry) => setFocused(entry)} onItemPress={(entry) => void open(entry)} message={state} />
     </div>
   );

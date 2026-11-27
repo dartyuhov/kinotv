@@ -36,12 +36,27 @@ Missing media remains an unavailable entry rather than guessing an episode.
 Missing posters use the existing artwork fallback. Invalid title identity or
 timestamp cannot establish ordering and is omitted.
 
-No source establishes global server ordering or a history `sort` parameter.
+No source establishes global server ordering or a history `sort` parameter, and
+a real account's pages were observed out of `last_seen` order (November 2026).
 The app therefore fetches **all pages** before publishing a result, sorts by
 `last_seen` descending, and retains the latest row per `item.id`. Ties use title
 ID for stable display. A failed page fails the query; the UI offers Retry.
 The safety bound is 200 pages of 50 rows. Larger or invalid pagination produces
 an error instead of presenting a truncated list as complete history.
+
+Page 1 reports the page count; the remaining pages are requested in parallel,
+at most six at a time, and merged in page order. A long history is dozens of
+pages: on a 2021 TV (Tizen 6.0) one account's 54 pages took about 190 ms each,
+over 10 s when read one after another. A page beyond a total that shrank during
+the read contributes nothing rather than failing the query.
+
+History isn't refetched every time its tab shows. The query stays fresh for
+five minutes and is kept for thirty after the tab closes; progress writes and
+watched changes invalidate it, so playback from this app updates it at once.
+Each successful read is also saved in local storage (`kinotv:history`, only the
+fields the cards show), and the next launch starts from that copy at its age,
+refreshing behind it once stale. A failed refresh keeps the list on screen; only
+a history never read shows the error and Retry. Sign-out removes the copy.
 
 On OK, current item detail resolves the historical **media ID** to its exact
 episode or film part. Fresh watching status establishes explicit completion.
