@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Plugin, UserConfig } from 'vite';
-import { ICON_FILE, renderConfigXml, tizenVersion } from './configXml.ts';
+import { ICON_FILE, PREVIEW_SERVICE_FILE, renderConfigXml, tizenVersion } from './configXml.ts';
 
 /**
  * Makes every production build a Tizen widget folder that runs from local files.
@@ -44,6 +44,8 @@ export function tizenWidget(): Plugin {
       const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
       this.emitFile({ type: 'asset', fileName: 'config.xml', source: renderConfigXml({ version: tizenVersion(version) }) });
       this.emitFile({ type: 'asset', fileName: ICON_FILE, source: readFileSync(join(root, 'tizen', ICON_FILE)) });
+      // The preview service runs in the TV's Node.js runtime as written (ES5), so it is copied, not bundled.
+      this.emitFile({ type: 'asset', fileName: PREVIEW_SERVICE_FILE, source: readFileSync(join(root, 'tizen', PREVIEW_SERVICE_FILE)) });
     },
   };
 }

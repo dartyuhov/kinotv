@@ -43,6 +43,14 @@ describe('renderConfigXml', () => {
     expect(xml).toMatch(/<tizen:setting [^>]*context-menu="disable"/);
   });
 
+  it('declares the Smart Hub preview service and resumes the running app from a tile', () => {
+    expect(xml).toContain('<tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="bg_service"/>');
+    expect(xml).toMatch(/<tizen:service id="KinoTV0001\.service"[^>]*>\s*<tizen:content src="service\/service\.js"\/>/);
+    expect(xml).toContain('<tizen:category name="http://tizen.org/category/service"/>');
+    expect(xml).toContain('<tizen:src name="index.html" reload="disable"/>');
+    expect(xml).toContain('<tizen:operation name="http://samsung.com/appcontrol/operation/eden_resume"/>');
+  });
+
   it('starts with an XML declaration and closes the widget element', () => {
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<widget ')).toBe(true);
     expect(xml.trimEnd().endsWith('</widget>')).toBe(true);

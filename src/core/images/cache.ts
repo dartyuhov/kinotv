@@ -2,7 +2,13 @@ import type { ImageStore } from '../platform/imageStore';
 import { decodeRecord, encodeRecord, hasDirective, responseMetadata, type ImageMetadata } from './records';
 import { abortable, fetchImage, readImageBody, validateImage, type ImageTransport } from './transport';
 
-export const IMAGE_BUDGET = 50 * 1024 * 1024;
+/**
+ * Most the persistent artwork cache may hold. A History of a few hundred titles is mostly 16:9 artwork
+ * of 0.2–0.45 MiB each once bounded to 1080p, so 50 MiB couldn't keep one screen-scroll of it.
+ */
+export const IMAGE_BUDGET = 250 * 1024 * 1024;
+/** Share of the storage quota the cache may take, when the store's backend reports one (IndexedDB). */
+export const IMAGE_QUOTA_SHARE = 0.8;
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const IMAGE_MEMORY_BUDGET = 8 * 1024 * 1024;
 export type ImagePriority = 'visible' | 'refresh' | 'prefetch';
@@ -27,6 +33,8 @@ export interface ImageDiagnostics { hits: number; misses: number; downloadedByte
 export interface ImageCache {
   acquire(source: string, role?: ImageRole, priority?: ImagePriority): ImageLease;
   usage(): Promise<ImageUsage>;
+  /** The byte limit in effect: the budget, capped by the storage quota once that is known. */
+  limit(): Promise<number>;
   diagnostics(): Promise<ImageDiagnostics>;
   clear(): Promise<void>;
 }
@@ -34,6 +42,11 @@ export interface ImageCacheOptions {
   store: ImageStore;
   transport?: ImageTransport;
   budget?: number;
+  /**
+   * The storage quota in bytes, if the backend has one. Writes near a quota fail, and a failed write
+   * turns persistence off for the session, so the limit stays at IMAGE_QUOTA_SHARE of it.
+   */
+  quota?: () => Promise<number | undefined>;
   maxImageBytes?: number;
   now?: () => number;
   validate?: (blob: Blob) => Promise<Blob | void>;
@@ -56,10 +69,11 @@ interface SharedImage {
   invalidated?: boolean;
 }
 
-export function createImageCache({ store, transport = fetchImage, budget = IMAGE_BUDGET,
+export function createImageCache({ store, transport = fetchImage, budget = IMAGE_BUDGET, quota,
   maxImageBytes = MAX_IMAGE_BYTES, now = Date.now, validate = validateImage, timeoutMs = 15_000,
   memoryBudget = IMAGE_MEMORY_BUDGET }: ImageCacheOptions): ImageCache {
-  const limit = Math.min(IMAGE_BUDGET, Math.max(0, budget));
+  // Settled during initialization (before any write or cleanup), once the quota is known.
+  let limit = Math.min(IMAGE_BUDGET, Math.max(0, budget));
   const imageLimit = Math.min(MAX_IMAGE_BYTES, Math.max(0, maxImageBytes));
   const shared = new Map<string, SharedImage>();
   // Validated compressed bytes only: no retained object URLs or decoded images.
@@ -129,6 +143,12 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
   }
   const initialized = (async () => {
     try {
+      const storageQuota = await quota?.().catch(() => undefined);
+      if (storageQuota !== undefined && Number.isFinite(storageQuota) && storageQuota > 0) {
+        limit = Math.min(limit, Math.floor(storageQuota * IMAGE_QUOTA_SHARE));
+      }
+    } catch { /* No quota: keep the budget. */ }
+    try {
       for (const file of await store.list()) if (managed(file.key)) files.set(file.key, file.size);
       for (const key of [...files.keys()]) {
         await exclusive(async () => { try {
@@ -195,11 +215,15 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
     await exclusive(async () => {
       if (reservation) reservations.delete(reservation);
       if (!available || epoch !== generation || signal?.aborted || (expected && entries.get(key) !== expected)) return;
+      // A retry clears all unleased artwork first only when the store reported itself full. Any other
+      // failure (a TV under memory pressure fails the odd IndexedDB write) just retries: forcing the
+      // cleanup there wiped the whole cache, 176 records in one session on a 2021 TV.
+      let full = false;
       for (let attempt = 0; attempt < 2; attempt++) {
         if (epoch !== generation || signal?.aborted) return;
         const temporary = temporaryKey();
         try {
-          if (!await cleanup(record.size, key, attempt > 0)) return;
+          if (!await cleanup(record.size, key, full)) return;
           if (epoch !== generation || signal?.aborted) return;
           files.set(temporary, record.size);
           await store.writeTemporary(temporary, record);
@@ -214,7 +238,8 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
           if (!metadataOnly) validated.add(key); // Download was validated before admission.
           dirty.delete(key);
           return;
-        } catch {
+        } catch (error) {
+          full = (error as { name?: unknown } | null)?.name === 'QuotaExceededError';
           bases.delete(key);
           validated.delete(key);
           // A failed rollback can leave physical backups or a differently sized
@@ -554,6 +579,10 @@ export function createImageCache({ store, transport = fetchImage, budget = IMAGE
       await initialized;
       await serial;
       return { managedBytes: bytes(), entries: entries.size, persistenceAvailable: available };
+    },
+    async limit() {
+      await initialized;
+      return limit;
     },
     async diagnostics() {
       await initialized;

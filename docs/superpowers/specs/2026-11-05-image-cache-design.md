@@ -1,7 +1,8 @@
 # Bounded image cache for KinoTV
 
 KinoTV reuses downloaded artwork across browsing sessions while keeping its
-managed image-cache files within 50 MiB. The cache works entirely on the TV,
+managed image-cache files within 250 MiB (at most 80% of a reported storage
+quota). The cache works entirely on the TV,
 requires no configuration, and remains separate from the saved login session.
 This document records the approved policy and proposes the implementation
 design for review. Implementation has not started.
@@ -91,7 +92,12 @@ prevent admission, display the new image transiently rather than expanding the
 disk budget. Batch last-used metadata updates instead of writing on every
 focus movement. Never store image bytes as base64 in localStorage.
 
-The 50 MiB limit covers KinoTV-managed logical files, not filesystem allocation
+The limit is 250 MiB, capped at 80% of the storage quota when the backend
+reports one (IndexedDB; about 263 MiB on a 2021 TV, so about 210 MiB there):
+writes near a quota fail, and a failed write turns persistence off for the
+session. It was 50 MiB until November 2026, which held less than one screenful
+of History's 16:9 artwork (0.2–0.45 MiB each at 1080p). The limit covers
+KinoTV-managed logical files, not filesystem allocation
 overhead, browser-managed HTTP caches, the installed application, or decoded
 graphics memory. Settings must label it **Image cache**, not total app storage.
 
@@ -104,6 +110,16 @@ and reconcile index entries with actual files before admitting writes.
 For browser development, store blobs and metadata transactionally in IndexedDB.
 Apply the same logical accounting; browser quota failures trigger the same
 fallback behavior. This adapter does not prove Tizen filesystem behavior.
+
+On a TV, the private-file store is used only when the filesystem passes a probe
+(`probeTizenImageStore`): a dozen hash-named records are written, listed back
+and one is read. Tizen 6.0 (2021 models) fails it: `listDirectory` returns names
+only up to about 512 bytes in total, later ones empty or cut, so the cache could
+neither find nor account for its files (observed: 130 files on disk, Settings
+showing 0 MiB and "unavailable"). There the cache uses IndexedDB, which held and
+returned blobs intact on that TV (263 MiB quota), and the unusable directory is
+removed. The decision is remembered per user agent, so a firmware update probes
+again.
 
 ## Image identity and freshness
 
@@ -161,10 +177,14 @@ cache, so an exact process-memory ceiling cannot be guaranteed by this module.
 
 ## Failures and cleanup
 
-The cache is an optimization, not a prerequisite for browsing. On storage
-errors, evict unleased entries and retry admission once. If persistence still
-fails, serve images transiently for the session and report persistence as
-unavailable. Never retry writes indefinitely or delete unrelated app data.
+The cache is an optimization, not a prerequisite for browsing. On a storage
+error, retry admission once; evict unleased entries before that retry only when
+the store reported itself full (`QuotaExceededError`). Other write failures
+happen on a TV under memory pressure, and evicting on them wiped the whole cache
+(176 records in one session on a 2021 TV) for a single failed write. If
+persistence still fails, serve images transiently for the session and report
+persistence as unavailable. Never retry writes indefinitely or delete unrelated
+app data.
 
 Remove corrupt payloads and recover through a fresh bounded download. Keep
 existing component title/placeholder fallbacks when the network also fails.
@@ -181,7 +201,7 @@ remain intact.
 ## Settings and diagnostics
 
 Provide a compact Settings section using the existing focus and localization
-patterns. It displays **Image cache: X MiB / 50 MiB** and **Clear image cache**.
+patterns. It displays **Image cache: X MiB / limit MiB** and **Clear image cache**.
 The clear action reports completion or an actionable storage failure without
 changing sign-in state. No size slider or advanced tuning is needed.
 
@@ -222,7 +242,7 @@ establish device performance; report that boundary explicitly.
 ## Review and next step
 
 Review this written design before implementation planning. The approved policy
-is a 50 MiB automatically managed image cache; the detailed module, storage,
+is an automatically managed image cache (now 250 MiB, quota-capped); the detailed module, storage,
 and acceptance design above remains subject to review. Implementation planning
 must account for the standalone HTTPS transport dependency without introducing
 a persistent external helper.

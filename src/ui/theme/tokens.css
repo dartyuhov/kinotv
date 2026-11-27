@@ -76,7 +76,15 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --scale-focus-button: 1.06;
   --scale-focus-card: 1.1;
-  --lift-focus-card: -8px;
+  /*
+   * The focused card lifts a little and gets an outer ring (white, with a dark gap to the artwork) that
+   * reads on bright and dark artwork alike. Scale, lift and ring together stay inside the 28px the grid
+   * and rows keep above a card: a 300px poster grows 15px, lifts 4px, and the ring adds 7px × 1.1.
+   */
+  --lift-focus-card: -4px;
+  --focus-ring-width: 4px;
+  --focus-ring-offset: 3px;
+  --color-focus-ring: #fff;
   --motion-scroll: 300ms;
   --motion-backdrop: 400ms;
   --scale-focus-tab: 1.08;

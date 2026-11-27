@@ -4,11 +4,20 @@
 import type { ImageFilesystem } from './tizenImageStore';
 import type { AvPlay } from './avplay';
 
+export interface TizenAppControlData { key: string; value: string[] }
+export interface TizenRequestedAppControl { appControl?: { operation?: string; data?: TizenAppControlData[] } }
+
 interface TizenApi {
   filesystem?: ImageFilesystem & { toURI?(path: string): string };
   tvinputdevice?: { registerKey(name: string): void };
-  application?: { getCurrentApplication(): { exit(): void } };
+  application?: {
+    getCurrentApplication(): { exit(): void; getRequestedAppControl?(): TizenRequestedAppControl | null };
+    launchAppControl?(control: unknown, appId: string, success?: () => void, failure?: (error: unknown) => void,
+      reply?: { onsuccess(data: TizenAppControlData[]): void; onfailure(): void }): void;
+  };
   systeminfo?: { getCapability(key: string): unknown };
+  ApplicationControl?: new (operation: string, uri: string | null, mime: string | null, category: string | null, data: unknown[]) => unknown;
+  ApplicationControlData?: new (key: string, value: string[]) => unknown;
 }
 
 interface WebApis {

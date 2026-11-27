@@ -11,7 +11,7 @@ configuration.
 ## Solution
 
 KinoTV automatically saves recently used artwork in a persistent image cache
-with a 50 MiB managed-file limit. It prioritizes visible images, reuses fresh
+with a 250 MiB managed-file limit (at most 80% of a reported storage quota). It prioritizes visible images, reuses fresh
 artwork across restarts, refreshes stale artwork efficiently, and removes
 least-recently-used images when necessary. Settings shows usage and offers a
 clear action that preserves the saved login and preferences.
@@ -22,7 +22,7 @@ clear action that preserves the saved login and preferences.
    screen, so that browsing feels fast and uses less bandwidth.
 2. As a viewer, I want cached artwork retained across app restarts, so that
    reopening KinoTV doesn't download every picture again.
-3. As a viewer, I want the image cache bounded to 50 MiB, so that artwork
+3. As a viewer, I want the image cache bounded (250 MiB, quota-capped), so that artwork
    doesn't consume excessive TV storage.
 4. As a viewer, I want old, rarely used artwork removed automatically, so that
    I don't need to manage storage myself.
@@ -121,7 +121,7 @@ manage storage directly.
   persisted storage. Visible leases can remain until released. Preserve login
   state and preferences.
 - Settings uses existing remote-focus and localization patterns, displaying
-  usage against 50 MiB and a clear action without advanced tuning controls.
+  usage against the limit in effect and a clear action without advanced tuning controls.
 - The cancellable image transport supports bounded bytes and conditional
   responses. Use ordinary artwork fetching when supported and allow the
   separately designed on-TV HTTPS transport behind that contract. Never send
@@ -177,8 +177,8 @@ image-cache acceptance.
 
 ## Further Notes
 
-The approved user policy is automatic caching with a 50 MiB managed-file
-budget. The written design contains the rationale and detailed recovery rules.
+The approved user policy is automatic caching with a 250 MiB managed-file
+budget (50 MiB until November 2026), capped at 80% of a reported storage quota. The written design contains the rationale and detailed recovery rules.
 This feature belongs to the existing KinoTV v1 effort and must preserve its
 standalone everyday-use requirement.
 

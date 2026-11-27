@@ -1,5 +1,5 @@
 /*
- * Artwork card. Focus: scale, lift, light outline, and diagonal sheen. Blurred
+ * Artwork card. Focus: scale, a small lift, an outer white ring, and diagonal sheen. Blurred
  * shadows cause severe paint stalls on Samsung TVs; only transform/opacity animate.
  */
 .card {
@@ -24,14 +24,21 @@
   height: var(--card-poster-height);
 }
 
-/* A cheap focus outline on a layer that fades in. */
+/*
+ * The focus ring: outside the card, separated from the artwork by a gap, on a layer that fades in
+ * (opacity only, so it stays cheap on the TV).
+ */
 .card::before {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: var(--radius-card);
-  border: 2px solid rgba(255, 255, 255, 0.7);
+  top: calc(-1 * (var(--focus-ring-offset) + var(--focus-ring-width)));
+  right: calc(-1 * (var(--focus-ring-offset) + var(--focus-ring-width)));
+  bottom: calc(-1 * (var(--focus-ring-offset) + var(--focus-ring-width)));
+  left: calc(-1 * (var(--focus-ring-offset) + var(--focus-ring-width)));
+  border-radius: calc(var(--radius-card) + var(--focus-ring-offset) + var(--focus-ring-width));
+  border: var(--focus-ring-width) solid var(--color-focus-ring);
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--motion-focus) var(--ease-out);
 }
 

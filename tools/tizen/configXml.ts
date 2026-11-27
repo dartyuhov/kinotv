@@ -8,6 +8,9 @@ export const APP_NAME = 'KinoTV';
 /** What `tizen run` / `tizen uninstall -p` and `sdb shell 0 debug` take on a TV. */
 export const APP_ID = `${PACKAGE_ID}.${APP_NAME}`;
 export const ICON_FILE = 'icon.png';
+/** The Smart Hub preview service (tizen/service/service.js): `<package>.<name>`, as Tizen requires. */
+export const PREVIEW_SERVICE_ID = `${PACKAGE_ID}.service`;
+export const PREVIEW_SERVICE_FILE = 'service/service.js';
 
 const PRIVILEGES = [
   'http://tizen.org/privilege/internet',
@@ -94,6 +97,19 @@ ${privileges}
 
   <!-- Don't load the app in the background at TV power-on: it would start before the network and session are ready. -->
   <tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="false"/>
+
+  <!-- Smart Hub preview: the latest History titles above the app on the Home bar, set by a service. -->
+  <tizen:metadata key="http://samsung.com/tv/metadata/use.preview" value="bg_service"/>
+  <tizen:service id="${PREVIEW_SERVICE_ID}" auto-restart="false">
+    <tizen:content src="${PREVIEW_SERVICE_FILE}"/>
+    <tizen:name>service</tizen:name>
+    <tizen:category name="http://tizen.org/category/service"/>
+  </tizen:service>
+  <!-- A preview tile opens the app with its action data; a running app gets it without reloading. -->
+  <tizen:app-control>
+    <tizen:src name="index.html" reload="disable"/>
+    <tizen:operation name="http://samsung.com/appcontrol/operation/eden_resume"/>
+  </tizen:app-control>
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
 </widget>
 `;

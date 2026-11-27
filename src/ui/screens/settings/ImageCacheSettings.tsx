@@ -5,7 +5,7 @@ import type { ImageDiagnostics, ImageUsage } from '../../../core/images/cache';
 import { Button } from '../../components/Button';
 
 export function ImageCacheSettings() {
-  const [snapshot, setSnapshot] = useState<{ usage: ImageUsage; diagnostics: ImageDiagnostics }>();
+  const [snapshot, setSnapshot] = useState<{ usage: ImageUsage; limit: number; diagnostics: ImageDiagnostics }>();
   const [feedback, setFeedback] = useState<'clearing' | 'cleared' | 'failed'>();
   const busy = useRef(false);
   const [revision, setRevision] = useState(0);
@@ -13,9 +13,9 @@ export function ImageCacheSettings() {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     const update = async () => {
-      const [usage, diagnostics] = await Promise.all([imageCache().usage(), imageCache().diagnostics()]);
+      const [usage, limit, diagnostics] = await Promise.all([imageCache().usage(), imageCache().limit(), imageCache().diagnostics()]);
       if (!active) return;
-      setSnapshot({ usage, diagnostics });
+      setSnapshot({ usage, limit, diagnostics });
       timer = setTimeout(() => { void update(); }, 1000);
     };
     void update();
@@ -32,7 +32,7 @@ export function ImageCacheSettings() {
   const mib = (bytes: number) => (bytes / (1024 * 1024)).toLocaleString(getLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return (
     <section className="settings-tab__cache" aria-label={t('settings.imageCacheClear')} aria-busy={feedback === 'clearing'}>
-      <h2>{snapshot ? t('settings.imageCache', { used: mib(snapshot.usage.managedBytes) }) : t('settings.imageCacheLoading')}</h2>
+      <h2>{snapshot ? t('settings.imageCache', { used: mib(snapshot.usage.managedBytes), limit: Math.round(snapshot.limit / (1024 * 1024)) }) : t('settings.imageCacheLoading')}</h2>
       {snapshot && <>
         <p>{t(snapshot.usage.persistenceAvailable ? 'settings.imageCacheAvailable' : 'settings.imageCacheUnavailable')}</p>
         <p className="settings-tab__diagnostics">{t('settings.imageCacheDiagnostics', {
